@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Design tokens                                                       */
+/* ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  --background: #f6f6f3;
+  --surface: #ffffff;
+  --surface-2: #efefea;
+  --surface-3: #e7e7e1;
+  --line: #e3e3dc;
+  --line-strong: #cfcfc6;
+
+  --ink: #1b1c18;
+  --ink-2: #55574e;
+  --ink-3: #8b8d81;
+
+  --accent: #1e6b52;
+  --accent-hover: #175741;
+  --accent-soft: #e2efe9;
+  --accent-ink: #144837;
+
+  --danger: #a63d2e;
+  --danger-soft: #f6e8e3;
+  --warning: #8d6a1d;
+  --warning-soft: #f4ecd9;
+
+  --shadow-card: 0 1px 2px rgba(27, 28, 24, 0.04), 0 1px 3px rgba(27, 28, 24, 0.03);
+  --shadow-pop: 0 8px 24px rgba(27, 28, 24, 0.1), 0 2px 6px rgba(27, 28, 24, 0.06);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #151613;
+  --surface: #1c1d19;
+  --surface-2: #24251f;
+  --surface-3: #2c2d26;
+  --line: #2e2f28;
+  --line-strong: #42443a;
+
+  --ink: #ecece6;
+  --ink-2: #a9aa9f;
+  --ink-3: #797b6f;
+
+  --accent: #4fae8d;
+  --accent-hover: #63bfa0;
+  --accent-soft: #1d3b31;
+  --accent-ink: #8ed2b8;
+
+  --danger: #d9836b;
+  --danger-soft: #3a241c;
+  --warning: #c9a04e;
+  --warning-soft: #362c17;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.18);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv05", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+/* Slim, calm scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion                                                              */
+/* ------------------------------------------------------------------ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out both;
+}
+
+.animate-rise-in {
+  animation: rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.16s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-rise-in,
+  .animate-scale-in {
+    animation: none;
+  }
+}

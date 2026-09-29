@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { IconInbox, IconPlus, IconTasks, IconToday, IconMenu, IconX } from '@/components/ui/icons';
 import { MOBILE_NAV_ITEMS, MORE_NAV_ITEMS } from './nav';
@@ -17,9 +17,11 @@ const ICONS = {
 
 export function MobileNav() {
   const pathname = usePathname();
-  const { data } = useData();
+  const { data, ready } = useData();
   const { openQuickAdd } = useUI();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <>
@@ -37,7 +39,7 @@ export function MobileNav() {
               </button>
             </div>
             {MORE_NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
                 <Link
@@ -60,9 +62,9 @@ export function MobileNav() {
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
         <div className="flex h-16 items-center justify-around px-2">
           {MOBILE_NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);
             const Icon = ICONS[item.href as keyof typeof ICONS] ?? item.icon;
-            const count = item.href === '/inbox' ? data.inbox.length : 0;
+            const count = item.href === '/inbox' && mounted && ready ? data.inbox.length : 0;
             return (
               <Link key={item.href} href={item.href} className="relative flex w-16 flex-col items-center gap-1 py-1">
                 <span className={`relative ${active ? 'text-accent' : 'text-ink-3'}`}>

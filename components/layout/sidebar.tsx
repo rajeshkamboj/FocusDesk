@@ -2,12 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { NAV_ITEMS } from './nav';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data } = useData();
+  const { data, ready } = useData();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface lg:flex">
@@ -21,9 +24,12 @@ export function Sidebar() {
 
       <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-3">
         {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);
           const Icon = item.icon;
-          const count = item.href === '/inbox' ? data.inbox.length : 0;
+          // Inbox count is persisted in localStorage (browser-only state).
+          // Render 0 on the server and on the initial client render to keep
+          // hydration deterministic; update to the real count after mount/ready.
+          const count = item.href === '/inbox' && mounted && ready ? data.inbox.length : 0;
           return (
             <Link
               key={item.href}

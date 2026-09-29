@@ -40,7 +40,7 @@ export function TodayScreen() {
 
   const dayName = weekdayName(today);
   const greeting =
-    new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+    new Date().getHours() < 12 ? 'Good morning, Rajesh' : new Date().getHours() < 18 ? 'Good afternoon, Rajesh' : 'Good evening, Rajesh';
 
   return (
     <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">

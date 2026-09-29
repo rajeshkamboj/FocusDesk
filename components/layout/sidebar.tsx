@@ -50,6 +50,12 @@ export function Sidebar() {
         Your data stays on this device
         <br />
         until Supabase sync is enabled.
+        <div className="mt-2">
+          Built by{' '}
+          <a href="https://pixldot.com" target="_blank" rel="noopener noreferrer" className="hover:text-ink-2">
+            PixlDot
+          </a>
+        </div>
       </div>
     </aside>
   );

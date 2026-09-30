@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import type { User } from '@supabase/supabase-js';
@@ -23,6 +24,9 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);
@@ -32,14 +36,27 @@ export function useAuth(): AuthContextValue {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = isSupabaseConfigured();
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(configured);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!configured) return;
+    let active = true;
+
+    if (!configured) {
+      queueMicrotask(() => {
+        if (active) setLoading(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
 
     const client = getSupabaseBrowserClient();
-    let active = true;
 
     void client.auth.getUser().then(({ data, error }) => {
       if (!active) return;
@@ -77,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ user, signIn, signOut }), [user, signIn, signOut]);
 
-  if (loading) {
+  if (!hydrated || loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-canvas">
         <div className="h-6 w-6 animate-pulse rounded-full border-2 border-line-strong border-t-accent" />

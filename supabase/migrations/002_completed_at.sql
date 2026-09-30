@@ -19,12 +19,12 @@ language plpgsql
 as $$
 begin
   if new.status = 'completed' and (old.status is distinct from 'completed') then
-    -- Only stamp when the caller didn't provide their own timestamp, so
-    -- bulk imports / restores that already carry completed_at aren't
-    -- overwritten with "now".
-    if new.completed_at is null then
-      new.completed_at := now();
-    end if;
+    -- Always stamp with the server clock on transition into 'completed'.
+    -- We intentionally ignore any client-supplied completed_at so a user
+    -- cannot write arbitrary completion timestamps. Bulk imports/backfills
+    -- that use INSERT (not UPDATE) are unaffected by this trigger and can
+    -- seed completed_at explicitly.
+    new.completed_at := now();
   elsif new.status is distinct from 'completed' and old.status = 'completed' then
     new.completed_at := null;
   end if;

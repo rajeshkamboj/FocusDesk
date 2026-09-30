@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { IconInbox, IconPlus, IconTasks, IconToday, IconMenu, IconX } from '@/components/ui/icons';
 import { MOBILE_NAV_ITEMS, MORE_NAV_ITEMS } from './nav';
@@ -20,8 +20,6 @@ export function MobileNav() {
   const { data, ready } = useData();
   const { openQuickAdd } = useUI();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   return (
     <>
@@ -64,7 +62,7 @@ export function MobileNav() {
           {MOBILE_NAV_ITEMS.map((item) => {
             const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);
             const Icon = ICONS[item.href as keyof typeof ICONS] ?? item.icon;
-            const count = item.href === '/inbox' && mounted && ready ? data.inbox.length : 0;
+            const count = item.href === '/inbox' && ready ? data.inbox.length : 0;
             return (
               <Link key={item.href} href={item.href} className="relative flex w-16 flex-col items-center gap-1 py-1">
                 <span className={`relative ${active ? 'text-accent' : 'text-ink-3'}`}>

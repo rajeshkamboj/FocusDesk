@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from 'react';
 import { addDays, todayISO } from '@/lib/dates';
+import { useAuth } from '@/components/auth/auth-provider';
 import { createRepository, repositoryKind, type AppRepository } from '@/lib/store';
 import { isOpenTask } from '@/lib/selectors';
 import type {
@@ -146,6 +147,7 @@ export function useData(): DataContextValue {
 let toastCounter = 0;
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [data, setData] = useState<AppData>(emptyData());
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -172,7 +174,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const repo = createRepository();
+    const repo = createRepository(user?.id);
     repoRef.current = repo;
 
     (async () => {
@@ -223,7 +225,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             notify(stale.length === 1 ? '1 task carried forward to today' : `${stale.length} tasks carried forward to today`);
           }
         }
-      } catch {
+      } catch (error) {
+        console.error('Could not load application data', error);
         if (!cancelled) setReady(true);
       }
     })();
@@ -231,7 +234,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [notify]);
+  }, [notify, user?.id]);
 
   /* ---------------------------------------------------------------- */
   /* Helpers                                                          */

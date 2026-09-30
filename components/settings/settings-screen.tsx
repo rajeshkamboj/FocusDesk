@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
 import type { AppData, ThemePreference } from '@/lib/types';
 
 export function SettingsScreen() {
+  const { user, signOut } = useAuth();
   const { data, actions, repoKind, notify } = useData();
   const [permission, setPermission] = useState(notificationPermission());
   const fileRef = useRef<HTMLInputElement>(null);
@@ -70,6 +72,28 @@ export function SettingsScreen() {
       />
 
       <div className="space-y-8">
+        {repoKind === 'supabase' ? (
+          <section>
+            <SectionTitle>Account</SectionTitle>
+            <div className="mt-3 flex items-center justify-between gap-6 rounded-2xl border border-line bg-surface px-5 py-4 shadow-card">
+              <div>
+                <p className="text-[13.5px] font-medium text-ink">Signed in</p>
+                <p className="mt-0.5 text-[11.5px] text-ink-3">{user?.email}</p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void signOut().catch((error: unknown) =>
+                    notify(error instanceof Error ? error.message : 'Could not sign out'),
+                  );
+                }}
+              >
+                Sign out
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
         {/* General */}
         <section>
           <SectionTitle>General</SectionTitle>

@@ -24,6 +24,7 @@ import type {
   TaskInput,
   WeeklyPriority,
 } from '../types';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { emptyData, defaultSettings } from './defaults';
 import type {
   AppRepository,
@@ -34,11 +35,6 @@ import type {
   MonthlyPriorityInput,
   WeeklyPriorityInput,
 } from './repository';
-
-export interface SupabaseConfig {
-  url: string;
-  anonKey: string;
-}
 
 /* ------------------------------------------------------------------ */
 /* Row mapping (domain camelCase ⇄ database snake_case)                */
@@ -279,69 +275,74 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
   }
 
   async update(id: string, patch: Partial<T>): Promise<T> {
-    const rows = await this.http.get(this.table, `id=eq.${encodeURIComponent(id)}`);
+    const rows = await this.http.get(this.table, { id });
     if (rows.length === 0) throw new Error(`Record not found: ${id}`);
     const current = this.map.fromRow(rows[0]);
     const next = { ...current, ...patch };
-    await this.http.patch(this.table, `id=eq.${encodeURIComponent(id)}`, this.map.toRow(next));
+    await this.http.patch(this.table, id, this.map.toRow(next));
     return next;
   }
 
   async delete(id: string): Promise<void> {
-    await this.http.delete(this.table, `id=eq.${encodeURIComponent(id)}`);
+    await this.http.delete(this.table, id);
   }
 }
 
 class SupabaseHttpClient {
-  constructor(private readonly config: SupabaseConfig) {}
+  constructor(
+    private readonly client: SupabaseClient,
+    private readonly userId: string,
+  ) {}
 
-  private headers() {
-    return {
-      apikey: this.config.anonKey,
-      Authorization: `Bearer ${this.config.anonKey}`,
-      'Content-Type': 'application/json',
-    };
+  private owned(row: Row): Row {
+    return { ...row, user_id: this.userId };
   }
 
-  private endpoint(table: string, query?: string): string {
-    const q = query ? `?${query}` : '';
-    return `${this.config.url}/rest/v1/${table}${q}`;
-  }
-
-  async get(table: string, query?: string): Promise<Row[]> {
-    const res = await fetch(this.endpoint(table, query), { headers: this.headers() });
-    if (!res.ok) throw new Error(`Supabase GET ${table} failed: ${res.status}`);
-    return (await res.json()) as Row[];
+  async get(
+    table: string,
+    filters: Record<string, string> = {},
+    order?: { column: string; ascending: boolean },
+  ): Promise<Row[]> {
+    let query = this.client.from(table).select('*').eq('user_id', this.userId);
+    for (const [column, value] of Object.entries(filters)) query = query.eq(column, value);
+    if (order) query = query.order(order.column, { ascending: order.ascending });
+    const { data, error } = await query;
+    if (error) throw new Error(`Supabase read from ${table} failed: ${error.message}`);
+    return (data ?? []) as Row[];
   }
 
   async post(table: string, body: Row | Row[]): Promise<void> {
-    const res = await fetch(this.endpoint(table), {
-      method: 'POST',
-      headers: { ...this.headers(), Prefer: 'return=minimal' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Supabase POST ${table} failed: ${res.status}`);
+    const rows = Array.isArray(body) ? body.map((row) => this.owned(row)) : this.owned(body);
+    const { error } = await this.client.from(table).insert(rows);
+    if (error) throw new Error(`Supabase insert into ${table} failed: ${error.message}`);
   }
 
-  async patch(table: string, query: string, body: Row): Promise<void> {
-    const res = await fetch(this.endpoint(table, query), {
-      method: 'PATCH',
-      headers: { ...this.headers(), Prefer: 'return=minimal' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Supabase PATCH ${table} failed: ${res.status}`);
+  async patch(table: string, id: string, body: Row): Promise<void> {
+    const { error } = await this.client
+      .from(table)
+      .update(this.owned(body))
+      .eq('user_id', this.userId)
+      .eq('id', id);
+    if (error) throw new Error(`Supabase update of ${table} failed: ${error.message}`);
   }
 
-  async delete(table: string, query: string): Promise<void> {
-    const res = await fetch(this.endpoint(table, query), {
-      method: 'DELETE',
-      headers: { ...this.headers(), Prefer: 'return=minimal' },
-    });
-    if (!res.ok) throw new Error(`Supabase DELETE ${table} failed: ${res.status}`);
+  async delete(table: string, id: string): Promise<void> {
+    const { error } = await this.client
+      .from(table)
+      .delete()
+      .eq('user_id', this.userId)
+      .eq('id', id);
+    if (error) throw new Error(`Supabase delete from ${table} failed: ${error.message}`);
   }
 
   async clear(table: string): Promise<void> {
-    await this.delete(table, 'id=neq.__none__');
+    const { error } = await this.client.from(table).delete().eq('user_id', this.userId);
+    if (error) throw new Error(`Supabase clear of ${table} failed: ${error.message}`);
+  }
+
+  async upsert(table: string, body: Row): Promise<void> {
+    const { error } = await this.client.from(table).upsert(this.owned(body));
+    if (error) throw new Error(`Supabase upsert into ${table} failed: ${error.message}`);
   }
 }
 
@@ -364,8 +365,8 @@ export class SupabaseRepository implements AppRepository {
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
 
-  constructor(config: SupabaseConfig) {
-    this.http = new SupabaseHttpClient(config);
+  constructor(client: SupabaseClient, userId: string) {
+    this.http = new SupabaseHttpClient(client, userId);
 
     this.tasks = new RestCollection(this.http, 'tasks', taskMap, (input) => ({
       id: uuid(),
@@ -448,10 +449,11 @@ export class SupabaseRepository implements AppRepository {
 
   taskHistory = {
     list: async (taskId?: string): Promise<TaskHistoryEntry[]> => {
-      const query = taskId
-        ? `task_id=eq.${encodeURIComponent(taskId)}&order=at.desc`
-        : 'order=at.desc';
-      const rows = await this.http.get('task_history', query);
+      const rows = await this.http.get(
+        'task_history',
+        taskId ? { task_id: taskId } : {},
+        { column: 'at', ascending: false },
+      );
       return rows.map(historyMap.fromRow);
     },
     add: async (entry: Omit<TaskHistoryEntry, 'id' | 'at'> & { at?: string }): Promise<TaskHistoryEntry> => {
@@ -469,7 +471,7 @@ export class SupabaseRepository implements AppRepository {
 
   settings = {
     get: async (): Promise<Settings> => {
-      const rows = await this.http.get('app_settings', 'id=eq.singleton');
+      const rows = await this.http.get('app_settings', { id: 'singleton' });
       const data = rows[0]?.data as Partial<Settings> | undefined;
       const base = emptyData().settings;
       return {
@@ -485,7 +487,7 @@ export class SupabaseRepository implements AppRepository {
         notifications: { ...current.notifications, ...patch.notifications },
         appearance: { ...current.appearance, ...patch.appearance },
       };
-      await this.http.patch('app_settings', 'id=eq.singleton', { id: 'singleton', data: next });
+      await this.http.upsert('app_settings', { id: 'singleton', data: next });
       return next;
     },
   };

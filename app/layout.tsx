@@ -3,11 +3,12 @@ import './globals.css';
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { DataProvider } from '@/components/data/data-provider';
 import { AppShell } from '@/components/layout/app-shell';
+import { RegisterSW } from '@/components/pwa/register-sw';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Pace — Personal Execution System',
-    template: '%s · Pace',
+    default: 'FocusDesk',
+    template: '%s · FocusDesk',
   },
   description:
     'A calm personal execution system: decide what matters today, move the important things forward, and review honestly.',
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Pace',
+    title: 'FocusDesk',
   },
 };
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
+        <RegisterSW />
         <AuthProvider>
           <DataProvider>
             <AppShell>{children}</AppShell>

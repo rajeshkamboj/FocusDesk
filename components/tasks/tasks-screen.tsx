@@ -104,14 +104,14 @@ export function TasksScreen() {
 
       <div className="mb-5 flex flex-wrap items-center gap-2.5">
         <Tabs items={FILTERS} active={filter} onChange={(id) => setFilter(id as FilterId)} />
-        <div className="flex flex-1 items-center gap-2.5">
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search tasks…"
-            className="h-9.5 max-w-52"
+            className="h-10 w-44 sm:w-52"
           />
-          <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-9.5 max-w-40">
+          <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-10 w-40">
             <option value="">All projects</option>
             {activeProjects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -119,7 +119,7 @@ export function TasksScreen() {
               </option>
             ))}
           </Select>
-          <Select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} className="h-9.5 max-w-40">
+          <Select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} className="h-10 w-40">
             <option value="">All goals</option>
             {activeGoals.map((g) => (
               <option key={g.id} value={g.id}>

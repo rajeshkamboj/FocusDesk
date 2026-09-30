@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,22 @@ export function TodayScreen() {
   const { data } = useData();
   const today = todayISO();
   const [addOpen, setAddOpen] = useState(false);
+  // Greeting depends on the user's local hour — it must not be computed during
+  // the initial render/hydration pass or SSR will disagree with the client
+  // clock and produce a hydration mismatch. Render a stable SSR-safe string
+  // and patch in the time-aware greeting on the client after mount.
+  const [greeting, setGreeting] = useState<string>('Welcome back');
+  useEffect(() => {
+    const displayName = getUserDisplayName(user);
+    const h = new Date().getHours();
+    setGreeting(
+      h < 12
+        ? `Good morning, ${displayName}`
+        : h < 18
+          ? `Good afternoon, ${displayName}`
+          : `Good evening, ${displayName}`,
+    );
+  }, [user]);
 
   const todays = useMemo(
     () =>
@@ -42,14 +58,6 @@ export function TodayScreen() {
   );
 
   const dayName = weekdayName(today);
-  const displayName = getUserDisplayName(user);
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12
-      ? `Good morning, ${displayName}`
-      : hour < 18
-        ? `Good afternoon, ${displayName}`
-        : `Good evening, ${displayName}`;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
@@ -136,7 +144,7 @@ export function TodayScreen() {
         </div>
         <Link
           href="/review"
-          className="inline-flex h-9.5 items-center rounded-xl border border-line px-4 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+          className="inline-flex h-10 items-center rounded-xl border border-line px-4 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
         >
           Open Daily Review
         </Link>

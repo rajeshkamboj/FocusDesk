@@ -100,7 +100,7 @@ export function PriorityCard() {
         <>
           <p
             className={`mt-3 text-balance text-2xl font-semibold leading-snug tracking-tight sm:text-[28px] ${
-              priority.completed ? 'text-ink-3 line-through' : 'text-ink'
+              priority.completed ? 'text-ink-2' : 'text-ink'
             }`}
           >
             {priority.title}

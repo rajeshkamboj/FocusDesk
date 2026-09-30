@@ -88,9 +88,19 @@ export interface DailyReviewStats {
   priorityCompleted: boolean | null;
 }
 
+/** Stable comparator: completed_at DESC, null timestamps last, then createdAt DESC. */
+function byCompletedDesc(a: { completedAt?: string; createdAt: string }, b: { completedAt?: string; createdAt: string }): number {
+  const at = a.completedAt ? Date.parse(a.completedAt) : NaN;
+  const bt = b.completedAt ? Date.parse(b.completedAt) : NaN;
+  const av = Number.isNaN(at) ? 0 : at;
+  const bv = Number.isNaN(bt) ? 0 : bt;
+  if (av !== bv) return bv - av;
+  return b.createdAt.localeCompare(a.createdAt);
+}
+
 export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats {
   const dayTasks = data.tasks.filter((t) => !t.archived && t.scheduledDate === date);
-  const completed = dayTasks.filter((t) => t.status === 'completed');
+  const completed = dayTasks.filter((t) => t.status === 'completed').sort(byCompletedDesc);
   const cancelled = dayTasks.filter((t) => t.status === 'cancelled');
   const incomplete = dayTasks.filter((t) => isOpenTask(t));
   const start = new Date(`${date}T00:00:00`);
@@ -123,7 +133,7 @@ export interface WeeklyReviewStats {
 export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): WeeklyReviewStats {
   const inRange = (d?: string) => d !== undefined && d >= from && d <= to;
 
-  const completed = data.tasks.filter((t) => !t.archived && t.status === 'completed' && inRange(t.scheduledDate ?? t.completedAt?.slice(0, 10)));
+  const completed = data.tasks.filter((t) => !t.archived && t.status === 'completed' && inRange(t.scheduledDate ?? t.completedAt?.slice(0, 10))).sort(byCompletedDesc);
   const cancelled = data.tasks.filter((t) => t.status === 'cancelled' && inRange(t.scheduledDate));
 
   const start = new Date(`${from}T00:00:00`);
@@ -162,9 +172,9 @@ export interface MonthlyReviewStats {
 }
 
 export function monthlyReviewStats(data: AppData, month: string): MonthlyReviewStats {
-  const completed = data.tasks.filter(
-    (t) => !t.archived && t.status === 'completed' && (t.completedAt ?? '').slice(0, 7) === month,
-  );
+  const completed = data.tasks
+    .filter((t) => !t.archived && t.status === 'completed' && (t.completedAt ?? '').slice(0, 7) === month)
+    .sort(byCompletedDesc);
 
   const monthlyPriorities = data.monthlyPriorities
     .filter((p) => p.month === month)

@@ -62,27 +62,55 @@ export function TasksScreen() {
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const task of filtered) {
-      const key = task.scheduledDate ?? (task.status === 'someday' ? 'someday' : 'none');
+      // Completed tasks collect under a dedicated "__completed__" bucket that
+      // is ordered most-recent-first. Pending tasks keep their existing date /
+      // priority grouping.
+      const key =
+        task.status === 'completed'
+          ? '__completed__'
+          : task.scheduledDate ?? (task.status === 'someday' ? 'someday' : 'none');
       const arr = map.get(key) ?? [];
       arr.push(task);
       map.set(key, arr);
     }
     const order = [...map.entries()].sort(([a], [b]) => {
+      if (a === '__completed__') return 1;
+      if (b === '__completed__') return -1;
       if (a === 'someday') return 1;
       if (b === 'someday') return -1;
       if (a === 'none') return 1;
       if (b === 'none') return -1;
       return a < b ? -1 : 1;
     });
+
+    const byCompletedDesc = (x: Task, y: Task): number => {
+      const xt = x.completedAt ? Date.parse(x.completedAt) : NaN;
+      const yt = y.completedAt ? Date.parse(y.completedAt) : NaN;
+      const xv = Number.isNaN(xt) ? 0 : xt;
+      const yv = Number.isNaN(yt) ? 0 : yt;
+      if (xv !== yv) return yv - xv; // newest first; null timestamps go last (0)
+      return y.createdAt.localeCompare(x.createdAt); // stable tiebreak
+    };
+
+    const activeSort = (x: Task, y: Task): number => {
+      const w = { high: 0, medium: 1, low: 2 } as const;
+      return w[x.priority] - w[y.priority];
+    };
+
     return order.map(([key, tasks]) => ({
       key,
-      label: key === 'someday' ? 'Someday' : key === 'none' ? 'Unscheduled' : relativeDay(key),
-      tasks: tasks.sort((x, y) => {
-        if (x.status === 'completed' && y.status !== 'completed') return 1;
-        if (y.status === 'completed' && x.status !== 'completed') return -1;
-        const w = { high: 0, medium: 1, low: 2 };
-        return w[x.priority] - w[y.priority];
-      }),
+      label:
+        key === '__completed__'
+          ? 'Completed'
+          : key === 'someday'
+            ? 'Someday'
+            : key === 'none'
+              ? 'Unscheduled'
+              : relativeDay(key),
+      tasks:
+        key === '__completed__'
+          ? [...tasks].sort(byCompletedDesc)
+          : [...tasks].sort(activeSort),
     }));
   }, [filtered]);
 

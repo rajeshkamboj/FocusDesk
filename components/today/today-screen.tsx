@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
 import { ProgressBar } from '@/components/ui/card';
-import { IconPlus, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
-import { TaskSection } from '@/components/tasks/task-list';
+import { IconChevronDown, IconPlus, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
+import { TaskSection, TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { PriorityCard } from './priority-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
@@ -19,39 +19,55 @@ export function TodayScreen() {
   const { data } = useData();
   const today = todayISO();
   const [addOpen, setAddOpen] = useState(false);
-  // Greeting depends on the user's local hour — it must not be computed during
-  // the initial render/hydration pass or SSR will disagree with the client
-  // clock and produce a hydration mismatch. Render a stable SSR-safe string
-  // and patch in the time-aware greeting on the client after mount.
-  const [greeting, setGreeting] = useState<string>('Welcome back');
-  useEffect(() => {
-    const displayName = getUserDisplayName(user);
-    const h = new Date().getHours();
-    setGreeting(
-      h < 12
-        ? `Good morning, ${displayName}`
-        : h < 18
-          ? `Good afternoon, ${displayName}`
-          : `Good evening, ${displayName}`,
-    );
-  }, [user]);
+  const [showCompleted, setShowCompleted] = useState(false);
+  // Defer any client-only, time-dependent rendering until after mount so SSR
+  // and the first client paint produce identical markup (no hydration mismatch).
+  // useSyncExternalStore is used for the mounted flag to satisfy the React
+  // "no setState in effects" lint rule — the server snapshot is false, and the
+  // client subscribes and immediately returns true.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+
+  const displayName = getUserDisplayName(user);
+  const greeting = mounted
+    ? (() => {
+        const h = new Date().getHours();
+        return h < 12
+          ? `Good morning, ${displayName}`
+          : h < 18
+            ? `Good afternoon, ${displayName}`
+            : `Good evening, ${displayName}`;
+      })()
+    : 'Welcome back';
 
   const todays = useMemo(
-    () =>
-      data.tasks
-        .filter((t) => t.scheduledDate === today && t.status !== 'cancelled')
-        .sort((a, b) => Number(a.status === 'completed') - Number(b.status === 'completed')),
+    () => data.tasks.filter((t) => t.scheduledDate === today && t.status !== 'cancelled'),
     [data.tasks, today],
   );
 
-  const priority = todays.filter((t) => t.priority === 'high');
-  const other = todays.filter((t) => t.priority === 'medium');
-  const optional = todays.filter((t) => t.priority === 'low');
+  const openTasks = todays.filter(isOpenTask);
+  const completedTasks = useMemo(() => {
+    const list = todays.filter((t) => t.status === 'completed');
+    return list.sort((a, b) => {
+      const at = a.completedAt ? Date.parse(a.completedAt) : NaN;
+      const bt = b.completedAt ? Date.parse(b.completedAt) : NaN;
+      const av = Number.isNaN(at) ? 0 : at;
+      const bv = Number.isNaN(bt) ? 0 : bt;
+      if (av !== bv) return bv - av;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [todays]);
 
-  const done = todays.filter((t) => t.status === 'completed').length;
+  const priority = openTasks.filter((t) => t.priority === 'high');
+  const other = openTasks.filter((t) => t.priority === 'medium');
+  const optional = openTasks.filter((t) => t.priority === 'low');
+
+  const done = completedTasks.length;
   const total = todays.length;
-  const open = todays.filter(isOpenTask);
-  const totalMinutes = open.reduce((sum, t) => sum + (t.estimatedDuration ?? 0), 0);
+  const totalMinutes = openTasks.reduce((sum, t) => sum + (t.estimatedDuration ?? 0), 0);
 
   const approaching = tasksWithApproachingDeadline(data.tasks).filter(
     (t) => t.scheduledDate !== today && isOpenTask(t),
@@ -115,7 +131,7 @@ export function TodayScreen() {
           </Button>
         </div>
 
-        {todays.length === 0 ? (
+        {openTasks.length === 0 && completedTasks.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center">
             <IconTasks width={22} height={22} className="mx-auto text-ink-3" />
             <p className="mt-3 text-[15px] font-medium text-ink">A clear day</p>
@@ -129,9 +145,32 @@ export function TodayScreen() {
           </div>
         ) : (
           <>
-            <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} />
-            <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} />
-            <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} />
+            {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} /> : null}
+            {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} /> : null}
+            {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} /> : null}
+            {completedTasks.length > 0 ? (
+              <section>
+                <button
+                  type="button"
+                  onClick={() => setShowCompleted((v) => !v)}
+                  className="mb-1.5 flex w-full items-center justify-between rounded-lg px-1 py-1 text-left transition-colors hover:text-ink-2"
+                  aria-expanded={showCompleted}
+                >
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+                      Completed today
+                    </h2>
+                    <span className="text-[11px] tabular-nums text-ink-3">{completedTasks.length}</span>
+                  </div>
+                  <IconChevronDown
+                    width={14}
+                    height={14}
+                    className={`text-ink-3 transition-transform duration-150 ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
+                  />
+                </button>
+                {showCompleted ? <TaskList tasks={completedTasks} showDates={false} /> : null}
+              </section>
+            ) : null}
           </>
         )}
       </div>

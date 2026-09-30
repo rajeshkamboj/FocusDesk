@@ -133,6 +133,25 @@ export function formatTime(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * Format an ISO timestamp for the "Completed …" line shown beneath a task.
+ *  - today at 6:42 PM
+ *  - yesterday at 9:05 AM
+ *  - Sep 28 at 8:17 PM
+ * Uses the user's local timezone. Returns an empty string if the input is
+ * missing or invalid.
+ */
+export function formatCompletionTimestamp(iso: string | undefined, reference: ISODate = todayISO()): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const dateKey = toISODate(d);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (dateKey === reference) return `Completed today at ${time}`;
+  if (dateKey === addDays(reference, -1)) return `Completed yesterday at ${time}`;
+  return `Completed ${formatShortDate(dateKey)} at ${time}`;
+}
+
 /** "14:30"-style time on a given date → full ISO timestamp. */
 export function combineDateTime(date: ISODate, time: string): string {
   const [h, m] = time.split(':').map(Number);

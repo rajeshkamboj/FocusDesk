@@ -13,9 +13,14 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
 
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={`h-10 cursor-pointer appearance-none pr-8 ${controlClass} ${className}`} {...props}>
-      {children}
-    </select>
+    <div className="relative">
+      <select
+        className={`h-10 w-full cursor-pointer appearance-none rounded-xl border border-line bg-surface bg-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2216%22%20height=%2216%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%238b8d81%22%20stroke-width=%222%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><polyline%20points=%226%209%2012%2015%2018%209%22/></svg>')] bg-[length:16px_16px] bg-[right_0.75rem_center] bg-no-repeat px-3.5 pr-9 text-sm text-ink transition-colors duration-150 hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+    </div>
   );
 }
 

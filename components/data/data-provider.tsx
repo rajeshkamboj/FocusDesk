@@ -343,21 +343,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       completeTask: async (id) => {
-        const updated = await repo().tasks.update(id, {
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before) return;
+        // Optimistic update: mark completed immediately in the UI using the
+        // browser clock. The persisted value (via the repo) wins once the
+        // update returns; if the server supplies a timestamp that one replaces
+        // ours. On failure we roll back and surface a toast.
+        const optimistic: Task = {
+          ...before,
           status: 'completed',
-          completedAt: new Date().toISOString(),
-        });
-        patchTaskState(updated);
-        await logHistory(id, 'completed');
+          // Only stamp completedAt when transitioning from a non-completed
+          // state so rapid toggle/untoggle doesn't stack stale timestamps.
+          completedAt: before.status === 'completed' ? before.completedAt : new Date().toISOString(),
+        };
+        patchTaskState(optimistic);
+        try {
+          const updated = await repo().tasks.update(id, {
+            status: 'completed',
+            completedAt: optimistic.completedAt,
+          });
+          patchTaskState(updated);
+          if (before.status !== 'completed') await logHistory(id, 'completed');
+        } catch (error) {
+          // Roll back to the previous state on failure.
+          patchTaskState(before);
+          notify('Could not mark task complete — please try again');
+          console.error('completeTask failed', error);
+        }
       },
 
       reopenTask: async (id) => {
         const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before) return;
         const status: TaskStatus =
-          before?.scheduledDate === todayISO() ? 'today' : before?.scheduledDate ? 'planned' : 'created';
-        const updated = await repo().tasks.update(id, { status, completedAt: undefined });
-        patchTaskState(updated);
-        await logHistory(id, 'reopened');
+          before.scheduledDate === todayISO() ? 'today' : before.scheduledDate ? 'planned' : 'created';
+        const optimistic: Task = { ...before, status, completedAt: undefined };
+        patchTaskState(optimistic);
+        try {
+          const updated = await repo().tasks.update(id, { status, completedAt: undefined });
+          patchTaskState(updated);
+          if (before.status === 'completed') await logHistory(id, 'reopened');
+        } catch (error) {
+          patchTaskState(before);
+          notify('Could not reopen task — please try again');
+          console.error('reopenTask failed', error);
+        }
       },
 
       startTask: async (id) => {

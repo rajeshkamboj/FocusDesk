@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
 import { ProgressBar } from '@/components/ui/card';
@@ -11,8 +12,10 @@ import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { PriorityCard } from './priority-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
 import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
+import { getUserDisplayName } from '@/lib/auth/display-name';
 
 export function TodayScreen() {
+  const { user } = useAuth();
   const { data } = useData();
   const today = todayISO();
   const [addOpen, setAddOpen] = useState(false);
@@ -39,8 +42,14 @@ export function TodayScreen() {
   );
 
   const dayName = weekdayName(today);
+  const displayName = getUserDisplayName(user);
+  const hour = new Date().getHours();
   const greeting =
-    new Date().getHours() < 12 ? 'Good morning, Rajesh' : new Date().getHours() < 18 ? 'Good afternoon, Rajesh' : 'Good evening, Rajesh';
+    hour < 12
+      ? `Good morning, ${displayName}`
+      : hour < 18
+        ? `Good afternoon, ${displayName}`
+        : `Good evening, ${displayName}`;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">

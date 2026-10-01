@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm';
 import { ProgressBar } from '@/components/ui/card';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconFlame, IconPlus, IconTrash } from '@/components/ui/icons';
-import { addDays, endOfWeek, formatShortDate, isoWeekKey, startOfWeek, todayISO } from '@/lib/dates';
+import { addDays, endOfWeek, formatFocusedTime, formatShortDate, isoWeekKey, startOfWeek, todayISO } from '@/lib/dates';
 import { weeklyReviewStats } from '@/lib/selectors';
 import type { WeeklyPriority } from '@/lib/types';
 
@@ -151,12 +151,24 @@ export function WeeklyReview() {
 
             {stats.completed.length > 0 ? (
               <div className="mt-5">
-                <p className="text-[13px] font-medium text-ink">Completed work</p>
+                <p className="text-[13px] font-medium text-ink">
+                  Completed work
+                  {stats.focusedSeconds > 0 ? (
+                    <span className="ml-2 text-[11.5px] font-normal tabular-nums text-ink-3">
+                      {formatFocusedTime(stats.focusedSeconds)} focused
+                    </span>
+                  ) : null}
+                </p>
                 <ul className="mt-2 space-y-1.5">
                   {stats.completed.slice(0, 8).map((t) => (
                     <li key={t.id} className="flex items-center gap-2 text-[13px] text-ink-2">
                       <IconCheck width={13} height={13} className="shrink-0 text-accent" />
-                      <span className="truncate">{t.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                      {t.actualDurationSeconds != null ? (
+                        <span className="shrink-0 tabular-nums text-[11.5px] text-ink-3" title="Focused time">
+                          {formatFocusedTime(t.actualDurationSeconds)}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -170,7 +182,7 @@ export function WeeklyReview() {
               <div className="mt-5">
                 <p className="text-[13px] font-medium text-ink">Projects worked on</p>
                 <div className="mt-2 space-y-2">
-                  {stats.projectsWorkedOn.map(({ project, completed }) => (
+                  {stats.projectsWorkedOn.map(({ project, completed, focusedSeconds }) => (
                     <div key={project.id} className="flex items-center gap-3">
                       <span className="w-40 truncate text-[13px] text-ink-2">{project.name}</span>
                       <ProgressBar
@@ -178,7 +190,10 @@ export function WeeklyReview() {
                         total={Math.max(completed, data.tasks.filter((t) => t.projectId === project.id).length)}
                         className="max-w-40"
                       />
-                      <span className="text-[11px] tabular-nums text-ink-3">{completed} done</span>
+                      <span className="text-[11px] tabular-nums text-ink-3">
+                        {completed} done
+                        {focusedSeconds > 0 ? ` · ${formatFocusedTime(focusedSeconds)}` : ''}
+                      </span>
                     </div>
                   ))}
                 </div>

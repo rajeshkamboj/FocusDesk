@@ -10,7 +10,7 @@ import { Field, Textarea } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/icons';
 import { TaskList } from '@/components/tasks/task-list';
-import { addDays, daysBetween, formatLongDate, formatTime, todayISO, weekdayName } from '@/lib/dates';
+import { addDays, daysBetween, formatFocusedTime, formatLongDate, formatTime, todayISO, weekdayName } from '@/lib/dates';
 import { dailyReviewStats } from '@/lib/selectors';
 import type { DailyPriority, ISODate } from '@/lib/types';
 
@@ -187,8 +187,13 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
       {/* Tasks */}
       {stats.completed.length > 0 ? (
         <section>
-          <h3 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
-            Completed · {stats.completed.length}
+          <h3 className="mb-1.5 flex items-baseline gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+            <span>Completed · {stats.completed.length}</span>
+            {stats.focusedSeconds > 0 ? (
+              <span className="font-normal normal-case tracking-normal tabular-nums">
+                {formatFocusedTime(stats.focusedSeconds)} focused
+              </span>
+            ) : null}
           </h3>
           <TaskList tasks={stats.completed} showDates={false} />
         </section>

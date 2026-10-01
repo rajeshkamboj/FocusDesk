@@ -159,6 +159,19 @@ export function formatSecondsDetailed(seconds?: number | null): string {
   return `${s} sec`;
 }
 
+/**
+ * The consumed duration of a completed task, phrased for the eye:
+ * "47 min", "1h 12m", "< 1 min". Rounds to minutes (the timer stays
+ * seconds-accurate underneath) and reuses the existing duration formatter,
+ * so "focused time" is never a second way of counting time.
+ */
+export function formatFocusedTime(seconds?: number | null): string {
+  if (seconds == null || Number.isNaN(seconds)) return '';
+  const total = Math.max(0, Math.floor(seconds));
+  if (total < 60) return '< 1 min';
+  return formatDuration(total / 60);
+}
+
 /** Format an ISO timestamp as local "HH:MM". */
 export function formatTime(iso: string): string {
   const d = new Date(iso);

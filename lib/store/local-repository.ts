@@ -21,6 +21,8 @@ import type {
   TaskHistoryEntry,
   TaskInput,
   WeeklyPriority,
+  WellbeingDay,
+  WellbeingDayInput,
 } from '../types';
 import { emptyData } from './defaults';
 import type {
@@ -122,6 +124,7 @@ export class LocalRepository implements AppRepository {
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
+  wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
 
   constructor(storage: StorageLike | null = browserStorage()) {
     this.storage = storage ?? memoryStorage();
@@ -254,6 +257,20 @@ export class LocalRepository implements AppRepository {
         projectId: input.projectId || undefined,
       }),
     );
+
+    this.wellbeingDays = new Collection<WellbeingDay, WellbeingDayInput>(
+      () => this.data,
+      'wellbeingDays',
+      persist,
+      (input) => ({
+        id: createId(),
+        date: input.date,
+        jogging: input.jogging ?? false,
+        nitnemMorning: input.nitnemMorning ?? false,
+        nitnemEvening: input.nitnemEvening ?? false,
+        nitnemNight: input.nitnemNight ?? false,
+      }),
+    );
   }
 
   private read(): AppData {
@@ -332,6 +349,7 @@ export class LocalRepository implements AppRepository {
       weeklyPriorities: data.weeklyPriorities ?? [],
       monthlyPriorities: data.monthlyPriorities ?? [],
       taskHistory: data.taskHistory ?? [],
+      wellbeingDays: data.wellbeingDays ?? [],
       settings: {
         general: { ...base.settings.general, ...data.settings?.general },
         notifications: { ...base.settings.notifications, ...data.settings?.notifications },

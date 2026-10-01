@@ -21,6 +21,8 @@ import type {
   TaskHistoryEntry,
   TaskInput,
   WeeklyPriority,
+  WellbeingDay,
+  WellbeingDayInput,
 } from '../types';
 
 /** CRUD contract for one collection. */
@@ -70,6 +72,7 @@ export interface AppRepository {
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
+  wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
 
   taskHistory: {
     list(taskId?: string): Promise<TaskHistoryEntry[]>;

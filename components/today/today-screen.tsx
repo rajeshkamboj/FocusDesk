@@ -10,6 +10,7 @@ import { IconChevronDown, IconPlus, IconTasks, IconClock, IconFlag } from '@/com
 import { TaskSection, TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { PriorityCard } from './priority-card';
+import { WellbeingCard } from './wellbeing-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
 import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
@@ -76,7 +77,7 @@ export function TodayScreen() {
   const dayName = weekdayName(today);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10 2xl:max-w-6xl">
       {/* Header */}
       <header className="mb-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -118,75 +119,87 @@ export function TodayScreen() {
         ) : null}
       </header>
 
-      {/* Priority */}
-      <PriorityCard />
-
-      {/* Tasks */}
-      <div className="mt-9 space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Today&apos;s tasks</h2>
-          <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
-            <IconPlus width={15} height={15} />
-            Add Task
-          </Button>
+      {/* On wide screens the priority and the task list keep the main column
+          while Daily well-being sits quietly in the unused space on the right.
+          On smaller screens everything simply stacks in the same order. */}
+      <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_264px] 2xl:items-start 2xl:gap-x-8">
+        {/* Priority */}
+        <div className="2xl:col-start-1 2xl:row-start-1">
+          <PriorityCard />
         </div>
 
-        {openTasks.length === 0 && completedTasks.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center">
-            <IconTasks width={22} height={22} className="mx-auto text-ink-3" />
-            <p className="mt-3 text-[15px] font-medium text-ink">A clear day</p>
-            <p className="mx-auto mt-1 max-w-sm text-[13px] leading-relaxed text-ink-3">
-              Add a task for today — a title is enough. Everything else is optional.
-            </p>
-            <Button variant="primary" size="sm" className="mt-4" onClick={() => setAddOpen(true)}>
+        {/* Tasks */}
+        <div className="mt-9 space-y-6 2xl:col-start-1 2xl:row-start-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Today&apos;s tasks</h2>
+            <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
               <IconPlus width={15} height={15} />
               Add Task
             </Button>
           </div>
-        ) : (
-          <>
-            {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} /> : null}
-            {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} /> : null}
-            {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} /> : null}
-            {completedTasks.length > 0 ? (
-              <section>
-                <button
-                  type="button"
-                  onClick={() => setShowCompleted((v) => !v)}
-                  className="mb-1.5 flex w-full items-center justify-between rounded-lg px-1 py-1 text-left transition-colors hover:text-ink-2"
-                  aria-expanded={showCompleted}
-                >
-                  <div className="flex items-baseline gap-2">
-                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
-                      Completed today
-                    </h2>
-                    <span className="text-[11px] tabular-nums text-ink-3">{completedTasks.length}</span>
-                  </div>
-                  <IconChevronDown
-                    width={14}
-                    height={14}
-                    className={`text-ink-3 transition-transform duration-150 ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
-                  />
-                </button>
-                {showCompleted ? <TaskList tasks={completedTasks} showDates={false} /> : null}
-              </section>
-            ) : null}
-          </>
-        )}
-      </div>
 
-      {/* End of day */}
-      <div className="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-6 py-5 shadow-card">
-        <div>
-          <p className="text-[15px] font-medium text-ink">End-of-day review</p>
-          <p className="mt-0.5 text-[13px] text-ink-2">Did you actually accomplish what mattered?</p>
+          {openTasks.length === 0 && completedTasks.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center">
+              <IconTasks width={22} height={22} className="mx-auto text-ink-3" />
+              <p className="mt-3 text-[15px] font-medium text-ink">A clear day</p>
+              <p className="mx-auto mt-1 max-w-sm text-[13px] leading-relaxed text-ink-3">
+                Add a task for today — a title is enough. Everything else is optional.
+              </p>
+              <Button variant="primary" size="sm" className="mt-4" onClick={() => setAddOpen(true)}>
+                <IconPlus width={15} height={15} />
+                Add Task
+              </Button>
+            </div>
+          ) : (
+            <>
+              {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} /> : null}
+              {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} /> : null}
+              {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} /> : null}
+              {completedTasks.length > 0 ? (
+                <section>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleted((v) => !v)}
+                    className="mb-1.5 flex w-full items-center justify-between rounded-lg px-1 py-1 text-left transition-colors hover:text-ink-2"
+                    aria-expanded={showCompleted}
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+                        Completed today
+                      </h2>
+                      <span className="text-[11px] tabular-nums text-ink-3">{completedTasks.length}</span>
+                    </div>
+                    <IconChevronDown
+                      width={14}
+                      height={14}
+                      className={`text-ink-3 transition-transform duration-150 ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
+                    />
+                  </button>
+                  {showCompleted ? <TaskList tasks={completedTasks} showDates={false} /> : null}
+                </section>
+              ) : null}
+            </>
+          )}
         </div>
-        <Link
-          href="/review"
-          className="inline-flex h-10 items-center rounded-xl border border-line px-4 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
-        >
-          Open Daily Review
-        </Link>
+
+        {/* Daily well-being — quiet and secondary, never a task list */}
+        <aside className="mt-9 2xl:sticky 2xl:top-10 2xl:col-start-2 2xl:row-start-1 2xl:row-end-3 2xl:mt-0">
+          <WellbeingCard />
+        </aside>
+
+        {/* End of day */}
+        <div className="mt-12 2xl:col-start-1 2xl:row-start-3 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-6 py-5 shadow-card">
+          <div>
+            <p className="text-[15px] font-medium text-ink">End-of-day review</p>
+            <p className="mt-0.5 text-[13px] text-ink-2">Did you actually accomplish what mattered?</p>
+          </div>
+          <Link
+            href="/review"
+            className="inline-flex h-10 items-center rounded-xl border border-line px-4 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+          >
+            Open Daily Review
+          </Link>
+        </div>
       </div>
 
       <TaskFormModal open={addOpen} onClose={() => setAddOpen(false)} defaults={{ scheduledDate: today }} />

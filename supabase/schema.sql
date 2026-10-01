@@ -108,6 +108,9 @@ create table if not exists app_settings (
 );
 insert into app_settings (id, data) values ('singleton', '{}') on conflict do nothing;
 
+-- Daily well-being (Today page) lives in its own user-scoped table and is
+-- created by supabase/migrations/004_daily_wellbeing.sql.
+
 -- IMPORTANT: enable RLS and add policies tied to auth.uid() before exposing
 -- real data. The anon key is public; without auth, anyone with the URL can
 -- read/write these tables.

@@ -154,6 +154,57 @@ async function main() {
   ok(persistedTimed.actualDurationSeconds === finished.actualDurationSeconds && persistedTimed.estimatedDuration === 30
      && get(manual.id).actualDurationSeconds === undefined, 'Timer 19: timing data persists across reload/logout');
 
+  /* ------------------------------------------------------------------ */
+  /* Daily well-being — four check-ins, fresh every day                  */
+  /* ------------------------------------------------------------------ */
+
+  const wellbeingToday = () => c().data.wellbeingDays.filter((w) => w.date === today);
+  const wellbeingDay = () => wellbeingToday()[0];
+  const flagsOf = (w?: { jogging: boolean; nitnemMorning: boolean; nitnemEvening: boolean; nitnemNight: boolean }) =>
+    [w?.jogging, w?.nitnemMorning, w?.nitnemEvening, w?.nitnemNight];
+
+  ok(c().data.wellbeingDays.length === 0, 'Well-being: a fresh day starts with no record at all');
+
+  await run(() => c().actions.toggleWellbeing('jogging'));
+  await run(() => c().actions.toggleWellbeing('nitnemEvening'));
+  ok(flagsOf(wellbeingDay()).join() === 'true,false,true,false' && wellbeingToday().length === 1,
+     'Well-being: check-ins land on one record for the day');
+
+  await run(() => c().actions.toggleWellbeing('nitnemEvening'));
+  ok(wellbeingDay()!.nitnemEvening === false, 'Well-being: a check-in can be unchecked again');
+
+  // Three concurrent taps (the app queues them per day).
+  await run(async () => {
+    await Promise.all([
+      c().actions.toggleWellbeing('nitnemMorning'),
+      c().actions.toggleWellbeing('nitnemMorning'),
+      c().actions.toggleWellbeing('nitnemMorning'),
+    ]);
+  });
+  ok(wellbeingToday().length === 1 && wellbeingDay()!.nitnemMorning === true,
+     'Well-being: rapid taps cannot create duplicate records for one day');
+
+  await run(() => c().actions.toggleWellbeing('nitnemMorning'));
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(flagsOf(wellbeingDay()).join() === 'true,false,false,false',
+     'Well-being: today’s check-ins persist across reload');
+
+  // Age the record by one day: history kept, today fresh again.
+  const raw = JSON.parse(String(dom.window.localStorage.getItem('pace.db.v1'))) as {
+    wellbeingDays: { date: string }[];
+  };
+  raw.wellbeingDays = raw.wellbeingDays.map((w) => ({ ...w, date: addDays(today, -1) }));
+  dom.window.localStorage.setItem('pace.db.v1', JSON.stringify(raw));
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(c().data.wellbeingDays.length === 1 && c().data.wellbeingDays[0].date === addDays(today, -1),
+     'Well-being: yesterday stays as history');
+  ok(flagsOf(wellbeingDay()).every((f) => f === undefined) && c().data.tasks.length > 0,
+     'Well-being: a new day starts fresh without touching anything else');
+
   await act(async () => root.unmount());
   console.log('\nWorkflow verified.');
   process.exit(0);

@@ -10,6 +10,7 @@ import type {
   Project,
   Task,
   TaskStatus,
+  WellbeingDay,
 } from './types';
 
 export const OPEN_STATUSES: TaskStatus[] = ['created', 'planned', 'today', 'in_progress', 'incomplete'];
@@ -41,6 +42,14 @@ export function tasksWithApproachingDeadline(tasks: Task[], days = 3, date: ISOD
     const diff = daysBetween(date, t.dueDate);
     return diff <= days;
   });
+}
+
+/**
+ * The well-being record for a day, if the user checked anything that day.
+ * An absent record is a fresh, untouched day — never an overdue one.
+ */
+export function wellbeingOnDate(days: WellbeingDay[], date: ISODate = todayISO()): WellbeingDay | undefined {
+  return days.find((d) => d.date === date);
 }
 
 export interface Progress {

@@ -23,6 +23,8 @@ import type {
   TaskHistoryEntry,
   TaskInput,
   WeeklyPriority,
+  WellbeingDay,
+  WellbeingDayInput,
 } from '../types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emptyData, defaultSettings } from './defaults';
@@ -237,6 +239,25 @@ const monthlyPriorityMap = {
   }),
 };
 
+const wellbeingDayMap = {
+  toRow: (w: WellbeingDay): Row => ({
+    id: w.id,
+    date: w.date,
+    jogging: w.jogging,
+    nitnem_morning: w.nitnemMorning,
+    nitnem_evening: w.nitnemEvening,
+    nitnem_night: w.nitnemNight,
+  }),
+  fromRow: (r: Row): WellbeingDay => ({
+    id: String(r.id),
+    date: String(r.date ?? ''),
+    jogging: bool(r.jogging),
+    nitnemMorning: bool(r.nitnem_morning),
+    nitnemEvening: bool(r.nitnem_evening),
+    nitnemNight: bool(r.nitnem_night),
+  }),
+};
+
 const historyMap = {
   toRow: (h: TaskHistoryEntry): Row => ({
     id: h.id,
@@ -367,6 +388,7 @@ export class SupabaseRepository implements AppRepository {
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
+  wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
 
   constructor(client: SupabaseClient, userId: string) {
     this.http = new SupabaseHttpClient(client, userId);
@@ -448,6 +470,15 @@ export class SupabaseRepository implements AppRepository {
       goalId: input.goalId || undefined,
       projectId: input.projectId || undefined,
     }));
+
+    this.wellbeingDays = new RestCollection(this.http, 'wellbeing_days', wellbeingDayMap, (input) => ({
+      id: uuid(),
+      date: input.date,
+      jogging: input.jogging ?? false,
+      nitnemMorning: input.nitnemMorning ?? false,
+      nitnemEvening: input.nitnemEvening ?? false,
+      nitnemNight: input.nitnemNight ?? false,
+    }));
   }
 
   taskHistory = {
@@ -496,7 +527,7 @@ export class SupabaseRepository implements AppRepository {
   };
 
   async exportData(): Promise<AppData> {
-    const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, settings] =
+    const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
       await Promise.all([
         this.tasks.list(),
         this.projects.list(),
@@ -507,9 +538,10 @@ export class SupabaseRepository implements AppRepository {
         this.weeklyPriorities.list(),
         this.monthlyPriorities.list(),
         this.taskHistory.list(),
+        this.wellbeingDays.list(),
         this.settings.get(),
       ]);
-    return { tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, settings };
+    return { tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings };
   }
 
   async importData(data: AppData): Promise<void> {
@@ -524,6 +556,7 @@ export class SupabaseRepository implements AppRepository {
       weeklyPriorities: data.weeklyPriorities ?? [],
       monthlyPriorities: data.monthlyPriorities ?? [],
       taskHistory: data.taskHistory ?? [],
+      wellbeingDays: data.wellbeingDays ?? [],
       settings: {
         general: { ...base.settings.general, ...data.settings?.general },
         notifications: { ...base.settings.notifications, ...data.settings?.notifications },
@@ -541,6 +574,7 @@ export class SupabaseRepository implements AppRepository {
       this.http.clear('weekly_priorities'),
       this.http.clear('monthly_priorities'),
       this.http.clear('task_history'),
+      this.http.clear('wellbeing_days'),
     ]);
 
     const bulk = (table: string, rows: Row[]) => (rows.length > 0 ? this.http.post(table, rows) : Promise.resolve());
@@ -555,6 +589,7 @@ export class SupabaseRepository implements AppRepository {
       bulk('weekly_priorities', payload.weeklyPriorities.map(weeklyPriorityMap.toRow)),
       bulk('monthly_priorities', payload.monthlyPriorities.map(monthlyPriorityMap.toRow)),
       bulk('task_history', payload.taskHistory.map(historyMap.toRow)),
+      bulk('wellbeing_days', payload.wellbeingDays.map(wellbeingDayMap.toRow)),
     ]);
     await this.settings.save(payload.settings);
   }

@@ -171,6 +171,38 @@ export interface MonthlyPriority {
 }
 
 /* ------------------------------------------------------------------ */
+/* Daily well-being                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The four daily well-being check-ins: jogging and the three Nitnem
+ * check-ins. Deliberately a fixed, tiny set — this is not a habit tracker.
+ */
+export type WellbeingHabit = 'jogging' | 'nitnemMorning' | 'nitnemEvening' | 'nitnemNight';
+
+/**
+ * One day's well-being check-ins. A record only exists once the user has
+ * checked something for that day — an absent record simply means "nothing
+ * checked yet", which is how every fresh day starts.
+ */
+export interface WellbeingDay {
+  id: ID;
+  date: ISODate;
+  jogging: boolean;
+  nitnemMorning: boolean;
+  nitnemEvening: boolean;
+  nitnemNight: boolean;
+}
+
+export type WellbeingDayInput = {
+  date: ISODate;
+  jogging?: boolean;
+  nitnemMorning?: boolean;
+  nitnemEvening?: boolean;
+  nitnemNight?: boolean;
+};
+
+/* ------------------------------------------------------------------ */
 /* Inbox                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -266,5 +298,7 @@ export interface AppData {
   weeklyPriorities: WeeklyPriority[];
   monthlyPriorities: MonthlyPriority[];
   taskHistory: TaskHistoryEntry[];
+  /** One record per day the user checked at least one well-being item. */
+  wellbeingDays: WellbeingDay[];
   settings: Settings;
 }

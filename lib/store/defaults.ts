@@ -33,6 +33,7 @@ export function emptyData(): AppData {
     weeklyPriorities: [],
     monthlyPriorities: [],
     taskHistory: [],
+    wellbeingDays: [],
     settings: { ...defaultSettings, general: { ...defaultSettings.general }, notifications: { ...defaultSettings.notifications }, appearance: { ...defaultSettings.appearance } },
   };
 }

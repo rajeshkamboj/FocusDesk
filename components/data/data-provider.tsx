@@ -38,6 +38,8 @@ import type {
   TaskInput,
   TaskStatus,
   WeeklyPriority,
+  WellbeingDay,
+  WellbeingHabit,
   ISODate,
 } from '@/lib/types';
 import { emptyData } from '@/lib/store/defaults';
@@ -126,6 +128,10 @@ export interface DataActions {
   deleteIdea(id: string): Promise<void>;
   promoteIdea(id: string, kind: 'task' | 'project' | 'goal' | 'someday', extra?: Partial<TaskInput>): Promise<void>;
 
+  /* Daily well-being */
+  /** Check or uncheck one of today's four well-being check-ins. */
+  toggleWellbeing(habit: WellbeingHabit): Promise<void>;
+
   /* Settings & data */
   updateSettings(patch: Partial<Settings>): Promise<void>;
   exportData(): Promise<AppData>;
@@ -166,6 +172,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     dataRef.current = data;
   }, [data]);
 
+  // The well-being record the user last touched (kept alongside the optimistic
+  // state) and a queue that serializes its writes.
+  const wellbeingRef = useRef<WellbeingDay | null>(null);
+  const wellbeingQueueRef = useRef<Promise<void>>(Promise.resolve());
+
   const notify = useCallback((message: string) => {
     const id = ++toastCounter;
     setToasts((prev) => [...prev, { id, message }]);
@@ -187,7 +198,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, settings] =
+        const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
           await Promise.all([
             repo.tasks.list(),
             repo.projects.list(),
@@ -198,6 +209,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             repo.weeklyPriorities.list(),
             repo.monthlyPriorities.list(),
             repo.taskHistory.list(),
+            repo.wellbeingDays.list(),
             repo.settings.get(),
           ]);
         if (cancelled) return;
@@ -211,8 +223,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           weeklyPriorities,
           monthlyPriorities,
           taskHistory,
+          wellbeingDays,
           settings,
         };
+        wellbeingRef.current = wellbeingDays.find((w) => w.date === todayISO()) ?? null;
         setData(loaded);
         setReady(true);
 
@@ -263,6 +277,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const removeTaskState = useCallback((id: string) => {
     setData((d) => ({ ...d, tasks: d.tasks.filter((t) => t.id !== id) }));
+  }, []);
+
+  /** Replace (or add) one day's well-being record in the local snapshot. */
+  const applyWellbeing = useCallback((record: WellbeingDay) => {
+    wellbeingRef.current = record;
+    setData((d) => ({
+      ...d,
+      wellbeingDays: d.wellbeingDays.some((w) => w.date === record.date)
+        ? d.wellbeingDays.map((w) => (w.date === record.date ? record : w))
+        : [...d.wellbeingDays, record],
+    }));
   }, []);
 
   const repo = () => {
@@ -684,6 +709,70 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setData((d) => ({ ...d, monthlyPriorities: d.monthlyPriorities.filter((p) => p.id !== id) }));
       },
 
+      toggleWellbeing: async (habit) => {
+        const date = todayISO();
+        // Today's record, whether it is already loaded or was just created by
+        // an earlier tap that is still being written.
+        const known =
+          wellbeingRef.current?.date === date
+            ? wellbeingRef.current
+            : (dataRef.current.wellbeingDays.find((w) => w.date === date) ?? null);
+        const toggled: WellbeingDay = known
+          ? { ...known }
+          : {
+              id: `pending-${date}`,
+              date,
+              jogging: false,
+              nitnemMorning: false,
+              nitnemEvening: false,
+              nitnemNight: false,
+            };
+        toggled[habit] = !toggled[habit];
+        // Optimistic: the checkmark responds immediately, the write follows.
+        applyWellbeing(toggled);
+
+        // Writes are queued per day, so two quick taps on a fresh day can never
+        // create two records for the same date.
+        wellbeingQueueRef.current = wellbeingQueueRef.current
+          .then(async () => {
+            const target = wellbeingRef.current;
+            if (!target || target.date !== date) return;
+            const r = repo();
+            const flags = {
+              jogging: target.jogging,
+              nitnemMorning: target.nitnemMorning,
+              nitnemEvening: target.nitnemEvening,
+              nitnemNight: target.nitnemNight,
+            };
+            try {
+              const saved = target.id.startsWith('pending-')
+                ? await r.wellbeingDays.create({ date, ...flags })
+                : await r.wellbeingDays.update(target.id, flags);
+              if (wellbeingRef.current === target) {
+                applyWellbeing(saved);
+              } else if (wellbeingRef.current) {
+                // A newer tap is on its way — keep its state, adopt the real id.
+                wellbeingRef.current = { ...wellbeingRef.current, id: saved.id };
+              }
+            } catch (error) {
+              console.error('Could not save the well-being check-in', error);
+              notify('Could not save that check-in — please try again');
+              // Resync from the repository so the UI never keeps a state the
+              // backend rejected.
+              try {
+                const days = await r.wellbeingDays.list();
+                wellbeingRef.current = days.find((w) => w.date === date) ?? null;
+                setData((d) => ({ ...d, wellbeingDays: days }));
+              } catch {
+                /* keep the current state */
+              }
+            }
+          })
+          // Safety net: the queue must never stall on an unexpected failure.
+          .catch((error) => console.error('Well-being write failed', error));
+        await wellbeingQueueRef.current;
+      },
+
       addProject: async (input) => {
         const created = await repo().projects.create(input);
         setData((d) => ({ ...d, projects: [...d.projects, created] }));
@@ -813,7 +902,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [applyTaskPatch, createFromTitle, logHistory, notify, patchTaskState, removeTaskState],
+    [applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchTaskState, removeTaskState],
   );
 
   const value = useMemo<DataContextValue>(

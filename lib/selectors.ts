@@ -2,7 +2,7 @@
  * Pure derived-state helpers. No side effects — safe to use anywhere.
  */
 
-import { daysBetween, todayISO } from './dates';
+import { daysBetween, toISODate, todayISO } from './dates';
 import type {
   AppData,
   ISODate,
@@ -111,13 +111,35 @@ export function monthlyPriorityProgress(
 
 export interface DailyReviewStats {
   date: ISODate;
+  /**
+   * Work actually finished on `date`: every non-archived completed task whose
+   * `completedAt` falls on that local calendar day, whatever it was scheduled
+   * for. Ordered by `completedAt` descending.
+   */
   completed: Task[];
+  /** Open tasks that were planned for `date` (`scheduledDate`). */
   incomplete: Task[];
   cancelled: Task[];
   postponedCount: number;
   priorityCompleted: boolean | null;
   /** Focused time (seconds) invested in the day's completed tasks. */
   focusedSeconds: number;
+}
+
+/**
+ * The calendar day a completed task was finished on, in the user's local time
+ * zone. `completedAt` is stored as an ISO instant (`new Date().toISOString()`),
+ * so it has to go through the same local-day conversion the rest of the app
+ * uses — slicing the string would compare UTC dates and push work done in the
+ * local evening onto the next day (and pull early-morning work back a day).
+ * Returns undefined for anything that is not a completed task with a usable
+ * timestamp, so no completion date is ever invented.
+ */
+function completedOnDate(task: Task): ISODate | undefined {
+  if (task.status !== 'completed' || !task.completedAt) return undefined;
+  const at = new Date(task.completedAt);
+  if (Number.isNaN(at.getTime())) return undefined;
+  return toISODate(at);
 }
 
 /** Stable comparator: completed_at DESC, null timestamps last, then createdAt DESC. */
@@ -131,10 +153,24 @@ function byCompletedDesc(a: { completedAt?: string; createdAt: string }, b: { co
 }
 
 export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats {
-  const dayTasks = data.tasks.filter((t) => !t.archived && t.scheduledDate === date);
-  const completed = dayTasks.filter((t) => t.status === 'completed').sort(byCompletedDesc);
-  const cancelled = dayTasks.filter((t) => t.status === 'cancelled');
-  const incomplete = dayTasks.filter((t) => isOpenTask(t));
+  const live = data.tasks.filter((t) => !t.archived);
+
+  // "What actually happened on this day?" Completion timing comes from
+  // completedAt — never from scheduledDate, which only says when the work was
+  // *planned*. A task planned yesterday but finished today therefore belongs to
+  // today, and one planned today but finished tomorrow belongs to tomorrow.
+  // A completed record with no completedAt (legacy/imported data) keeps the
+  // old behaviour and is reported on its scheduled day; no completion date is
+  // invented for it.
+  const completed = live
+    .filter((t) => t.status === 'completed' && (completedOnDate(t) ?? t.scheduledDate) === date)
+    .sort(byCompletedDesc);
+
+  // Planned-but-unfinished work is still keyed off scheduledDate: that is what
+  // "what was planned for this day" means.
+  const planned = live.filter((t) => t.scheduledDate === date);
+  const cancelled = planned.filter((t) => t.status === 'cancelled');
+  const incomplete = planned.filter(isOpenTask);
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(`${date}T23:59:59.999`);
   const postponedCount = data.taskHistory.filter((h) => {

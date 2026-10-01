@@ -437,6 +437,35 @@ async function main() {
   ok(monthStats.focusedSeconds === focusedSeconds(monthStats.completed),
      'Monthly review total equals the sum of its completed tasks');
 
+  /* ------------------------------------------------------------------ */
+  /* Daily review — completed work is dated by completedAt               */
+  /* ------------------------------------------------------------------ */
+
+  // The real write path stamps completedAt with the clock; the review has to
+  // read that instant, not the day the task happened to be planned for.
+  let carried!: { id: string };
+  await run(async () => {
+    carried = (await c().actions.addTask({
+      title: 'Planned yesterday, finished today',
+      scheduledDate: addDays(today, -1),
+      status: 'planned',
+    })) as { id: string };
+  });
+  await run(() => c().actions.completeTask(carried.id));
+  ok(get(carried.id).completedAt !== undefined
+     && dailyReviewStats(c().data, today).completed.some((t) => t.id === carried.id),
+     'Daily review counts a task planned yesterday but finished today');
+  ok(!dailyReviewStats(c().data, addDays(today, -1)).completed.some((t) => t.id === carried.id),
+     'Daily review does not count that task on the day it was merely planned');
+
+  let unscheduled!: { id: string };
+  await run(async () => {
+    unscheduled = (await c().actions.addTask({ title: 'Never scheduled, finished today' })) as { id: string };
+  });
+  await run(() => c().actions.completeTask(unscheduled.id));
+  ok(dailyReviewStats(c().data, today).completed.some((t) => t.id === unscheduled.id),
+     'Daily review counts an unscheduled task on the day it was actually finished');
+
   await act(async () => root.unmount());
   ctx = null;
   root = await mount();

@@ -65,6 +65,13 @@ Open the deployed site in Chrome or Edge and click **Install** in the address ba
 npm i --no-save jsdom tsx && npx tsx scripts/verify-workflow.tsx
 ```
 
+`scripts/verify-review-stats.ts` checks the Review date semantics in isolation — completed work is dated by `completedAt` (when the work actually happened), planned work by `scheduledDate` (when it was meant to happen). No DOM needed, and it is worth running in more than one timezone since completion is matched on the **local** calendar day:
+```bash
+npx tsx scripts/verify-review-stats.ts
+TZ=Asia/Kolkata npx tsx scripts/verify-review-stats.ts
+TZ=America/New_York npx tsx scripts/verify-review-stats.ts
+```
+
 ## Known limitations (v1)
 - Reminders fire only while the app is open. Background push needs a backend.
 - Supabase mode has no auth or sync conflict handling yet, so it's single-user only.

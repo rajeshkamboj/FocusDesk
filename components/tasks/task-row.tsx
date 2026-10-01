@@ -21,7 +21,7 @@ import {
   IconPlay,
   IconTrash,
 } from '@/components/ui/icons';
-import { addDays, formatCompletionTimestamp, formatDuration, formatSecondsDetailed, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
+import { addDays, formatCompletionTimestamp, formatDuration, formatFocusedTime, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import type { Task } from '@/lib/types';
 import { TaskFormModal } from './task-form-modal';
@@ -76,12 +76,10 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
     : paused
       ? `Paused ${formatStopwatch(task.actualDurationSeconds ?? 0)}`
       : null;
-  const spentLabel =
-    done && task.actualDurationSeconds != null
-      ? task.estimatedDuration != null
-        ? `Estimated ${formatDuration(task.estimatedDuration)} · Actual ${formatSecondsDetailed(task.actualDurationSeconds)}`
-        : `Time spent: ${formatSecondsDetailed(task.actualDurationSeconds)}`
-      : null;
+  // Focused time — the timer's own value (the sum of every Start/Pause/Resume
+  // segment), shown only when a session was actually recorded. Never invented.
+  const focusedLabel = done ? formatFocusedTime(task.actualDurationSeconds) : '';
+  const hasDetails = hasDescription || focusedLabel !== '';
 
   /** Only one task can be actively timed at a time. */
   const guardedStart = () => {
@@ -131,7 +129,7 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
         <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight}`}>
           {task.title}
         </span>
-        {hasDescription ? (
+        {hasDetails ? (
           <IconChevronRight
             width={12}
             height={12}
@@ -153,7 +151,7 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
         dueLabel ||
         completionLabel ||
         workingLabel !== null ||
-        spentLabel !== null ||
+        focusedLabel !== '' ||
         task.tags.length > 0) && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3">
           {project ? <span className="font-medium text-ink-2">{project.name}</span> : null}
@@ -179,10 +177,10 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
             </span>
           ) : null}
           {done && completionLabel ? <span className="text-ink-3">{completionLabel}</span> : null}
-          {done && spentLabel ? (
-            <span className="inline-flex items-center gap-1">
+          {focusedLabel ? (
+            <span className="inline-flex items-center gap-1 tabular-nums" title="Focused time">
               <IconClock width={12} height={12} />
-              {spentLabel}
+              {focusedLabel}
             </span>
           ) : null}
           {task.tags.map((t) => (
@@ -205,7 +203,7 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
         />
 
         <div className="min-w-0 flex-1">
-          {hasDescription ? (
+          {hasDetails ? (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
@@ -218,10 +216,23 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
             taskSummary
           )}
 
-          {hasDescription && expanded ? (
-            <p className="mt-1.5 whitespace-pre-line break-words text-[12.5px] leading-relaxed text-ink-2">
-              {task.description}
-            </p>
+          {hasDetails && expanded ? (
+            <div className="mt-1.5 space-y-1">
+              {hasDescription ? (
+                <p className="whitespace-pre-line break-words text-[12.5px] leading-relaxed text-ink-2">{task.description}</p>
+              ) : null}
+              {done ? (
+                <div className="space-y-0.5 text-[11.5px] text-ink-3">
+                  {completionLabel ? <p>{completionLabel}</p> : null}
+                  {focusedLabel ? (
+                    <p className="tabular-nums">
+                      Focused time: <span className="font-medium text-ink-2">{focusedLabel}</span>
+                    </p>
+                  ) : null}
+                  {task.estimatedDuration ? <p className="tabular-nums">Estimated: {formatDuration(task.estimatedDuration)}</p> : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

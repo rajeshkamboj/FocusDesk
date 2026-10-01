@@ -13,8 +13,8 @@ import { IconChevronDown, IconMore, IconPencil, IconPlus, IconProjects, IconTras
 import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
-import { formatShortDate, todayISO } from '@/lib/dates';
-import { projectProgress } from '@/lib/selectors';
+import { formatFocusedTime, formatShortDate, todayISO } from '@/lib/dates';
+import { projectFocusedSeconds, projectProgress } from '@/lib/selectors';
 import type { Project, ProjectStatus } from '@/lib/types';
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -90,6 +90,7 @@ export function ProjectsScreen() {
         <div className="space-y-3">
           {projects.map((project) => {
             const prog = projectProgress(data.tasks, project.id);
+            const focused = projectFocusedSeconds(data.tasks, project.id);
             const goal = project.goalId ? data.goals.find((g) => g.id === project.goalId) : undefined;
             const tasks = data.tasks.filter((t) => t.projectId === project.id && t.status !== 'cancelled');
             const openTasks = tasks.filter((t) => t.status !== 'completed');
@@ -124,6 +125,7 @@ export function ProjectsScreen() {
                       <ProgressBar done={prog.done} total={prog.total} className="max-w-56" />
                       <span className="text-[11px] tabular-nums text-ink-3">
                         {prog.done}/{prog.total} tasks done
+                        {focused > 0 ? ` · ${formatFocusedTime(focused)} focused` : ''}
                       </span>
                       {project.deadline ? (
                         <span className={`text-[11px] ${deadlineSoon ? 'text-warning' : 'text-ink-3'}`}>

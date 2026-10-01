@@ -28,6 +28,22 @@ export function tasksOnDate(tasks: Task[], date: ISODate): Task[] {
   return tasks.filter((t) => t.scheduledDate === date && isOpenTask(t));
 }
 
+/**
+ * Focused time (seconds) invested across the given tasks.
+ *
+ * Reads the task timer's own value — `actualDurationSeconds`, the total of
+ * every Start/Pause/Resume segment, finalized by the timer when the task was
+ * finished. No second duration field and no second calculation exist.
+ */
+export function focusedSeconds(tasks: Task[]): number {
+  return tasks.reduce((sum, t) => sum + (t.actualDurationSeconds ?? 0), 0);
+}
+
+/** Focused time (seconds) invested in a project's completed tasks. */
+export function projectFocusedSeconds(tasks: Task[], projectId: string): number {
+  return focusedSeconds(tasks.filter((t) => t.projectId === projectId && t.status === 'completed' && !t.archived));
+}
+
 /** Open tasks scheduled before `date`. */
 export function overdueTasks(tasks: Task[], date: ISODate = todayISO()): Task[] {
   return tasks.filter(
@@ -95,6 +111,8 @@ export interface DailyReviewStats {
   cancelled: Task[];
   postponedCount: number;
   priorityCompleted: boolean | null;
+  /** Focused time (seconds) invested in the day's completed tasks. */
+  focusedSeconds: number;
 }
 
 /** Stable comparator: completed_at DESC, null timestamps last, then createdAt DESC. */
@@ -127,6 +145,7 @@ export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats
     cancelled,
     postponedCount,
     priorityCompleted: priority ? priority.completed : null,
+    focusedSeconds: focusedSeconds(completed),
   };
 }
 
@@ -136,7 +155,9 @@ export interface WeeklyReviewStats {
   postponedCount: number;
   completedDailyPriorities: number;
   totalDailyPriorities: number;
-  projectsWorkedOn: { project: Project; completed: number }[];
+  projectsWorkedOn: { project: Project; completed: number; focusedSeconds: number }[];
+  /** Focused time (seconds) invested in the week's completed tasks. */
+  focusedSeconds: number;
 }
 
 export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): WeeklyReviewStats {
@@ -156,12 +177,19 @@ export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): We
   const dayPriorities = data.dailyPriorities.filter((p) => p.date >= from && p.date <= to);
 
   const byProject = new Map<string, number>();
+  const focusedByProject = new Map<string, number>();
   for (const t of completed) {
-    if (t.projectId) byProject.set(t.projectId, (byProject.get(t.projectId) ?? 0) + 1);
+    if (!t.projectId) continue;
+    byProject.set(t.projectId, (byProject.get(t.projectId) ?? 0) + 1);
+    focusedByProject.set(t.projectId, (focusedByProject.get(t.projectId) ?? 0) + (t.actualDurationSeconds ?? 0));
   }
   const projectsWorkedOn = data.projects
     .filter((p) => byProject.has(p.id))
-    .map((project) => ({ project, completed: byProject.get(project.id) ?? 0 }));
+    .map((project) => ({
+      project,
+      completed: byProject.get(project.id) ?? 0,
+      focusedSeconds: focusedByProject.get(project.id) ?? 0,
+    }));
 
   return {
     completed,
@@ -170,6 +198,7 @@ export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): We
     completedDailyPriorities: dayPriorities.filter((p) => p.completed).length,
     totalDailyPriorities: dayPriorities.length,
     projectsWorkedOn,
+    focusedSeconds: focusedSeconds(completed),
   };
 }
 
@@ -178,6 +207,8 @@ export interface MonthlyReviewStats {
   monthlyPriorities: { priority: MonthlyPriority; progress: Progress | null }[];
   projectProgress: { project: Project; progress: Progress }[];
   repeatedlyPostponed: Task[];
+  /** Focused time (seconds) invested in the month's completed tasks. */
+  focusedSeconds: number;
 }
 
 export function monthlyReviewStats(data: AppData, month: string): MonthlyReviewStats {
@@ -198,5 +229,11 @@ export function monthlyReviewStats(data: AppData, month: string): MonthlyReviewS
     .filter((t) => !t.archived && isOpenTask(t) && t.postponementCount >= 3)
     .sort((a, b) => b.postponementCount - a.postponementCount);
 
-  return { completed, monthlyPriorities, projectProgress: projectStats, repeatedlyPostponed };
+  return {
+    completed,
+    monthlyPriorities,
+    projectProgress: projectStats,
+    repeatedlyPostponed,
+    focusedSeconds: focusedSeconds(completed),
+  };
 }

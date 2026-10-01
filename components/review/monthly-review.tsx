@@ -9,7 +9,7 @@ import { ProgressBar } from '@/components/ui/card';
 import { Select } from '@/components/ui/form';
 import { IconChevronLeft, IconChevronRight, IconPlus, IconTrash } from '@/components/ui/icons';
 import { TaskRow } from '@/components/tasks/task-row';
-import { monthKey, monthName, todayISO } from '@/lib/dates';
+import { formatFocusedTime, monthKey, monthName, todayISO } from '@/lib/dates';
 import { monthlyPriorityProgress, monthlyReviewStats } from '@/lib/selectors';
 import type { MonthlyPriority } from '@/lib/types';
 
@@ -191,10 +191,11 @@ export function MonthlyReview() {
       <section className="rounded-2xl border border-line bg-surface p-6 shadow-card">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3">Month in review</h2>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className={`mt-4 grid grid-cols-2 gap-3 ${stats.focusedSeconds > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
           <Stat label="Tasks completed" value={stats.completed.length} />
           <Stat label="Monthly priorities" value={`${stats.monthlyPriorities.filter((p) => p.priority.completed).length}/${stats.monthlyPriorities.length}`} />
           <Stat label="Projects moved" value={stats.projectProgress.length} />
+          {stats.focusedSeconds > 0 ? <Stat label="Focused time" value={formatFocusedTime(stats.focusedSeconds)} /> : null}
         </div>
 
         {stats.projectProgress.length > 0 ? (

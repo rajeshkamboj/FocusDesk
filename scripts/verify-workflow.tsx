@@ -15,8 +15,8 @@ async function main() {
   const { act } = React;
   const { AuthProvider } = await import('../components/auth/auth-provider');
   const { DataProvider, useData } = await import('../components/data/data-provider');
-  const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey } = await import('../lib/dates');
-  const { weeklyReviewStats } = await import('../lib/selectors');
+  const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
+  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds } = await import('../lib/selectors');
   const { elapsedActiveSeconds, isTimerPaused, isTimerRunning } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
@@ -80,10 +80,10 @@ async function main() {
   /* Task timer — estimated vs actual time                               */
   /* ------------------------------------------------------------------ */
 
-  const makeTask = async (title: string, estimatedDuration?: number) => {
+  const makeTask = async (title: string, estimatedDuration?: number, projectId?: string) => {
     let created!: { id: string };
     await run(async () => {
-      created = (await c().actions.addTask({ title, scheduledDate: today, status: 'today', estimatedDuration })) as { id: string };
+      created = (await c().actions.addTask({ title, scheduledDate: today, status: 'today', estimatedDuration, projectId })) as { id: string };
     });
     return c().data.tasks.find((t) => t.id === created.id)!;
   };
@@ -246,6 +246,83 @@ async function main() {
   await run(() => c().actions.finishTask(pausedOvernight.id));
   ok(get(pausedOvernight.id).status === 'completed' && (get(pausedOvernight.id).actualDurationSeconds ?? 0) >= frozenOvernight,
      'Lifecycle: Pause → Resume → Finish counts only running time');
+
+  /* ------------------------------------------------------------------ */
+  /* Focused time on completed tasks — one source of truth               */
+  /* ------------------------------------------------------------------ */
+
+  // A multi-session task: Start → Pause → Resume → Finish. The recorded
+  // value must be the SUM of the running segments, and everything that shows
+  // "focused time" must read exactly that value.
+  const multi = await makeTask('Two sessions of work', 45);
+  await run(() => c().actions.startTask(multi.id));
+  await wait(1100);
+  await run(() => c().actions.pauseTask(multi.id));
+  await wait(1100); // paused time must not count
+  await run(() => c().actions.resumeTask(multi.id));
+  await wait(1100);
+  await run(() => c().actions.finishTask(multi.id));
+  const multiDone = get(multi.id);
+  ok((multiDone.actualDurationSeconds ?? 0) >= 2 && (multiDone.actualDurationSeconds ?? 0) <= 4,
+     `Focused time: two segments are summed, paused time excluded (${multiDone.actualDurationSeconds}s)`);
+  ok(formatFocusedTime(multiDone.actualDurationSeconds) === '< 1 min',
+     'Focused time: a sub-minute session reads "< 1 min", never a fake duration');
+
+  // A longer session, driven through the real timer path: backdate startedAt,
+  // then Finish — exactly what a user's session would have persisted.
+  const runSession = async (title: string, minutes: number, projectId?: string) => {
+    const t = await makeTask(title, undefined, projectId);
+    await run(() => c().actions.startTask(t.id));
+    await run(() => c().actions.updateTask(t.id, { startedAt: new Date(Date.now() - minutes * 60_000).toISOString() }));
+    await run(() => c().actions.finishTask(t.id));
+    return get(t.id);
+  };
+
+  const single = await runSession('One longer session', 47);
+  ok(formatFocusedTime(single.actualDurationSeconds) === '47 min', 'Focused time formats as "47 min"');
+  ok(formatFocusedTime(72 * 60) === '1h 12m', 'Focused time formats as "1h 12m"');
+  ok(formatFocusedTime(undefined) === '' && formatFocusedTime(0) === '< 1 min',
+     'Focused time: no record → nothing to show; a zero-second session → "< 1 min"');
+
+  const project = await (async () => {
+    let p;
+    await run(async () => {
+      p = await c().actions.addProject({ name: 'Timed project' });
+    });
+    return p! as { id: string };
+  })();
+  const projectA = await runSession('Project task A', 30, project.id);
+  const projectB = await runSession('Project task B', 48, project.id);
+  ok(projectA.actualDurationSeconds === 30 * 60 && projectB.actualDurationSeconds === 48 * 60,
+     'Project sessions record their consumed time through the timer');
+  const projectTotal = projectFocusedSeconds(c().data.tasks, project.id);
+  ok(projectTotal === (30 + 48) * 60, `Project summary sums only its completed sessions (${formatFocusedTime(projectTotal)})`);
+  ok(focusedSeconds([get(overnight.id)]) === 0,
+     'Focused time: a session still running contributes nothing until it is finished');
+
+  // A task completed without the timer must never show an invented duration.
+  const beforeUntimed = dailyReviewStats(c().data, today).focusedSeconds;
+  const untimed = await makeTask('Completed without the timer');
+  await run(() => c().actions.completeTask(untimed.id));
+  ok(get(untimed.id).actualDurationSeconds === undefined, 'A task completed without the timer records no duration');
+  ok(dailyReviewStats(c().data, today).focusedSeconds === beforeUntimed,
+     'Focused time: an untimed completion adds nothing and changes no total');
+
+  const dayStats = dailyReviewStats(c().data, today);
+  ok(dayStats.focusedSeconds === focusedSeconds(dayStats.completed),
+     'Daily review total equals the sum of its completed tasks (same value, same field)');
+  const weekStats = weeklyReviewStats(c().data, startOfWeek(today), endOfWeek(today));
+  ok(weekStats.focusedSeconds === focusedSeconds(weekStats.completed) && weekStats.projectsWorkedOn.some((p) => p.project.id === project.id && p.focusedSeconds >= 78 * 60 - 1),
+     'Weekly review total and per-project focused time come from the same tasks');
+  const monthStats = monthlyReviewStats(c().data, today.slice(0, 7));
+  ok(monthStats.focusedSeconds === focusedSeconds(monthStats.completed),
+     'Monthly review total equals the sum of its completed tasks');
+
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(focusedSeconds([get(single.id)]) === single.actualDurationSeconds && focusedSeconds([get(multi.id)]) === (multiDone.actualDurationSeconds ?? 0),
+     'Focused time survives a reload unchanged (no recomputation)');
 
   await act(async () => root.unmount());
   console.log('\nWorkflow verified.');

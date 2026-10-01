@@ -23,6 +23,7 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { createRepository, repositoryKind, type AppRepository } from '@/lib/store';
 import { dailyPriorityTimerTaskId, isOpenTask } from '@/lib/selectors';
 import {
+  blockingTimerTask,
   checkpointTimingPatch,
   elapsedActiveSeconds,
   interruptedTimerPatch,
@@ -793,10 +794,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // stable, app-owned Task row so its focus session uses the exact same
           // startedAt/pausedAt/actualDurationSeconds lifecycle as every task.
           const taskId = dailyPriorityTimerTaskId(priority.id);
-          const otherActiveTask = dataRef.current.tasks.find(
-            (t) => t.id !== taskId && !t.archived && t.status === 'in_progress' &&
-              (t.startedAt !== undefined || t.pausedAt !== undefined),
-          );
+          // Same single-timer rule as a task row's Start button: only a
+          // *running* session blocks. A paused task (normal or priority) has
+          // released the timer and must not stop this one from starting.
+          const otherActiveTask = blockingTimerTask(dataRef.current.tasks, taskId);
           if (otherActiveTask) {
             notify(`Finish or pause “${otherActiveTask.title}” before starting another timer`);
             return null;

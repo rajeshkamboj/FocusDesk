@@ -180,19 +180,19 @@ export function ProjectsScreen() {
 
                 {isExpanded ? (
                   <div className="border-t border-line px-5 py-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mb-3"
+                      onClick={() => setAddTaskFor(project.id)}
+                    >
+                      <IconPlus width={14} height={14} /> Add task to project
+                    </Button>
                     {tasks.length > 0 ? (
                       <TaskList tasks={tasks} />
                     ) : (
                       <p className="text-[13px] text-ink-3">No tasks in this project yet.</p>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => setAddTaskFor(project.id)}
-                    >
-                      <IconPlus width={14} height={14} /> Add task to project
-                    </Button>
                     <p className="mt-2 text-[11px] text-ink-3">
                       {openTasks.length} open · {tasks.length - openTasks.length} completed
                     </p>

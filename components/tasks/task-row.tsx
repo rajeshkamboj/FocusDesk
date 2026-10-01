@@ -11,16 +11,20 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
 import {
   IconArchive,
+  IconCheck,
   IconClock,
   IconFlag,
   IconMore,
+  IconPause,
   IconPencil,
   IconPlay,
   IconTrash,
 } from '@/components/ui/icons';
-import { addDays, formatCompletionTimestamp, formatDuration, relativeDay, todayISO } from '@/lib/dates';
+import { addDays, formatCompletionTimestamp, formatDuration, formatSecondsDetailed, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import type { Task } from '@/lib/types';
 import { TaskFormModal } from './task-form-modal';
+import { useNow } from './use-now';
 
 function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
@@ -49,12 +53,54 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [blockedBy, setBlockedBy] = useState<Task | null>(null);
+  const [timerBusy, setTimerBusy] = useState(false);
 
   const project = task.projectId ? data.projects.find((p) => p.id === task.projectId) : undefined;
   const done = task.status === 'completed';
   const cancelled = task.status === 'cancelled';
   const overdue = task.dueDate !== undefined && task.dueDate < todayISO() && !done && !cancelled;
   const completionLabel = formatCompletionTimestamp(task.completedAt);
+
+  // Timer state — derived from persisted timestamps, never from a counter.
+  const running = !done && !cancelled && isTimerRunning(task);
+  const paused = !done && !cancelled && isTimerPaused(task);
+  const now = useNow(running);
+  const elapsedSeconds = elapsedActiveSeconds(task, now);
+  const workingLabel = running
+    ? `Working ${formatStopwatch(elapsedSeconds)}`
+    : paused
+      ? `Paused ${formatStopwatch(task.actualDurationSeconds ?? 0)}`
+      : null;
+  const spentLabel =
+    done && task.actualDurationSeconds != null
+      ? task.estimatedDuration != null
+        ? `Estimated ${formatDuration(task.estimatedDuration)} · Actual ${formatSecondsDetailed(task.actualDurationSeconds)}`
+        : `Time spent: ${formatSecondsDetailed(task.actualDurationSeconds)}`
+      : null;
+
+  /** Only one task can be actively timed at a time. */
+  const guardedStart = () => {
+    const other = data.tasks.find(
+      (t) =>
+        t.id !== task.id &&
+        !t.archived &&
+        t.status === 'in_progress' &&
+        (t.startedAt !== undefined || t.pausedAt !== undefined),
+    );
+    if (other) {
+      setBlockedBy(other);
+      return;
+    }
+    void runTimerAction(() => actions.startTask(task.id));
+  };
+
+  /** Serialize timer actions so rapid clicks can't interleave. */
+  const runTimerAction = (fn: () => Promise<void>) => {
+    if (timerBusy) return;
+    setTimerBusy(true);
+    void fn().finally(() => setTimerBusy(false));
+  };
 
   const dueLabel = (() => {
     if (!task.dueDate || cancelled) return null;
@@ -88,19 +134,30 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
             <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight}`}>
               {task.title}
             </span>
-            {task.status === 'in_progress' && !done ? <Badge tone="accent">In progress</Badge> : null}
+            {task.status === 'in_progress' && !done && !paused ? <Badge tone="accent">In progress</Badge> : null}
+            {paused ? <Badge tone="muted">Paused</Badge> : null}
             {task.status === 'someday' ? <Badge tone="muted">Someday</Badge> : null}
             {task.postponementCount >= 3 && !done && !cancelled ? (
               <Badge tone="warning">Postponed {task.postponementCount}×</Badge>
             ) : null}
           </div>
 
-          {(showDate || project || task.estimatedDuration || dueLabel || completionLabel || task.tags.length > 0) && (
+          {(showDate ||
+            project ||
+            task.estimatedDuration ||
+            dueLabel ||
+            completionLabel ||
+            workingLabel !== null ||
+            spentLabel !== null ||
+            task.tags.length > 0) && (
             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3">
               {project ? <span className="font-medium text-ink-2">{project.name}</span> : null}
               {showDate && task.scheduledDate && !done ? <span>{relativeDay(task.scheduledDate)}</span> : null}
               {showDate && !task.scheduledDate && task.status !== 'someday' && !done ? <span>Unscheduled</span> : null}
-              {task.estimatedDuration && !done ? (
+              {workingLabel !== null ? (
+                <span className={`font-medium tabular-nums ${running ? 'text-ink-2' : ''}`}>{workingLabel}</span>
+              ) : null}
+              {task.estimatedDuration && !done && !running && !paused ? (
                 <span className="inline-flex items-center gap-1">
                   <IconClock width={12} height={12} />
                   {formatDuration(task.estimatedDuration)}
@@ -117,6 +174,12 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
                 </span>
               ) : null}
               {done && completionLabel ? <span className="text-ink-3">{completionLabel}</span> : null}
+              {done && spentLabel ? (
+                <span className="inline-flex items-center gap-1">
+                  <IconClock width={12} height={12} />
+                  {spentLabel}
+                </span>
+              ) : null}
               {task.tags.map((t) => (
                 <span key={t} className="rounded bg-surface-2 px-1.5 py-px">
                   {t}
@@ -125,6 +188,69 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
             </div>
           )}
         </div>
+
+        {!done && !cancelled ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {running ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={timerBusy}
+                  aria-label="Pause timer"
+                  onClick={() => void runTimerAction(() => actions.pauseTask(task.id))}
+                >
+                  <IconPause width={13} height={13} />
+                  <span className="hidden sm:inline">Pause</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="soft"
+                  disabled={timerBusy}
+                  aria-label="Finish task"
+                  onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
+                >
+                  <IconCheck width={13} height={13} />
+                  <span className="hidden sm:inline">Finish</span>
+                </Button>
+              </>
+            ) : paused ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={timerBusy}
+                  aria-label="Resume timer"
+                  onClick={() => void runTimerAction(() => actions.resumeTask(task.id))}
+                >
+                  <IconPlay width={13} height={13} />
+                  <span className="hidden sm:inline">Resume</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="soft"
+                  disabled={timerBusy}
+                  aria-label="Finish task"
+                  onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
+                >
+                  <IconCheck width={13} height={13} />
+                  <span className="hidden sm:inline">Finish</span>
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={timerBusy}
+                aria-label="Start task"
+                onClick={guardedStart}
+              >
+                <IconPlay width={13} height={13} />
+                <span className="hidden sm:inline">Start</span>
+              </Button>
+            )}
+          </div>
+        ) : null}
 
         <Menu
           trigger={({ toggle }) => (
@@ -303,6 +429,23 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
           void actions.deleteTask(task.id);
         }}
       />
+
+      {/* Only one task can be timed at a time — inform instead of silently stopping the other. */}
+      <Modal
+        open={blockedBy !== null}
+        onClose={() => setBlockedBy(null)}
+        title="Another task is in progress"
+        size="sm"
+        footer={
+          <Button variant="primary" onClick={() => setBlockedBy(null)}>
+            Got it
+          </Button>
+        }
+      >
+        <p className="text-sm leading-relaxed text-ink-2">
+          “{blockedBy?.title}” is currently in progress. Finish or pause it before starting this task.
+        </p>
+      </Modal>
     </>
   );
 }

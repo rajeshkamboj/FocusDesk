@@ -127,6 +127,38 @@ export function formatDuration(minutes?: number | null): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+/**
+ * Compact stopwatch format for live timers (counts up, never down):
+ *  - under an hour: "00:37" / "12:37"
+ *  - an hour or more: "1h 24m"
+ */
+export function formatStopwatch(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  if (total < 3600) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/**
+ * Human phrasing for a stored actual duration in seconds:
+ * "37 sec" / "12 min 37 sec" / "47 min" / "1h 24m".
+ */
+export function formatSecondsDetailed(seconds?: number | null): string {
+  if (seconds == null || Number.isNaN(seconds)) return '';
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  if (m > 0) return s === 0 ? `${m} min` : `${m} min ${s} sec`;
+  return `${s} sec`;
+}
+
 /** Format an ISO timestamp as local "HH:MM". */
 export function formatTime(iso: string): string {
   const d = new Date(iso);

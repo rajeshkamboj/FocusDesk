@@ -145,6 +145,9 @@ export function GoalsScreen() {
 
                 {isExpanded ? (
                   <div className="space-y-4 border-t border-line px-5 py-4">
+                    <Button variant="ghost" size="sm" onClick={() => setAddTaskFor(goal.id)}>
+                      <IconPlus width={14} height={14} /> Add task to goal
+                    </Button>
                     {linkedProjects.length > 0 ? (
                       <div>
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Projects</p>
@@ -165,9 +168,6 @@ export function GoalsScreen() {
                         <p className="text-[13px] text-ink-3">No tasks linked directly to this goal.</p>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setAddTaskFor(goal.id)}>
-                      <IconPlus width={14} height={14} /> Add task to goal
-                    </Button>
                   </div>
                 ) : null}
               </div>

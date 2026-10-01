@@ -43,6 +43,7 @@ import type {
   ISODate,
 } from '@/lib/types';
 import { emptyData } from '@/lib/store/defaults';
+import { loadDataLenient, mergeLoaded, type LoadIssue } from '@/lib/store/load';
 
 const BACKUP_KEY = 'pace.backup.v1';
 
@@ -147,6 +148,15 @@ export interface DataContextValue {
   toasts: Toast[];
   notify: (message: string) => void;
   dismissToast: (id: number) => void;
+  /**
+   * Collections the backend could not serve on the last load — usually a
+   * migration that was never run against the database. The rest of the app
+   * keeps working; these are shown as a warning instead of a blank screen.
+   */
+  loadIssues: LoadIssue[];
+  /** Load everything again (after running the missing SQL, say). */
+  reload: () => void;
+  dismissLoadIssues: () => void;
   actions: DataActions;
 }
 
@@ -165,6 +175,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData());
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [loadIssues, setLoadIssues] = useState<LoadIssue[]>([]);
+  const [reloadCount, setReloadCount] = useState(0);
   const repoKind = repositoryKind();
   const repoRef = useRef<AppRepository | null>(null);
   const dataRef = useRef(data);
@@ -187,6 +199,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const reload = useCallback(() => setReloadCount((n) => n + 1), []);
+  const dismissLoadIssues = useCallback(() => setLoadIssues([]), []);
+
   /* ---------------------------------------------------------------- */
   /* Load                                                             */
   /* ---------------------------------------------------------------- */
@@ -197,73 +212,63 @@ export function DataProvider({ children }: { children: ReactNode }) {
     repoRef.current = repo;
 
     (async () => {
-      try {
-        const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
-          await Promise.all([
-            repo.tasks.list(),
-            repo.projects.list(),
-            repo.goals.list(),
-            repo.inbox.list(),
-            repo.ideas.list(),
-            repo.dailyPriorities.list(),
-            repo.weeklyPriorities.list(),
-            repo.monthlyPriorities.list(),
-            repo.taskHistory.list(),
-            repo.wellbeingDays.list(),
-            repo.settings.get(),
-          ]);
-        if (cancelled) return;
-        const loaded: AppData = {
-          tasks,
-          projects,
-          goals,
-          inbox,
-          ideas,
-          dailyPriorities,
-          weeklyPriorities,
-          monthlyPriorities,
-          taskHistory,
-          wellbeingDays,
-          settings,
-        };
-        wellbeingRef.current = wellbeingDays.find((w) => w.date === todayISO()) ?? null;
-        setData(loaded);
-        setReady(true);
+      // Each collection loads on its own: one missing table (e.g. a migration
+      // that was never run) must not blank the entire app. See lib/store/load.ts.
+      const { loaded, issues } = await loadDataLenient(repo);
+      if (cancelled) return;
 
-        // Automatic carry-forward: unfinished past tasks move to today.
-        // A task whose timer is in progress (running or paused) is never moved
-        // automatically — reopening the app must never end an active session,
-        // only the user decides when a work session stops.
-        if (settings.general.automaticCarryForward) {
-          const today = todayISO();
-          const stale = tasks.filter(
-            (t) =>
-              isOpenTask(t) &&
-              t.status !== 'in_progress' &&
-              t.scheduledDate !== undefined &&
-              t.scheduledDate < today,
-          );
-          for (const t of stale) {
-            const updated = await repo.tasks.update(t.id, { scheduledDate: today, status: 'today' });
-            await repo.taskHistory.add({ taskId: t.id, type: 'postponed', note: 'Carried forward to today' });
-            if (!cancelled) {
-              setData((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === updated.id ? updated : x)) }));
-            }
-          }
-          if (stale.length > 0 && !cancelled) {
-            notify(stale.length === 1 ? '1 task carried forward to today' : `${stale.length} tasks carried forward to today`);
+      const merged = mergeLoaded(dataRef.current, loaded);
+      dataRef.current = merged;
+      setData(merged);
+      if (loaded.wellbeingDays) {
+        wellbeingRef.current = loaded.wellbeingDays.find((w) => w.date === todayISO()) ?? null;
+      }
+      setLoadIssues(issues);
+      setReady(true);
+
+      if (issues.length > 0) {
+        console.error('Some collections could not be loaded', issues);
+        notify(
+          issues.length === 1
+            ? `${issues[0].label} could not be loaded`
+            : `${issues.length} sections could not be loaded`,
+        );
+      }
+
+      // Automatic carry-forward: unfinished past tasks move to today.
+      // A task whose timer is in progress (running or paused) is never moved
+      // automatically — reopening the app must never end an active session,
+      // only the user decides when a work session stops.
+      if (!merged.settings.general.automaticCarryForward) return;
+      try {
+        const today = todayISO();
+        const stale = merged.tasks.filter(
+          (t) =>
+            isOpenTask(t) &&
+            t.status !== 'in_progress' &&
+            t.scheduledDate !== undefined &&
+            t.scheduledDate < today,
+        );
+        for (const t of stale) {
+          const updated = await repo.tasks.update(t.id, { scheduledDate: today, status: 'today' });
+          await repo.taskHistory.add({ taskId: t.id, type: 'postponed', note: 'Carried forward to today' });
+          if (!cancelled) {
+            setData((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === updated.id ? updated : x)) }));
           }
         }
+        if (stale.length > 0 && !cancelled) {
+          notify(stale.length === 1 ? '1 task carried forward to today' : `${stale.length} tasks carried forward to today`);
+        }
       } catch (error) {
-        console.error('Could not load application data', error);
-        if (!cancelled) setReady(true);
+        // Carry-forward is a convenience; failing it must never affect the load.
+        console.error('Could not carry tasks forward', error);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [notify, user?.id]);
+  }, [notify, reloadCount, user?.id]);
 
   /* ---------------------------------------------------------------- */
   /* Helpers                                                          */
@@ -913,8 +918,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<DataContextValue>(
-    () => ({ ready, data, repoKind, toasts, notify, dismissToast, actions }),
-    [ready, data, repoKind, toasts, notify, dismissToast, actions],
+    () => ({ ready, data, repoKind, toasts, notify, dismissToast, loadIssues, reload, dismissLoadIssues, actions }),
+    [ready, data, repoKind, toasts, notify, dismissToast, loadIssues, reload, dismissLoadIssues, actions],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

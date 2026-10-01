@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { UIProvider } from '@/components/ui/ui-provider';
 import { Toaster } from '@/components/ui/toaster';
+import { DataWarning } from './data-warning';
 import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { QuickAdd } from './quick-add';
@@ -47,7 +48,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             <div className="h-6 w-6 animate-pulse rounded-full border-2 border-line-strong border-t-accent" />
           </div>
         ) : (
-          children
+          <>
+            <DataWarning />
+            {children}
+          </>
         )}
       </main>
       <QuickAdd />

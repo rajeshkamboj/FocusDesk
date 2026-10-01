@@ -1,11 +1,11 @@
 /**
  * Pure task-timer state helpers. No side effects — safe to use anywhere.
  *
- * The timer is timestamp-driven, never counter-driven: elapsed time is always
- * derived from `startedAt` / `pausedAt` / `actualDurationSeconds` on the task,
- * so re-renders, navigation, page refreshes and backgrounded tabs cannot drift
- * or reset the measurement. Only meaningful transitions (Start, Pause, Resume,
- * Finish) write to the repository.
+ * The timer is timestamp-driven, never counter-driven: elapsed time is derived
+ * from `startedAt` / `pausedAt` / `actualDurationSeconds` on the task. The
+ * persisted task fields are also periodically checkpointed while a session is
+ * running, so a browser termination without an unload event can recover to the
+ * last reliably stored second instead of treating an old `startedAt` as live.
  *
  * State model (the existing `status` field is the source of truth — pause is a
  * sub-state of `in_progress`, not a separate status):
@@ -14,7 +14,7 @@
  *                         │  ▲
  *                      Pause  Resume
  *                         ▼  │
- *                       in_progress (paused: pausedAt set, startedAt unset)
+ *                       in_progress (paused: startedAt unset, pausedAt set)
  *                         │
  *                      Finish
  *                         ▼
@@ -47,6 +47,59 @@ export function elapsedActiveSeconds(task: Task, nowMs: number = Date.now()): nu
     if (!Number.isNaN(started)) return accumulated + Math.max(0, (nowMs - started) / 1000);
   }
   return accumulated;
+}
+
+/**
+ * Persist a safe checkpoint of a running segment using the same existing task
+ * fields. Whole seconds are folded into `actualDurationSeconds`; `startedAt`
+ * moves forward by only those credited seconds, preserving any fractional
+ * remainder so checkpoints never progressively discard time.
+ */
+export function checkpointTimingPatch(task: Task, nowMs: number = Date.now()): Partial<Task> {
+  if (!isTimerRunning(task) || !task.startedAt) return {};
+  const startedMs = Date.parse(task.startedAt);
+  if (Number.isNaN(startedMs)) return {};
+
+  const accumulated = task.actualDurationSeconds ?? 0;
+  const total = elapsedActiveSeconds(task, nowMs);
+  const checkpointedSeconds = Math.floor(total);
+  const creditedMilliseconds = Math.max(0, (checkpointedSeconds - accumulated) * 1000);
+
+  return {
+    actualDurationSeconds: checkpointedSeconds,
+    startedAt: new Date(Math.max(startedMs, Math.min(nowMs, startedMs + creditedMilliseconds))).toISOString(),
+  };
+}
+
+/** Freeze a running timer at `now`, retaining the normal paused sub-state. */
+export function pauseTimingPatch(task: Task, nowMs: number = Date.now()): Partial<Task> {
+  if (!isTimerRunning(task)) return {};
+  return {
+    startedAt: undefined,
+    pausedAt: new Date(nowMs).toISOString(),
+    actualDurationSeconds: Math.floor(elapsedActiveSeconds(task, nowMs)),
+  };
+}
+
+/**
+ * Recover a running timer left behind by a terminated or reloaded page.
+ *
+ * An unload handler normally persists a precise pause. If the browser ended
+ * the page before that write completed, `startedAt` is the start of the
+ * uncheckpointed remainder and `actualDurationSeconds` is the last durable
+ * whole-second checkpoint. Stop there; never count the time FocusDesk was
+ * unavailable.
+ */
+export function interruptedTimerPatch(task: Task): Partial<Task> {
+  if (!isTimerRunning(task) || !task.startedAt) return {};
+  const startedMs = Date.parse(task.startedAt);
+  if (Number.isNaN(startedMs)) {
+    return { startedAt: undefined, pausedAt: new Date().toISOString() };
+  }
+  return {
+    startedAt: undefined,
+    pausedAt: new Date(startedMs).toISOString(),
+  };
 }
 
 /**

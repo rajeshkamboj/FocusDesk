@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/icons';
 import { TaskList } from '@/components/tasks/task-list';
 import { addDays, daysBetween, formatFocusedTime, formatLongDate, formatTime, todayISO, weekdayName } from '@/lib/dates';
-import { dailyReviewStats } from '@/lib/selectors';
+import { dailyPriorityTimerTaskId, dailyReviewStats } from '@/lib/selectors';
 import type { DailyPriority, ISODate } from '@/lib/types';
 
 /**
@@ -23,6 +23,12 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
   const isToday = date === todayISO();
   const stats = dailyReviewStats(data, date);
   const priority = data.dailyPriorities.find((p) => p.date === date);
+  const priorityTimerTask = priority
+    ? data.tasks.find((t) => t.id === dailyPriorityTimerTaskId(priority.id))
+    : undefined;
+  const priorityFocusedTime = priority?.completed
+    ? formatFocusedTime(priorityTimerTask?.actualDurationSeconds)
+    : '';
 
   const [noAnswered, setNoAnswered] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -100,6 +106,12 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
                     <Badge tone="muted">Moved {priority.postponementCount}×</Badge>
                   ) : null}
                   {priority.completedAt ? <span>done at {formatTime(priority.completedAt)}</span> : null}
+                  {priorityFocusedTime ? (
+                    <span className="inline-flex items-center gap-1 tabular-nums" title="Focused time">
+                      <IconClock width={12} height={12} />
+                      Focused time: {priorityFocusedTime}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>

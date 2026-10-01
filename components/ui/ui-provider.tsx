@@ -6,6 +6,8 @@ export interface FocusTarget {
   /** 'daily-priority' completes the day's priority; 'task' completes a task. */
   type: 'daily-priority' | 'task';
   id: string;
+  /** Daily priorities use a normal Task row for their persisted timer session. */
+  timerTaskId?: string;
   title: string;
 }
 

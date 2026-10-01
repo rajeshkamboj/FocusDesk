@@ -21,8 +21,16 @@ import {
 import { addDays, todayISO } from '@/lib/dates';
 import { useAuth } from '@/components/auth/auth-provider';
 import { createRepository, repositoryKind, type AppRepository } from '@/lib/store';
-import { isOpenTask } from '@/lib/selectors';
-import { elapsedActiveSeconds, isTimerPaused, isTimerRunning, settleTimingPatch } from '@/lib/timer';
+import { dailyPriorityTimerTaskId, isOpenTask } from '@/lib/selectors';
+import {
+  checkpointTimingPatch,
+  elapsedActiveSeconds,
+  interruptedTimerPatch,
+  isTimerPaused,
+  isTimerRunning,
+  pauseTimingPatch,
+  settleTimingPatch,
+} from '@/lib/timer';
 import type {
   AppData,
   DailyPriority,
@@ -45,6 +53,7 @@ import type {
 import { emptyData } from '@/lib/store/defaults';
 
 const BACKUP_KEY = 'pace.backup.v1';
+const TIMER_CHECKPOINT_INTERVAL_MS = 10_000;
 
 export interface Toast {
   id: number;
@@ -92,6 +101,8 @@ export interface DataActions {
 
   /* Daily priorities */
   setDailyPriority(title: string, date?: ISODate): Promise<DailyPriority>;
+  /** Start or resume the normal Task timer associated with a daily priority. */
+  startDailyPriorityTimer(id: string): Promise<Task | null>;
   updateDailyPriority(id: string, patch: Partial<DailyPriority>): Promise<void>;
   toggleDailyPriority(id: string): Promise<void>;
   deleteDailyPriority(id: string): Promise<void>;
@@ -198,7 +209,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
+        const [storedTasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
           await Promise.all([
             repo.tasks.list(),
             repo.projects.list(),
@@ -212,6 +223,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
             repo.wellbeingDays.list(),
             repo.settings.get(),
           ]);
+        if (cancelled) return;
+        // Any still-running session belongs to the previous page instance. A
+        // pagehide write normally paused it precisely; if termination skipped
+        // that write, stop at the task's last persisted timer checkpoint.
+        const tasks = await Promise.all(
+          storedTasks.map(async (task) => {
+            const patch = interruptedTimerPatch(task);
+            if (Object.keys(patch).length === 0) return task;
+            try {
+              return await repo.tasks.update(task.id, patch);
+            } catch (error) {
+              console.error('Could not persist interrupted timer recovery', error);
+              return { ...task, ...patch };
+            }
+          }),
+        );
         if (cancelled) return;
         const loaded: AppData = {
           tasks,
@@ -231,9 +258,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setReady(true);
 
         // Automatic carry-forward: unfinished past tasks move to today.
-        // A task whose timer is in progress (running or paused) is never moved
-        // automatically — reopening the app must never end an active session,
-        // only the user decides when a work session stops.
+        // In-progress timer tasks (including sessions recovered as paused above)
+        // keep their original schedule and accumulated time.
         if (settings.general.automaticCarryForward) {
           const today = todayISO();
           const stale = tasks.filter(
@@ -279,10 +305,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const patchTaskState = useCallback((task: Task) => {
-    setData((d) => ({ ...d, tasks: d.tasks.map((t) => (t.id === task.id ? task : t)) }));
+    const tasks = dataRef.current.tasks.some((t) => t.id === task.id)
+      ? dataRef.current.tasks.map((t) => (t.id === task.id ? task : t))
+      : [...dataRef.current.tasks, task];
+    dataRef.current = { ...dataRef.current, tasks };
+    setData((d) => ({
+      ...d,
+      tasks: d.tasks.some((t) => t.id === task.id)
+        ? d.tasks.map((t) => (t.id === task.id ? task : t))
+        : [...d.tasks, task],
+    }));
   }, []);
 
+  const addTaskState = useCallback((task: Task) => {
+    if (dataRef.current.tasks.some((t) => t.id === task.id)) {
+      patchTaskState(task);
+      return;
+    }
+    dataRef.current = { ...dataRef.current, tasks: [...dataRef.current.tasks, task] };
+    setData((d) => ({
+      ...d,
+      tasks: d.tasks.some((t) => t.id === task.id) ? d.tasks : [...d.tasks, task],
+    }));
+  }, [patchTaskState]);
+
   const removeTaskState = useCallback((id: string) => {
+    dataRef.current = { ...dataRef.current, tasks: dataRef.current.tasks.filter((t) => t.id !== id) };
     setData((d) => ({ ...d, tasks: d.tasks.filter((t) => t.id !== id) }));
   }, []);
 
@@ -301,6 +349,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!repoRef.current) throw new Error('Repository not ready');
     return repoRef.current;
   };
+
+  // Timer transitions and checkpoints for one task must reach the repository
+  // in order (especially for Supabase requests that can resolve out of order).
+  const taskWriteQueueRef = useRef(new Map<string, Promise<Task>>());
+  const priorityTimerStartRef = useRef(new Map<string, Promise<Task | null>>());
+  const persistTaskUpdate = useCallback((id: string, patch: Partial<Task>): Promise<Task> => {
+    const previous = taskWriteQueueRef.current.get(id);
+    const write = (previous ? previous.catch(() => undefined) : Promise.resolve(undefined))
+      .then(() => repo().tasks.update(id, patch));
+    taskWriteQueueRef.current.set(id, write);
+    void write.then(
+      () => { if (taskWriteQueueRef.current.get(id) === write) taskWriteQueueRef.current.delete(id); },
+      () => { if (taskWriteQueueRef.current.get(id) === write) taskWriteQueueRef.current.delete(id); },
+    );
+    return write;
+  }, []);
 
   /**
    * Serializes task writes: every mutation gets a per-task sequence number and
@@ -330,7 +394,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const seq = nextTaskSeq(id);
       patchTaskState({ ...before, ...patch });
       try {
-        const updated = await repo().tasks.update(id, patch);
+        const updated = await persistTaskUpdate(id, patch);
         if (isLatestTaskSeq(id, seq)) patchTaskState(updated);
         return updated;
       } catch (error) {
@@ -340,8 +404,111 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [isLatestTaskSeq, nextTaskSeq, notify, patchTaskState],
+    [isLatestTaskSeq, nextTaskSeq, notify, patchTaskState, persistTaskUpdate],
   );
+
+  const startTimerForTask = useCallback(async (id: string): Promise<Task | null> => {
+    const before = dataRef.current.tasks.find((t) => t.id === id);
+    if (!before || before.status === 'completed' || before.status === 'cancelled') return null;
+    if (isTimerRunning(before)) return before;
+    return applyTaskPatch(
+      id,
+      { status: 'in_progress', startedAt: new Date().toISOString(), pausedAt: undefined },
+      'Could not start the timer — please try again',
+    );
+  }, [applyTaskPatch]);
+
+  const resumeTimerForTask = useCallback(async (id: string): Promise<Task | null> => {
+    const before = dataRef.current.tasks.find((t) => t.id === id);
+    if (!before || !isTimerPaused(before)) return null;
+    return applyTaskPatch(
+      id,
+      { startedAt: new Date().toISOString(), pausedAt: undefined },
+      'Could not resume the timer — please try again',
+    );
+  }, [applyTaskPatch]);
+
+  const checkpointRunningTask = useCallback(
+    (task: Task, nowMs: number) => {
+      const patch = checkpointTimingPatch(task, nowMs);
+      if (Object.keys(patch).length === 0 ||
+          (patch.startedAt === task.startedAt && patch.actualDurationSeconds === task.actualDurationSeconds)) return;
+
+      const seq = nextTaskSeq(task.id);
+      patchTaskState({ ...task, ...patch });
+      void persistTaskUpdate(task.id, patch).then((updated) => {
+        if (isLatestTaskSeq(task.id, seq)) patchTaskState(updated);
+      }).catch((error: unknown) => {
+        // Keep the live in-memory timer moving. The next checkpoint or unload
+        // can retry; reopening will fall back to the last durable checkpoint.
+        console.error('Timer checkpoint failed', error);
+      });
+    },
+    [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate],
+  );
+
+  const checkpointRunningTasks = useCallback(() => {
+    const nowMs = Date.now();
+    for (const task of dataRef.current.tasks) {
+      if (isTimerRunning(task)) checkpointRunningTask(task, nowMs);
+    }
+  }, [checkpointRunningTask]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const id = window.setInterval(checkpointRunningTasks, TIMER_CHECKPOINT_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [checkpointRunningTasks, ready]);
+
+  /** Persist a pause before the page becomes unavailable; never tied to visibility. */
+  const pauseRunningTasksOnExit = useCallback(() => {
+    const repository = repoRef.current;
+    if (!repository) return;
+    const nowMs = Date.now();
+
+    for (const task of dataRef.current.tasks) {
+      if (!isTimerRunning(task)) continue;
+      const patch = pauseTimingPatch(task, nowMs);
+      const paused = { ...task, ...patch };
+      const seq = nextTaskSeq(task.id);
+      patchTaskState(paused);
+
+      // Local storage writes synchronously inside update(), which is the most
+      // reliable unload path. Supabase gets a queued best-effort request; the
+      // periodic checkpoints above remain the crash-safe fallback.
+      const update = repository.kind === 'local'
+        ? repository.tasks.update(task.id, patch)
+        : persistTaskUpdate(task.id, patch);
+      void update.then((updated) => {
+        if (isLatestTaskSeq(task.id, seq)) patchTaskState(updated);
+      }).catch((error: unknown) => {
+        console.error('Could not pause timer while closing FocusDesk', error);
+      });
+    }
+  }, [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate]);
+
+  useEffect(() => {
+    let closing = false;
+    const onPageExit = () => {
+      if (closing) return;
+      closing = true;
+      pauseRunningTasksOnExit();
+    };
+    const onPageShow = () => { closing = false; };
+    // Hidden is not closed: checkpoint, but deliberately keep the timer running.
+    const onVisibilityChange = () => checkpointRunningTasks();
+
+    window.addEventListener('pagehide', onPageExit);
+    window.addEventListener('beforeunload', onPageExit);
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', onPageExit);
+      window.removeEventListener('beforeunload', onPageExit);
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [checkpointRunningTasks, pauseRunningTasksOnExit]);
 
   /** Shared creation helper used by inbox conversion and idea promotion. */
   const createFromTitle = useCallback(
@@ -461,18 +628,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       startTask: async (id) => {
-        const before = dataRef.current.tasks.find((t) => t.id === id);
-        if (!before || before.status === 'completed' || before.status === 'cancelled') return;
-        if (isTimerRunning(before)) return; // already running — nothing to do
-        // Begin (or restart) timing. The elapsed time is measured from this
-        // timestamp, so renders, navigation and refreshes cannot drift it.
-        // actualDurationSeconds is left as-is: it keeps time from earlier
-        // sessions on the same task and the timer continues from there.
-        await applyTaskPatch(
-          id,
-          { status: 'in_progress', startedAt: new Date().toISOString(), pausedAt: undefined },
-          'Could not start the timer — please try again',
-        );
+        // Shared timer transition used by normal tasks and daily priorities.
+        await startTimerForTask(id);
       },
 
       pauseTask: async (id) => {
@@ -492,14 +649,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       resumeTask: async (id) => {
-        const before = dataRef.current.tasks.find((t) => t.id === id);
-        if (!before || !isTimerPaused(before)) return;
-        // Continue accumulating from the previous elapsed time.
-        await applyTaskPatch(
-          id,
-          { startedAt: new Date().toISOString(), pausedAt: undefined },
-          'Could not resume the timer — please try again',
-        );
+        await resumeTimerForTask(id);
       },
 
       finishTask: async (id) => {
@@ -622,6 +772,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (existing) {
           const updated = await repo().dailyPriorities.update(existing.id, { title: title.trim() });
           setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
+          const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(existing.id));
+          if (timerTask) await applyTaskPatch(timerTask.id, { title: updated.title }, 'Could not update the priority timer task');
           return updated;
         }
         const created = await repo().dailyPriorities.create({ date: day, title: title.trim() });
@@ -629,19 +781,107 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return created;
       },
 
+      startDailyPriorityTimer: async (id) => {
+        const pendingStart = priorityTimerStartRef.current.get(id);
+        if (pendingStart) return pendingStart;
+
+        const starting = (async (): Promise<Task | null> => {
+          const priority = dataRef.current.dailyPriorities.find((p) => p.id === id);
+          if (!priority || priority.completed) return null;
+
+          // DailyPriority is its own planning record, not a Task. Give it one
+          // stable, app-owned Task row so its focus session uses the exact same
+          // startedAt/pausedAt/actualDurationSeconds lifecycle as every task.
+          const taskId = dailyPriorityTimerTaskId(priority.id);
+          const otherActiveTask = dataRef.current.tasks.find(
+            (t) => t.id !== taskId && !t.archived && t.status === 'in_progress' &&
+              (t.startedAt !== undefined || t.pausedAt !== undefined),
+          );
+          if (otherActiveTask) {
+            notify(`Finish or pause “${otherActiveTask.title}” before starting another timer`);
+            return null;
+          }
+          let task = dataRef.current.tasks.find((t) => t.id === taskId);
+          if (!task) {
+            task = await repo().tasks.create({
+              id: taskId,
+              title: priority.title,
+              priority: 'high',
+              status: 'created',
+            });
+            addTaskState(task);
+          } else if (task.title !== priority.title) {
+            const renamed = await applyTaskPatch(task.id, { title: priority.title }, 'Could not update the priority timer task');
+            if (!renamed) return null;
+            task = renamed;
+          }
+
+          if (task.status === 'completed') {
+            const status: TaskStatus = task.scheduledDate === todayISO() ? 'today' : task.scheduledDate ? 'planned' : 'created';
+            const reopened = await applyTaskPatch(
+              task.id,
+              { status, completedAt: undefined, startedAt: undefined, pausedAt: undefined },
+              'Could not reopen the priority timer task',
+            );
+            if (!reopened) return null;
+            task = reopened;
+          }
+          return startTimerForTask(task.id);
+        })();
+        priorityTimerStartRef.current.set(id, starting);
+        try {
+          return await starting;
+        } finally {
+          if (priorityTimerStartRef.current.get(id) === starting) priorityTimerStartRef.current.delete(id);
+        }
+      },
+
       updateDailyPriority: async (id, patch) => {
         const updated = await repo().dailyPriorities.update(id, patch);
         setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
+        if (patch.title !== undefined) {
+          const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
+          if (timerTask && timerTask.title !== updated.title) {
+            await applyTaskPatch(timerTask.id, { title: updated.title }, 'Could not update the priority timer task');
+          }
+        }
       },
 
       toggleDailyPriority: async (id) => {
         const before = dataRef.current.dailyPriorities.find((p) => p.id === id);
         if (!before) return;
         const completed = !before.completed;
-        const updated = await repo().dailyPriorities.update(id, {
-          completed,
-          completedAt: completed ? new Date().toISOString() : undefined,
-        });
+        const completedAt = completed ? new Date().toISOString() : undefined;
+        const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
+
+        // The priority itself remains in daily_priorities, but any elapsed time
+        // lives only on its associated normal Task record. Keep both lifecycle
+        // states in sync without introducing priority-specific timer fields.
+        if (completed && timerTask && timerTask.status !== 'completed') {
+          const now = completedAt ? Date.parse(completedAt) : Date.now();
+          const finalized = await applyTaskPatch(
+            timerTask.id,
+            {
+              status: 'completed',
+              completedAt,
+              ...settleTimingPatch(timerTask, now),
+            },
+            'Could not finish the priority timer — please try again',
+          );
+          if (!finalized) return;
+          await logHistory(timerTask.id, 'completed');
+        } else if (!completed && timerTask?.status === 'completed') {
+          const status: TaskStatus = timerTask.scheduledDate === todayISO() ? 'today' : timerTask.scheduledDate ? 'planned' : 'created';
+          const reopened = await applyTaskPatch(
+            timerTask.id,
+            { status, completedAt: undefined, startedAt: undefined, pausedAt: undefined },
+            'Could not reopen the priority timer — please try again',
+          );
+          if (!reopened) return;
+          await logHistory(timerTask.id, 'reopened');
+        }
+
+        const updated = await repo().dailyPriorities.update(id, { completed, completedAt });
         setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
       },
 
@@ -909,7 +1149,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchTaskState, removeTaskState],
+    [addTaskState, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchTaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
   );
 
   const value = useMemo<DataContextValue>(

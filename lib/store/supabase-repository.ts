@@ -400,7 +400,7 @@ export class SupabaseRepository implements AppRepository {
     this.http = new SupabaseHttpClient(client, userId);
 
     this.tasks = new RestCollection(this.http, 'tasks', taskMap, (input) => ({
-      id: uuid(),
+      id: input.id ?? uuid(),
       title: input.title.trim(),
       description: input.description?.trim() || undefined,
       status: input.status ?? 'created',

@@ -17,7 +17,7 @@ async function main() {
   const { DataProvider, useData } = await import('../components/data/data-provider');
   const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
   const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds } = await import('../lib/selectors');
-  const { elapsedActiveSeconds, isTimerPaused, isTimerRunning } = await import('../lib/timer');
+  const { checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
   const Probe = () => { ctx = useData(); return null; };
@@ -88,6 +88,14 @@ async function main() {
     return c().data.tasks.find((t) => t.id === created.id)!;
   };
   const get = (id: string) => c().data.tasks.find((t) => t.id === id)!;
+  const closeAndReopen = async () => {
+    await act(async () => {
+      window.dispatchEvent(new dom.window.Event('pagehide'));
+      root.unmount();
+    });
+    ctx = null;
+    root = await mount();
+  };
 
   const timed = await makeTask('Timed work', 30);
   ok(timed.estimatedDuration === 30, 'Timer 1: task created with a 30-minute estimate');
@@ -98,20 +106,20 @@ async function main() {
   await wait(1100);
   ok(elapsedActiveSeconds(get(timed.id)) >= 1, 'Timer: elapsed grows from timestamps (not a counter)');
 
-  // Refresh (full unmount + remount) while the timer runs.
-  await act(async () => root.unmount());
-  ctx = null;
-  root = await mount();
-  ok(isTimerRunning(get(timed.id)) && elapsedActiveSeconds(get(timed.id)) >= 1, 'Timer 4-5: running timer continues from the correct elapsed time after reload');
-
   await wait(1100);
   await run(() => c().actions.pauseTask(timed.id));
   const afterPause = get(timed.id);
   ok(isTimerPaused(afterPause) && (afterPause.actualDurationSeconds ?? 0) >= 2, 'Timer 6: Pause preserves accumulated time');
   const frozen = afterPause.actualDurationSeconds ?? 0;
 
+  // A paused session remains paused with exactly the same duration after reload.
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(isTimerPaused(get(timed.id)) && get(timed.id).actualDurationSeconds === frozen,
+     'Timer A: reload keeps a normal task paused with its accumulated duration');
   await wait(1100);
-  ok(Math.floor(elapsedActiveSeconds(get(timed.id))) === frozen, 'Timer 7: paused time does not accumulate');
+  ok(Math.floor(elapsedActiveSeconds(get(timed.id))) === frozen, 'Timer 7: paused time does not accumulate after reload');
 
   await run(() => c().actions.resumeTask(timed.id));
   ok(isTimerRunning(get(timed.id)) && Math.floor(elapsedActiveSeconds(get(timed.id))) >= frozen, 'Timer 8-9: Resume continues from the previous elapsed time');
@@ -123,6 +131,22 @@ async function main() {
   ok(finished.startedAt === undefined && finished.pausedAt === undefined, 'Timer: Finish stops the timer');
   ok((finished.actualDurationSeconds ?? 0) >= frozen + 1, `Timer 10: actual_duration_seconds stored (${finished.actualDurationSeconds}s)`);
   ok(finished.estimatedDuration === 30, 'Timer 11: estimate remains 30 minutes (never overwritten)');
+
+  const checkpointBase = {
+    ...get(timed.id),
+    status: 'in_progress' as const,
+    actualDurationSeconds: 4,
+    startedAt: new Date(1_000).toISOString(),
+  };
+  const checkpoint = checkpointTimingPatch(checkpointBase, 3_750);
+  const checkpointed = { ...checkpointBase, ...checkpoint };
+  ok(checkpoint.actualDurationSeconds === 6 && checkpoint.startedAt === new Date(3_000).toISOString()
+      && Math.abs(elapsedActiveSeconds(checkpointed, 3_750) - 6.75) < 0.001,
+     'Timer checkpoint: whole seconds persist without losing the fractional remainder');
+  const recoveredCheckpoint = { ...checkpointed, ...interruptedTimerPatch(checkpointed) };
+  ok(isTimerPaused(recoveredCheckpoint) && recoveredCheckpoint.actualDurationSeconds === 6
+      && recoveredCheckpoint.pausedAt === checkpoint.startedAt,
+     'Timer checkpoint: interrupted sessions pause at the last durable timestamp');
 
   // Manual completion without the timer: works, and records no actual duration.
   const manual = await makeTask('Manually completed');
@@ -206,28 +230,44 @@ async function main() {
      'Well-being: a new day starts fresh without touching anything else');
 
   /* ------------------------------------------------------------------ */
-  /* Timer lifecycle — a session survives closing/reopening the app      */
+  /* Timer lifecycle — unload pause and last-checkpoint recovery         */
   /* ------------------------------------------------------------------ */
 
-  // A task left running on a past day is never carried forward: reopening
-  // the app must not end an active session — only the user decides.
+  // Closing the page dispatches pagehide (not visibilitychange): persist the
+  // current segment and reopen paused without carrying time across the gap.
   let overnight!: { id: string };
   await run(async () => {
     overnight = (await c().actions.addTask({ title: 'Left running overnight', scheduledDate: addDays(today, -1), status: 'today' })) as { id: string };
   });
   await run(() => c().actions.startTask(overnight.id));
   await wait(1100);
-  const beforeReopen = elapsedActiveSeconds(get(overnight.id));
+  await closeAndReopen();
+  const afterReopen = get(overnight.id);
+  const closedDuration = afterReopen.actualDurationSeconds ?? 0;
+  ok(isTimerPaused(afterReopen) && closedDuration >= 1 && afterReopen.scheduledDate === addDays(today, -1),
+     'Lifecycle B: closing/reopening pauses a normal task, saves elapsed time, and does not carry it forward');
+  await wait(1100);
+  ok((get(overnight.id).actualDurationSeconds ?? 0) === closedDuration,
+     'Lifecycle B: time while FocusDesk is closed is not counted');
+  await run(() => c().actions.finishTask(overnight.id));
+
+  // If unload persistence is skipped (for example, abrupt process termination),
+  // reopening reconciles a still-running row at its last persisted checkpoint.
+  const recovered = await makeTask('Recover last timer checkpoint');
+  await run(() => c().actions.startTask(recovered.id));
+  const reliableAt = new Date(Date.now() - 20_000).toISOString();
+  await run(() => c().actions.updateTask(recovered.id, { startedAt: reliableAt, actualDurationSeconds: 17 }));
   await act(async () => root.unmount());
   ctx = null;
   root = await mount();
-  const afterReopen = get(overnight.id);
-  ok(afterReopen.status === 'in_progress' && afterReopen.scheduledDate === addDays(today, -1),
-     'Lifecycle: reopening does not end or carry forward a running session');
-  ok(isTimerRunning(afterReopen) && elapsedActiveSeconds(afterReopen) >= beforeReopen,
-     'Lifecycle: the running timer keeps accumulating across a reopen (never reset)');
+  ok(isTimerPaused(get(recovered.id)) && get(recovered.id).actualDurationSeconds === 17
+      && get(recovered.id).pausedAt === reliableAt,
+     'Lifecycle: missed unload writes recover paused at the last reliable timestamp');
+  await wait(1100);
+  ok(get(recovered.id).actualDurationSeconds === 17, 'Lifecycle: recovery never accumulates time after its checkpoint');
+  await run(() => c().actions.finishTask(recovered.id));
 
-  // A paused session survives the same reopen, frozen.
+  // A normal pause persists immediately and remains frozen across a reload.
   const pausedOvernight = await makeTask('Paused overnight');
   await run(() => c().actions.startTask(pausedOvernight.id));
   await wait(1100);
@@ -237,15 +277,90 @@ async function main() {
   ctx = null;
   root = await mount();
   ok(isTimerPaused(get(pausedOvernight.id)) && get(pausedOvernight.id).actualDurationSeconds === frozenOvernight,
-     'Lifecycle: a paused session survives a reopen with the same duration');
+     'Lifecycle A: a paused session survives reload with the same duration');
   await wait(1100);
   ok(Math.floor(elapsedActiveSeconds(get(pausedOvernight.id))) === frozenOvernight,
-     'Lifecycle: paused time does not accumulate while the app is reopened');
+     'Lifecycle A: paused time does not accumulate after reload');
   await run(() => c().actions.resumeTask(pausedOvernight.id));
   await wait(1100);
   await run(() => c().actions.finishTask(pausedOvernight.id));
   ok(get(pausedOvernight.id).status === 'completed' && (get(pausedOvernight.id).actualDurationSeconds ?? 0) >= frozenOvernight,
      'Lifecycle: Pause → Resume → Finish counts only running time');
+
+  /* ------------------------------------------------------------------ */
+  /* Daily priority timer uses the shared Task timer/session             */
+  /* ------------------------------------------------------------------ */
+
+  const makePriority = async (title: string, date: string) => {
+    let created!: { id: string };
+    await run(async () => { created = await c().actions.setDailyPriority(title, date); });
+    return c().data.dailyPriorities.find((p) => p.id === created.id)!;
+  };
+  const priorityPaused = await makePriority('Priority pause and reload', addDays(today, 1));
+  let priorityTask!: import('../lib/types').Task | null;
+  let startedAgain!: import('../lib/types').Task | null;
+  await run(async () => {
+    [priorityTask, startedAgain] = await Promise.all([
+      c().actions.startDailyPriorityTimer(priorityPaused.id),
+      c().actions.startDailyPriorityTimer(priorityPaused.id),
+    ]);
+  });
+  ok(Boolean(priorityTask) && isTimerRunning(get(priorityTask.id)), 'Priority: Start creates and runs a normal persisted Task timer');
+  ok(startedAgain?.id === priorityTask.id
+      && c().data.tasks.filter((t) => t.id === priorityTask.id).length === 1,
+     'Priority G: concurrent/repeated Start reuses one Task/session instead of creating duplicates');
+  await wait(1100);
+  await run(() => c().actions.pauseTask(priorityTask.id));
+  const priorityFrozen = get(priorityTask.id).actualDurationSeconds ?? 0;
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(isTimerPaused(get(priorityTask.id)) && get(priorityTask.id).actualDurationSeconds === priorityFrozen && priorityFrozen >= 1,
+     'Priority C: pause and reload preserve the accumulated Task timer duration');
+  await run(() => c().actions.toggleDailyPriority(priorityPaused.id));
+
+  const priorityClosed = await makePriority('Priority close and reopen', addDays(today, 2));
+  let closingPriorityTask!: import('../lib/types').Task | null;
+  await run(async () => { closingPriorityTask = await c().actions.startDailyPriorityTimer(priorityClosed.id); });
+  await wait(1100);
+  await closeAndReopen();
+  const closedPriority = get(closingPriorityTask!.id);
+  const closedPrioritySeconds = closedPriority.actualDurationSeconds ?? 0;
+  ok(isTimerPaused(closedPriority) && closedPrioritySeconds >= 1,
+     'Priority D: closing/reopening leaves the priority timer paused with consumed time');
+  await wait(1100);
+  ok(get(closingPriorityTask!.id).actualDurationSeconds === closedPrioritySeconds,
+     'Priority D: closed time is excluded from the priority duration');
+  await run(() => c().actions.toggleDailyPriority(priorityClosed.id));
+
+  const priorityFinish = await makePriority('Priority resume and finish', addDays(today, 3));
+  let finishingPriorityTask!: import('../lib/types').Task | null;
+  await run(async () => { finishingPriorityTask = await c().actions.startDailyPriorityTimer(priorityFinish.id); });
+  await wait(1100);
+  await run(() => c().actions.pauseTask(finishingPriorityTask!.id));
+  const beforePriorityResume = get(finishingPriorityTask!.id).actualDurationSeconds ?? 0;
+  await wait(1100);
+  await run(() => c().actions.resumeTask(finishingPriorityTask!.id));
+  await wait(1100);
+  await run(() => c().actions.toggleDailyPriority(priorityFinish.id));
+  const finishedPriorityTask = get(finishingPriorityTask!.id);
+  ok(finishedPriorityTask.status === 'completed' && finishedPriorityTask.completedAt !== undefined
+      && (finishedPriorityTask.actualDurationSeconds ?? 0) >= beforePriorityResume + 1,
+     'Priority E: Pause → Resume → Finish persists the final actual focused duration');
+  ok(c().data.dailyPriorities.find((p) => p.id === priorityFinish.id)?.completed
+      && finishedPriorityTask.estimatedDuration === undefined
+      && formatFocusedTime(finishedPriorityTask.actualDurationSeconds) === '< 1 min',
+     'Priority E: completion displays actual focused time without overwriting an estimate');
+
+  // A hidden tab is not a page exit. Visibility changes never auto-pause.
+  const hiddenTabTask = await makeTask('Continue behind another tab');
+  await run(() => c().actions.startTask(hiddenTabTask.id));
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+  await act(async () => { document.dispatchEvent(new dom.window.Event('visibilitychange')); });
+  ok(isTimerRunning(get(hiddenTabTask.id)), 'Timer F: visibilitychange to hidden does not pause a running task');
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  await run(() => c().actions.pauseTask(hiddenTabTask.id));
+  await run(() => c().actions.finishTask(hiddenTabTask.id));
 
   /* ------------------------------------------------------------------ */
   /* Focused time on completed tasks — one source of truth               */
@@ -297,8 +412,12 @@ async function main() {
      'Project sessions record their consumed time through the timer');
   const projectTotal = projectFocusedSeconds(c().data.tasks, project.id);
   ok(projectTotal === (30 + 48) * 60, `Project summary sums only its completed sessions (${formatFocusedTime(projectTotal)})`);
-  ok(focusedSeconds([get(overnight.id)]) === 0,
+  const notYetFinished = await makeTask('Running but not finished');
+  await run(() => c().actions.startTask(notYetFinished.id));
+  ok(focusedSeconds([get(notYetFinished.id)]) === 0,
      'Focused time: a session still running contributes nothing until it is finished');
+  await run(() => c().actions.pauseTask(notYetFinished.id));
+  await run(() => c().actions.finishTask(notYetFinished.id));
 
   // A task completed without the timer must never show an invented duration.
   const beforeUntimed = dailyReviewStats(c().data, today).focusedSeconds;

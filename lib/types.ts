@@ -78,6 +78,8 @@ export interface Task {
 }
 
 export type TaskInput = {
+  /** Optional stable ID for app-owned task records; ordinary tasks get an ID from the repository. */
+  id?: ID;
   title: string;
   description?: string;
   status?: TaskStatus;

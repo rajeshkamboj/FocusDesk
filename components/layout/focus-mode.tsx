@@ -1,53 +1,52 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
 import { IconCheck, IconPause, IconPlay, IconX } from '@/components/ui/icons';
-
-function formatElapsed(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  const mm = String(m).padStart(2, '0');
-  const ss = String(s).padStart(2, '0');
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+import { formatStopwatch } from '@/lib/dates';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { useNow } from '@/components/tasks/use-now';
 
 /**
  * Focus Mode — a quiet room around one thing.
- * Started from "🔥 Start Priority" on Today (or a task). Everything else hides.
+ * Its clock is the normal persisted Task timer, not a Focus Mode counter.
  */
 export function FocusMode() {
   const { focusTarget, stopFocus } = useUI();
-  const { actions, ready } = useData();
-  const [seconds, setSeconds] = useState(0);
-  const [running, setRunning] = useState(true);
-
-  const [trackedTarget, setTrackedTarget] = useState(focusTarget);
-  if (trackedTarget !== focusTarget) {
-    setTrackedTarget(focusTarget);
-    setSeconds(0);
-    setRunning(true);
-  }
-
-  useEffect(() => {
-    if (!focusTarget || !running) return;
-    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [focusTarget, running]);
+  const { actions, data, ready } = useData();
+  const timerTaskId = focusTarget
+    ? focusTarget.type === 'task'
+      ? focusTarget.id
+      : focusTarget.timerTaskId
+    : undefined;
+  const timerTask = timerTaskId ? data.tasks.find((task) => task.id === timerTaskId) : undefined;
+  const running = timerTask ? isTimerRunning(timerTask) : false;
+  const paused = timerTask ? isTimerPaused(timerTask) : false;
+  const now = useNow(running);
+  const elapsed = timerTask ? elapsedActiveSeconds(timerTask, now) : 0;
 
   if (!focusTarget || !ready) return null;
 
+  const toggleTimer = async () => {
+    if (!timerTask) return;
+    if (running) await actions.pauseTask(timerTask.id);
+    else if (paused) await actions.resumeTask(timerTask.id);
+    else if (focusTarget.type === 'task') await actions.startTask(timerTask.id);
+  };
+
   const complete = async () => {
     if (focusTarget.type === 'daily-priority') {
-      await actions.updateDailyPriority(focusTarget.id, { completed: true, completedAt: new Date().toISOString() });
+      // This action also finalizes the associated Task timer before marking the
+      // daily priority complete, preserving the priority's existing timestamp.
+      await actions.toggleDailyPriority(focusTarget.id);
     } else {
       await actions.completeTask(focusTarget.id);
     }
     stopFocus();
   };
+
+  const toggleLabel = running ? 'Pause' : paused ? 'Resume' : 'Start';
 
   return (
     <div className="fixed inset-0 z-[80] flex animate-fade-in flex-col items-center justify-center bg-background">
@@ -69,13 +68,18 @@ export function FocusMode() {
         </h1>
 
         <div className="mt-10 font-mono text-6xl font-light tabular-nums tracking-tight text-ink-2 sm:text-7xl">
-          {formatElapsed(seconds)}
+          {formatStopwatch(elapsed)}
         </div>
 
         <div className="mt-12 flex items-center gap-3">
-          <Button variant="secondary" size="lg" onClick={() => setRunning((r) => !r)}>
+          <Button
+            variant="secondary"
+            size="lg"
+            disabled={!timerTask || (!running && !paused && focusTarget.type === 'daily-priority')}
+            onClick={() => void toggleTimer()}
+          >
             {running ? <IconPause width={18} height={18} /> : <IconPlay width={18} height={18} />}
-            {running ? 'Pause' : 'Resume'}
+            {toggleLabel}
           </Button>
           <Button variant="primary" size="lg" onClick={() => void complete()}>
             <IconCheck width={18} height={18} />

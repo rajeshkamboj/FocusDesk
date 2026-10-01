@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { TaskRow } from './task-row';
 import { TaskFormModal } from './task-form-modal';
 import { relativeDay, todayISO, addDays, isoWeekKey } from '@/lib/dates';
+import { dailyPriorityTimerTaskId } from '@/lib/selectors';
 import type { Task } from '@/lib/types';
 
 type FilterId = 'all' | 'today' | 'upcoming' | 'unscheduled' | 'someday' | 'completed' | 'cancelled';
@@ -37,7 +38,12 @@ export function TasksScreen() {
   const tomorrow = addDays(today, 1);
 
   const filtered = useMemo(() => {
-    let list = data.tasks.filter((t) => !t.archived);
+    // Today's priority already has its own card. Older priority timer Tasks are
+    // left visible here so an unfinished session can still be resumed later.
+    const priorityTimerTaskIds = new Set(
+      data.dailyPriorities.filter((p) => p.date === today).map((p) => dailyPriorityTimerTaskId(p.id)),
+    );
+    let list = data.tasks.filter((t) => !t.archived && !priorityTimerTaskIds.has(t.id));
 
     if (filter === 'today') list = list.filter((t) => t.scheduledDate === today && t.status !== 'completed' && t.status !== 'cancelled');
     else if (filter === 'upcoming') list = list.filter((t) => t.scheduledDate !== undefined && t.scheduledDate > today && t.status !== 'completed' && t.status !== 'cancelled');
@@ -57,7 +63,7 @@ export function TasksScreen() {
     }
 
     return list;
-  }, [data.tasks, data.projects, filter, projectFilter, goalFilter, query, today]);
+  }, [data.tasks, data.dailyPriorities, data.projects, filter, projectFilter, goalFilter, query, today]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();

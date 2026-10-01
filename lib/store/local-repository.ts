@@ -137,7 +137,7 @@ export class LocalRepository implements AppRepository {
       'tasks',
       persist,
       (input) => ({
-        id: createId(),
+        id: input.id ?? createId(),
         title: input.title.trim(),
         description: input.description?.trim() || undefined,
         status: input.status ?? 'created',

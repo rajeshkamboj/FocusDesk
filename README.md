@@ -9,7 +9,7 @@ The app ships with **zero predefined content**: you create every project, goal, 
 
 ## Sections
 Today · Inbox · Tasks · Projects · Goals · Calendar · Review (daily / weekly / monthly planning) · Ideas · Settings
-Plus: Focus Mode (🔥 Start Priority), global quick capture (**Ctrl + Shift + Space**), postponement tracking, task history, light/dark/system theme and JSON export/import.
+Plus: Focus Mode (🔥 Start Priority), a quiet task timer (start/pause/finish — stores actual time next to the estimate), global quick capture (**Ctrl + Shift + Space**), postponement tracking, task history, light/dark/system theme and JSON export/import.
 
 ## Local setup
 ```bash
@@ -39,8 +39,9 @@ npm run build && npm start
 
 ## Supabase setup
 1. Create a project, open the SQL editor and run `supabase/schema.sql`.
-2. Copy the project URL and anon key into the env vars.
-3. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
+2. For an existing database, apply the idempotent migrations in `supabase/migrations/` (`003_task_timer.sql` adds the task-timer columns).
+3. Copy the project URL and anon key into the env vars.
+4. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
 
 ## Architecture
 ```

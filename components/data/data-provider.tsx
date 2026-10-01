@@ -22,6 +22,7 @@ import { addDays, todayISO } from '@/lib/dates';
 import { useAuth } from '@/components/auth/auth-provider';
 import { createRepository, repositoryKind, type AppRepository } from '@/lib/store';
 import { isOpenTask } from '@/lib/selectors';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning, settleTimingPatch } from '@/lib/timer';
 import type {
   AppData,
   DailyPriority,
@@ -70,7 +71,14 @@ export interface DataActions {
   deleteTask(id: string): Promise<void>;
   completeTask(id: string): Promise<void>;
   reopenTask(id: string): Promise<void>;
+  /** Start (or restart) the task timer — status becomes in_progress. */
   startTask(id: string): Promise<void>;
+  /** Pause the running timer, preserving the time accumulated so far. */
+  pauseTask(id: string): Promise<void>;
+  /** Resume a paused timer, continuing from the accumulated time. */
+  resumeTask(id: string): Promise<void>;
+  /** Stop the timer, store actualDurationSeconds and mark the task completed. */
+  finishTask(id: string): Promise<void>;
   cancelTask(id: string): Promise<void>;
   /** Defer a task (increments postponement count). */
   postponeTask(id: string, to: ISODate | 'tomorrow' | 'someday', note?: string): Promise<void>;
@@ -262,6 +270,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return repoRef.current;
   };
 
+  /**
+   * Serializes task writes: every mutation gets a per-task sequence number and
+   * a server response is only applied (or rolled back) while it is still the
+   * newest one. Rapid Start/Pause/Finish clicks can therefore never apply a
+   * stale response on top of a newer state.
+   */
+  const taskSeqRef = useRef(new Map<string, number>());
+  const nextTaskSeq = useCallback((id: string) => {
+    const n = (taskSeqRef.current.get(id) ?? 0) + 1;
+    taskSeqRef.current.set(id, n);
+    return n;
+  }, []);
+  const isLatestTaskSeq = useCallback((id: string, seq: number) => {
+    return (taskSeqRef.current.get(id) ?? 0) === seq;
+  }, []);
+
+  /**
+   * Optimistically apply `patch` to a task, persist it and reconcile with the
+   * repository's response. On failure the task is rolled back and a toast is
+   * shown — the UI never keeps a state the backend rejected.
+   */
+  const applyTaskPatch = useCallback(
+    async (id: string, patch: Partial<Task>, failureMessage: string): Promise<Task | null> => {
+      const before = dataRef.current.tasks.find((t) => t.id === id);
+      if (!before) return null;
+      const seq = nextTaskSeq(id);
+      patchTaskState({ ...before, ...patch });
+      try {
+        const updated = await repo().tasks.update(id, patch);
+        if (isLatestTaskSeq(id, seq)) patchTaskState(updated);
+        return updated;
+      } catch (error) {
+        if (isLatestTaskSeq(id, seq)) patchTaskState(before);
+        notify(failureMessage);
+        console.error('Task update failed', error);
+        return null;
+      }
+    },
+    [isLatestTaskSeq, nextTaskSeq, notify, patchTaskState],
+  );
+
   /** Shared creation helper used by inbox conversion and idea promotion. */
   const createFromTitle = useCallback(
     async (
@@ -347,29 +396,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!before) return;
         // Optimistic update: mark completed immediately in the UI using the
         // browser clock. The persisted value (via the repo) wins once the
-        // update returns; if the server supplies a timestamp that one replaces
-        // ours. On failure we roll back and surface a toast.
-        const optimistic: Task = {
-          ...before,
-          status: 'completed',
-          // Only stamp completedAt when transitioning from a non-completed
-          // state so rapid toggle/untoggle doesn't stack stale timestamps.
-          completedAt: before.status === 'completed' ? before.completedAt : new Date().toISOString(),
-        };
-        patchTaskState(optimistic);
-        try {
-          const updated = await repo().tasks.update(id, {
+        // update returns; on failure we roll back and surface a toast.
+        // When the task is being timed, whatever time is accumulated is
+        // finalized into actualDurationSeconds first.
+        const updated = await applyTaskPatch(
+          id,
+          {
             status: 'completed',
-            completedAt: optimistic.completedAt,
-          });
-          patchTaskState(updated);
-          if (before.status !== 'completed') await logHistory(id, 'completed');
-        } catch (error) {
-          // Roll back to the previous state on failure.
-          patchTaskState(before);
-          notify('Could not mark task complete — please try again');
-          console.error('completeTask failed', error);
-        }
+            // Only stamp completedAt when transitioning from a non-completed
+            // state so rapid toggle/untoggle doesn't stack stale timestamps.
+            completedAt: before.status === 'completed' ? before.completedAt : new Date().toISOString(),
+            ...settleTimingPatch(before),
+          },
+          'Could not mark task complete — please try again',
+        );
+        if (updated && before.status !== 'completed') await logHistory(id, 'completed');
       },
 
       reopenTask: async (id) => {
@@ -377,28 +418,86 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!before) return;
         const status: TaskStatus =
           before.scheduledDate === todayISO() ? 'today' : before.scheduledDate ? 'planned' : 'created';
-        const optimistic: Task = { ...before, status, completedAt: undefined };
-        patchTaskState(optimistic);
-        try {
-          const updated = await repo().tasks.update(id, { status, completedAt: undefined });
-          patchTaskState(updated);
-          if (before.status === 'completed') await logHistory(id, 'reopened');
-        } catch (error) {
-          patchTaskState(before);
-          notify('Could not reopen task — please try again');
-          console.error('reopenTask failed', error);
-        }
+        // Reopening stops any timer but keeps the recorded actual duration —
+        // it is the total time spent on the task so far.
+        const updated = await applyTaskPatch(
+          id,
+          { status, completedAt: undefined, startedAt: undefined, pausedAt: undefined },
+          'Could not reopen task — please try again',
+        );
+        if (updated && before.status === 'completed') await logHistory(id, 'reopened');
       },
 
       startTask: async (id) => {
-        const updated = await repo().tasks.update(id, { status: 'in_progress' });
-        patchTaskState(updated);
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before || before.status === 'completed' || before.status === 'cancelled') return;
+        if (isTimerRunning(before)) return; // already running — nothing to do
+        // Begin (or restart) timing. The elapsed time is measured from this
+        // timestamp, so renders, navigation and refreshes cannot drift it.
+        // actualDurationSeconds is left as-is: it keeps time from earlier
+        // sessions on the same task and the timer continues from there.
+        await applyTaskPatch(
+          id,
+          { status: 'in_progress', startedAt: new Date().toISOString(), pausedAt: undefined },
+          'Could not start the timer — please try again',
+        );
+      },
+
+      pauseTask: async (id) => {
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before || !isTimerRunning(before)) return;
+        const now = Date.now();
+        // Freeze the accumulated active time; paused time is not work time.
+        await applyTaskPatch(
+          id,
+          {
+            startedAt: undefined,
+            pausedAt: new Date(now).toISOString(),
+            actualDurationSeconds: Math.floor(elapsedActiveSeconds(before, now)),
+          },
+          'Could not pause the timer — please try again',
+        );
+      },
+
+      resumeTask: async (id) => {
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before || !isTimerPaused(before)) return;
+        // Continue accumulating from the previous elapsed time.
+        await applyTaskPatch(
+          id,
+          { startedAt: new Date().toISOString(), pausedAt: undefined },
+          'Could not resume the timer — please try again',
+        );
+      },
+
+      finishTask: async (id) => {
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before || before.status !== 'in_progress') return;
+        const now = Date.now();
+        // Stop the timer, store the actual active working time (never the
+        // estimate) and complete the task through the existing mechanism.
+        const updated = await applyTaskPatch(
+          id,
+          {
+            status: 'completed',
+            completedAt: new Date(now).toISOString(),
+            ...settleTimingPatch(before, now),
+          },
+          'Could not complete task — please try again',
+        );
+        // The guard above guarantees this was an in_progress task.
+        if (updated) await logHistory(id, 'completed');
       },
 
       cancelTask: async (id) => {
-        const updated = await repo().tasks.update(id, { status: 'cancelled' });
-        patchTaskState(updated);
-        await logHistory(id, 'cancelled');
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        if (!before) return;
+        const updated = await applyTaskPatch(
+          id,
+          { status: 'cancelled', ...settleTimingPatch(before) },
+          'Could not cancel task — please try again',
+        );
+        if (updated) await logHistory(id, 'cancelled');
       },
 
       postponeTask: async (id, to, note) => {
@@ -412,6 +511,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
               : { status: to === todayISO() ? 'today' : 'planned', scheduledDate: to };
         const updated = await repo().tasks.update(id, {
           ...target,
+          // Leaving in_progress settles any running timer safely.
+          ...settleTimingPatch(before),
           postponementCount: before.postponementCount + 1,
         });
         patchTaskState(updated);
@@ -438,6 +539,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 : before.status === 'completed' || before.status === 'cancelled'
                   ? before.status
                   : 'planned',
+          // Leaving in_progress settles any running timer safely.
+          ...settleTimingPatch(before),
           ...(hadPlan ? { postponementCount: before.postponementCount + 1 } : {}),
         });
         patchTaskState(updated);
@@ -710,7 +813,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [createFromTitle, logHistory, notify, patchTaskState, removeTaskState],
+    [applyTaskPatch, createFromTitle, logHistory, notify, patchTaskState, removeTaskState],
   );
 
   const value = useMemo<DataContextValue>(

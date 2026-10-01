@@ -35,6 +35,10 @@ create table if not exists tasks (
   completed_at timestamptz,
   estimated_duration integer,
   actual_duration integer,
+  -- Task timer (actual time tracking). estimated_duration is never overwritten.
+  started_at timestamptz,
+  paused_at timestamptz,
+  actual_duration_seconds integer,
   reminder timestamptz,
   notes text,
   tags text[] not null default '{}',

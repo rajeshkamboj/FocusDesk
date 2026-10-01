@@ -51,10 +51,21 @@ export interface Task {
   /** The hard deadline — independent of the scheduled date. */
   dueDate?: ISODate;
   completedAt?: ISODateTime;
-  /** Estimated effort in minutes. */
+  /** Estimated effort in minutes. Never overwritten by the timer. */
   estimatedDuration?: number;
-  /** Actual effort in minutes. */
+  /** Actual effort in minutes. (Legacy field — the timer uses seconds.) */
   actualDuration?: number;
+  /**
+   * Actual active working time in seconds, measured by the task timer.
+   * While a task is being timed it holds the time accumulated so far (across
+   * pauses); on Finish it is finalized. Remains undefined for tasks that were
+   * completed without using the timer.
+   */
+  actualDurationSeconds?: number;
+  /** When the current timing segment started (set by Start/Resume). */
+  startedAt?: ISODateTime;
+  /** When the task was last paused; undefined while the timer runs. */
+  pausedAt?: ISODateTime;
   /** When to surface a reminder (ISO timestamp). */
   reminder?: ISODateTime;
   notes?: string;

@@ -5,22 +5,56 @@ import { useData } from '@/components/data/data-provider';
 import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
 import { IconCheck, IconFlame, IconPencil, IconPlay } from '@/components/ui/icons';
-import { todayISO } from '@/lib/dates';
+import { formatFocusedTime, formatStopwatch, todayISO } from '@/lib/dates';
+import { dailyPriorityTimerTaskId } from '@/lib/selectors';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { useNow } from '@/components/tasks/use-now';
 
 /**
  * 🔥 Today's Priority — the one question that matters in the morning:
  * "What is the ONE thing that matters most today?"
  */
 export function PriorityCard() {
-  const { data, actions } = useData();
+  const { data, actions, notify } = useData();
   const { startFocus } = useUI();
 
   const priority = data.dailyPriorities.find((p) => p.date === todayISO());
+  const timerTask = priority
+    ? data.tasks.find((t) => t.id === dailyPriorityTimerTaskId(priority.id))
+    : undefined;
+  const timerRunning = timerTask ? isTimerRunning(timerTask) : false;
+  const timerPaused = timerTask ? isTimerPaused(timerTask) : false;
+  const now = useNow(timerRunning);
+  const elapsed = timerTask ? elapsedActiveSeconds(timerTask, now) : 0;
+  const timerLabel = timerRunning
+    ? `Working ${formatStopwatch(elapsed)}`
+    : timerPaused
+      ? `Paused ${formatStopwatch(timerTask?.actualDurationSeconds ?? 0)}`
+      : timerTask?.actualDurationSeconds !== undefined
+        ? `Focused time: ${formatFocusedTime(timerTask.actualDurationSeconds)}`
+        : null;
 
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState('');
 
+  const openPriorityFocus = async () => {
+    if (!priority) return;
+    try {
+      const task = await actions.startDailyPriorityTimer(priority.id);
+      if (task) {
+        startFocus({
+          type: 'daily-priority',
+          id: priority.id,
+          timerTaskId: task.id,
+          title: priority.title,
+        });
+      }
+    } catch (error) {
+      console.error('Could not start the priority timer', error);
+      notify('Could not start the priority timer — please try again');
+    }
+  };
 
   if (!priority) {
     return (
@@ -105,6 +139,7 @@ export function PriorityCard() {
           >
             {priority.title}
           </p>
+          {timerLabel ? <p className="mt-2 text-[12px] font-medium tabular-nums text-ink-3">{timerLabel}</p> : null}
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
             {!priority.completed ? (
@@ -113,12 +148,9 @@ export function PriorityCard() {
                   <IconCheck width={16} height={16} />
                   Mark Complete
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => startFocus({ type: 'daily-priority', id: priority.id, title: priority.title })}
-                >
+                <Button variant="secondary" onClick={() => void openPriorityFocus()}>
                   <IconPlay width={15} height={15} />
-                  🔥 Start Priority
+                  {timerRunning ? 'Open Focus Mode' : timerPaused ? 'Resume Priority' : '🔥 Start Priority'}
                 </Button>
               </>
             ) : (

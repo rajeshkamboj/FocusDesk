@@ -39,6 +39,11 @@ export function focusedSeconds(tasks: Task[]): number {
   return tasks.reduce((sum, t) => sum + (t.actualDurationSeconds ?? 0), 0);
 }
 
+/** Stable ID for the normal Task record that stores a daily priority's timer session. */
+export function dailyPriorityTimerTaskId(priorityId: string): string {
+  return `daily-priority-timer:${priorityId}`;
+}
+
 /** Focused time (seconds) invested in a project's completed tasks. */
 export function projectFocusedSeconds(tasks: Task[], projectId: string): number {
   return focusedSeconds(tasks.filter((t) => t.projectId === projectId && t.status === 'completed' && !t.archived));

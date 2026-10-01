@@ -231,10 +231,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setReady(true);
 
         // Automatic carry-forward: unfinished past tasks move to today.
+        // A task whose timer is in progress (running or paused) is never moved
+        // automatically — reopening the app must never end an active session,
+        // only the user decides when a work session stops.
         if (settings.general.automaticCarryForward) {
           const today = todayISO();
           const stale = tasks.filter(
-            (t) => isOpenTask(t) && t.scheduledDate !== undefined && t.scheduledDate < today,
+            (t) =>
+              isOpenTask(t) &&
+              t.status !== 'in_progress' &&
+              t.scheduledDate !== undefined &&
+              t.scheduledDate < today,
           );
           for (const t of stale) {
             const updated = await repo.tasks.update(t.id, { scheduledDate: today, status: 'today' });

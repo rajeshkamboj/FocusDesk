@@ -205,6 +205,48 @@ async function main() {
   ok(flagsOf(wellbeingDay()).every((f) => f === undefined) && c().data.tasks.length > 0,
      'Well-being: a new day starts fresh without touching anything else');
 
+  /* ------------------------------------------------------------------ */
+  /* Timer lifecycle — a session survives closing/reopening the app      */
+  /* ------------------------------------------------------------------ */
+
+  // A task left running on a past day is never carried forward: reopening
+  // the app must not end an active session — only the user decides.
+  let overnight!: { id: string };
+  await run(async () => {
+    overnight = (await c().actions.addTask({ title: 'Left running overnight', scheduledDate: addDays(today, -1), status: 'today' })) as { id: string };
+  });
+  await run(() => c().actions.startTask(overnight.id));
+  await wait(1100);
+  const beforeReopen = elapsedActiveSeconds(get(overnight.id));
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  const afterReopen = get(overnight.id);
+  ok(afterReopen.status === 'in_progress' && afterReopen.scheduledDate === addDays(today, -1),
+     'Lifecycle: reopening does not end or carry forward a running session');
+  ok(isTimerRunning(afterReopen) && elapsedActiveSeconds(afterReopen) >= beforeReopen,
+     'Lifecycle: the running timer keeps accumulating across a reopen (never reset)');
+
+  // A paused session survives the same reopen, frozen.
+  const pausedOvernight = await makeTask('Paused overnight');
+  await run(() => c().actions.startTask(pausedOvernight.id));
+  await wait(1100);
+  await run(() => c().actions.pauseTask(pausedOvernight.id));
+  const frozenOvernight = get(pausedOvernight.id).actualDurationSeconds ?? 0;
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(isTimerPaused(get(pausedOvernight.id)) && get(pausedOvernight.id).actualDurationSeconds === frozenOvernight,
+     'Lifecycle: a paused session survives a reopen with the same duration');
+  await wait(1100);
+  ok(Math.floor(elapsedActiveSeconds(get(pausedOvernight.id))) === frozenOvernight,
+     'Lifecycle: paused time does not accumulate while the app is reopened');
+  await run(() => c().actions.resumeTask(pausedOvernight.id));
+  await wait(1100);
+  await run(() => c().actions.finishTask(pausedOvernight.id));
+  ok(get(pausedOvernight.id).status === 'completed' && (get(pausedOvernight.id).actualDurationSeconds ?? 0) >= frozenOvernight,
+     'Lifecycle: Pause → Resume → Finish counts only running time');
+
   await act(async () => root.unmount());
   console.log('\nWorkflow verified.');
   process.exit(0);

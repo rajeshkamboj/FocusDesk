@@ -97,6 +97,12 @@ const taskMap = {
     completedAt: str(r.completed_at),
     estimatedDuration: num(r.estimated_duration),
     actualDuration: num(r.actual_duration),
+    // Timer columns are part of the persisted session — they must be read
+    // back, otherwise a running/paused timer would be lost on reload (and
+    // every read-modify-write update would wipe the columns in the database).
+    startedAt: str(r.started_at),
+    pausedAt: str(r.paused_at),
+    actualDurationSeconds: num(r.actual_duration_seconds),
     reminder: str(r.reminder),
     notes: str(r.notes),
     tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],

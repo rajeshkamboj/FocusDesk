@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FocusDesk — Focus</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="widget">
+      <header class="titlebar" id="titlebar">
+        <span class="brand">🎯<span class="brand-text">FOCUS</span></span>
+        <button class="icon-button" id="close" type="button" title="Hide the widget — your task keeps running" aria-label="Hide widget">✕</button>
+      </header>
+
+      <main class="body">
+        <p class="task-title" id="title">Waiting for FocusDesk…</p>
+        <p class="task-meta" id="meta"></p>
+
+        <div class="clock" id="clock">--:--</div>
+
+        <div class="actions">
+          <button class="button secondary" id="toggle" type="button">
+            <span class="button-glyph" id="toggle-glyph">❚❚</span>
+            <span id="toggle-label">Pause</span>
+          </button>
+          <button class="button primary" id="finish" type="button">
+            <span class="button-glyph">✓</span>
+            <span>Finish</span>
+          </button>
+        </div>
+      </main>
+
+      <footer class="status" id="status">Connecting to FocusDesk…</footer>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,242 @@
+/*
+ * Focus Widget styling — intentionally quiet.
+ *
+ * Colours mirror the FocusDesk design tokens (app/globals.css) so the widget
+ * looks like part of the same product. Light/dark follow the OS preference.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --surface: #ffffff;
+  --surface-2: #efefea;
+  --line: #e3e3dc;
+  --ink: #1b1c18;
+  --ink-2: #55574e;
+  --ink-3: #8b8d81;
+  --accent: #1e6b52;
+  --accent-hover: #175741;
+  --accent-ink: #ffffff;
+  --danger: #a63d2e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1c1d19;
+    --surface-2: #24251f;
+    --line: #2e2f28;
+    --ink: #ecece6;
+    --ink-2: #a9aa9f;
+    --ink-3: #797b6f;
+    --accent: #4fae8d;
+    --accent-hover: #63bfa0;
+    --accent-ink: #10201a;
+    --danger: #d9836b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.widget {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------- */
+/* Title bar (drag handle)                                           */
+/* ---------------------------------------------------------------- */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px 7px 12px;
+  cursor: grab;
+}
+
+.titlebar:active {
+  cursor: grabbing;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.brand-text {
+  transform: translateY(0.5px);
+}
+
+.icon-button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.icon-button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- */
+/* Body                                                              */
+/* ---------------------------------------------------------------- */
+
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 4px;
+  min-height: 0;
+}
+
+.task-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-meta {
+  margin: 2px 0 0;
+  min-height: 14px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.clock {
+  margin-top: auto;
+  font-size: 38px;
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.clock.paused {
+  color: var(--ink-3);
+}
+
+.clock.offline {
+  opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------- */
+/* Actions                                                           */
+/* ---------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.button {
+  all: unset;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.button-glyph {
+  font-size: 10px;
+  transform: translateY(-0.5px);
+}
+
+.button.secondary {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.button.secondary:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button.primary:hover {
+  background: var(--accent-hover);
+}
+
+.button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button.busy {
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------- */
+/* Status line                                                       */
+/* ---------------------------------------------------------------- */
+
+.status {
+  padding: 5px 12px 7px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status.offline {
+  color: var(--danger);
+}

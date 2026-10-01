@@ -1,0 +1,15 @@
+{
+  "name": "focusdesk-focus-widget",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Experimental Windows companion for FocusDesk: a small always-on-top window that mirrors the task being timed",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:debug": "tauri build --debug",
+    "icons": "python3 tools/make-icons.py"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

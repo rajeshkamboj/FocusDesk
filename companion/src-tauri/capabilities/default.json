@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "widget",
+  "description": "Permissions for the Focus Widget window. Deliberately tiny: the widget calls the app's own IPC commands (app commands need no permission entry) and the window-state plugin runs entirely in Rust, so nothing else is granted.",
+  "windows": [
+    "widget"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

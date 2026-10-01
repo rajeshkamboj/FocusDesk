@@ -1,0 +1,6 @@
+# Companion app (Tauri) — build output and local dependencies.
+# The Next.js app in the repository root is unaffected by these paths.
+
+node_modules/
+src-tauri/target/
+src-tauri/gen/

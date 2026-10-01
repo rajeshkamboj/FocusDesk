@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "scripts/**",
+    // Companion desktop app (Tauri + Rust + plain browser JS) — not part of the
+    // Next.js application and not linted by the web app's configuration.
+    "companion/**",
   ]),
 ]);
 

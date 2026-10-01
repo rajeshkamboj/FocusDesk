@@ -10,6 +10,7 @@ import { MobileNav } from './mobile-nav';
 import { QuickAdd } from './quick-add';
 import { FocusMode } from './focus-mode';
 import { RegisterSW } from '@/components/pwa/register-sw';
+import { FocusWidgetLink } from '@/components/focus-widget/focus-widget-link';
 import { useNotificationScheduler } from '@/lib/notifications';
 import { applyTheme, watchSystemTheme } from '@/lib/theme';
 
@@ -54,6 +55,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       <FocusMode />
       <Toaster />
       <RegisterSW />
+      {/* Headless link to the optional Windows Focus Widget (no UI, inert when
+          the companion is not running). */}
+      <FocusWidgetLink />
     </div>
   );
 }

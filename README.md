@@ -43,12 +43,46 @@ npm run build && npm start
 3. Copy the project URL and anon key into the env vars.
 4. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
 
+## Experimental: Windows Focus Widget (branch `feature/windows-focus-widget`)
+
+An optional, **experimental** companion for Windows: a small always-on-top widget
+that shows the task FocusDesk is timing and offers Pause / Resume / Finish.
+It lives entirely in [`companion/`](companion/README.md), is **not** part of the
+web build, and the PWA keeps working unchanged when it is not installed.
+
+```
+Start a task in FocusDesk  ──▶  widget appears (always on top, movable)
+Pause / Resume / Finish    ◀──▶  applied by FocusDesk through its normal actions
+Finish                     ──▶  widget closes
+Closing the widget         ──▶  the task is left exactly as it was
+```
+
+How they talk: `components/focus-widget/focus-widget-link.tsx` (headless, mounted
+in the app shell) publishes the active task to a loopback bridge on
+`127.0.0.1:8787` and long-polls for widget commands, which it applies with the
+existing `useData()` actions. The widget derives elapsed time from the *same*
+persisted timestamps as `lib/timer.ts`, so the two can never drift. No new
+database, no second timer, no service-role key, no RLS change.
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_FOCUS_WIDGET_PORT` | bridge port (default `8787`) |
+| `NEXT_PUBLIC_FOCUS_WIDGET_ENABLED` | set to `false` to switch the link off entirely |
+
+Run the companion: see [`companion/README.md`](companion/README.md)
+(`cd companion && npm install && npm run dev`; `npm run build` produces the
+Windows installer). A Rust-free way to exercise the PWA side is
+`node companion/tools/mock-bridge.mjs` plus
+`npx tsx scripts/verify-focus-widget.tsx`.
+
 ## Architecture
 ```
 app/                  routes (thin wrappers)
 components/<feature>/ screens + feature components
 components/ui/        reusable UI kit
 components/data/      DataProvider — service layer (all writes + task history)
+components/focus-widget/  headless link to the optional Windows companion
+lib/focus-widget/     bridge client + protocol for that companion
 lib/types.ts          data model
 lib/store/            repository interface, LocalRepository, SupabaseRepository
 lib/selectors.ts      pure derived stats (review, progress)

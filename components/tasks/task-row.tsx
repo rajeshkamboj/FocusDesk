@@ -22,7 +22,7 @@ import {
   IconTrash,
 } from '@/components/ui/icons';
 import { addDays, formatCompletionTimestamp, formatDuration, formatFocusedTime, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
-import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { blockingTimerTask, elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import type { Task } from '@/lib/types';
 import { TaskFormModal } from './task-form-modal';
 import { useNow } from './use-now';
@@ -81,15 +81,13 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   const focusedLabel = done ? formatFocusedTime(task.actualDurationSeconds) : '';
   const hasDetails = hasDescription || focusedLabel !== '';
 
-  /** Only one task can be actively timed at a time. */
+  /**
+   * Only one task can be actively timed at a time. "Actively timed" means a
+   * running timer session (`startedAt` set), not an `in_progress` status: a
+   * paused task holds no clock, so it must never block starting another one.
+   */
   const guardedStart = () => {
-    const other = data.tasks.find(
-      (t) =>
-        t.id !== task.id &&
-        !t.archived &&
-        t.status === 'in_progress' &&
-        (t.startedAt !== undefined || t.pausedAt !== undefined),
-    );
+    const other = blockingTimerTask(data.tasks, task.id);
     if (other) {
       setBlockedBy(other);
       return;

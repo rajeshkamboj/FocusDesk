@@ -39,7 +39,7 @@ npm run build && npm start
 
 ## Supabase setup
 1. Create a project, open the SQL editor and run `supabase/schema.sql`.
-2. For an existing database, apply the idempotent migrations in `supabase/migrations/` (`003_task_timer.sql` adds the task-timer columns, `004_daily_wellbeing.sql` adds the `wellbeing_days` table used by the Today page's Daily well-being section, with RLS scoped to `auth.uid()`).
+2. Apply the idempotent migrations in `supabase/migrations/` in order for both new and existing databases. In particular, `003_task_timer.sql` adds task-timer columns, `004_daily_wellbeing.sql` creates the user-scoped `wellbeing_days` table, and `005_task_subtasks.sql` creates the user-scoped `subtasks` table with RLS.
 3. Copy the project URL and anon key into the env vars.
 4. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
 

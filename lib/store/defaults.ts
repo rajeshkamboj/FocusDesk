@@ -25,6 +25,7 @@ export const defaultSettings: Settings = {
 export function emptyData(): AppData {
   return {
     tasks: [],
+    subtasks: [],
     projects: [],
     goals: [],
     inbox: [],

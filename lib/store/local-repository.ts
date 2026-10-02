@@ -17,6 +17,8 @@ import type {
   Project,
   ProjectInput,
   Settings,
+  Subtask,
+  SubtaskInput,
   Task,
   TaskHistoryEntry,
   TaskInput,
@@ -117,6 +119,7 @@ export class LocalRepository implements AppRepository {
   private readonly storage: StorageLike;
 
   tasks: EntityRepository<Task, TaskInput>;
+  subtasks: EntityRepository<Subtask, SubtaskInput>;
   projects: EntityRepository<Project, ProjectInput>;
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
@@ -160,6 +163,25 @@ export class LocalRepository implements AppRepository {
         ...patch,
         title: patch.title !== undefined ? patch.title.trim() : task.title,
         tags: patch.tags ?? task.tags,
+      }),
+    );
+
+    this.subtasks = new Collection<Subtask, SubtaskInput>(
+      () => this.data,
+      'subtasks',
+      persist,
+      (input) => ({
+        id: createId(),
+        parentTaskId: input.parentTaskId,
+        title: input.title.trim(),
+        completed: false,
+        position: input.position ?? 0,
+        createdAt: nowISO(),
+      }),
+      (subtask, patch) => ({
+        ...subtask,
+        ...patch,
+        title: patch.title !== undefined ? patch.title.trim() : subtask.title,
       }),
     );
 
@@ -341,6 +363,7 @@ export class LocalRepository implements AppRepository {
     const base = emptyData();
     this.data = {
       tasks: data.tasks ?? [],
+      subtasks: data.subtasks ?? [],
       projects: data.projects ?? [],
       goals: data.goals ?? [],
       inbox: data.inbox ?? [],

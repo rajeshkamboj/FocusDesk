@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import {
   IconArchive,
   IconCheck,
+  IconChevronDown,
   IconChevronRight,
   IconClock,
   IconFlag,
@@ -19,12 +20,15 @@ import {
   IconPause,
   IconPencil,
   IconPlay,
+  IconPlus,
   IconTrash,
 } from '@/components/ui/icons';
 import { addDays, formatCompletionTimestamp, formatDuration, formatFocusedTime, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
 import { blockingTimerTask, elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { subtasksForTask } from '@/lib/selectors';
 import type { Task } from '@/lib/types';
 import { TaskFormModal } from './task-form-modal';
+import { TaskSubtasks } from './task-subtasks';
 import { useNow } from './use-now';
 
 function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
@@ -56,8 +60,9 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [blockedBy, setBlockedBy] = useState<Task | null>(null);
   const [timerBusy, setTimerBusy] = useState(false);
-  // UI-only expansion state for the task description (never persisted).
+  // UI-only expansion state for task details and the separately collapsible checklist.
   const [expanded, setExpanded] = useState(false);
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
   const hasDescription = Boolean(task.description?.trim());
 
   const project = task.projectId ? data.projects.find((p) => p.id === task.projectId) : undefined;
@@ -80,6 +85,11 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   // segment), shown only when a session was actually recorded. Never invented.
   const focusedLabel = done ? formatFocusedTime(task.actualDurationSeconds) : '';
   const hasDetails = hasDescription || focusedLabel !== '';
+  const subtasks = subtasksForTask(data.subtasks, task.id);
+  const completedSubtasks = subtasks.filter((subtask) => subtask.completed).length;
+  const subtasksToggleLabel = subtasksOpen
+    ? subtasks.length > 0 ? `Collapse subtasks: ${completedSubtasks}/${subtasks.length} complete` : 'Collapse subtasks'
+    : subtasks.length > 0 ? `Expand subtasks: ${completedSubtasks}/${subtasks.length} complete` : 'Add subtask';
 
   /**
    * Only one task can be actively timed at a time. "Actively timed" means a
@@ -201,36 +211,63 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
         />
 
         <div className="min-w-0 flex-1">
-          {hasDetails ? (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-              className="w-full text-left"
-            >
-              {taskSummary}
-            </button>
-          ) : (
-            taskSummary
-          )}
+          <div className="flex items-start gap-1.5">
+            <div className="min-w-0 flex-1">
+              {hasDetails ? (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  aria-expanded={expanded}
+                  className="w-full text-left"
+                >
+                  {taskSummary}
+                </button>
+              ) : (
+                taskSummary
+              )}
 
-          {hasDetails && expanded ? (
-            <div className="mt-1.5 space-y-1">
-              {hasDescription ? (
-                <p className="whitespace-pre-line break-words text-[12.5px] leading-relaxed text-ink-2">{task.description}</p>
-              ) : null}
-              {done ? (
-                <div className="space-y-0.5 text-[11.5px] text-ink-3">
-                  {completionLabel ? <p>{completionLabel}</p> : null}
-                  {focusedLabel ? (
-                    <p className="tabular-nums">
-                      Focused time: <span className="font-medium text-ink-2">{focusedLabel}</span>
-                    </p>
+              {hasDetails && expanded ? (
+                <div className="mt-1.5 space-y-1">
+                  {hasDescription ? (
+                    <p className="whitespace-pre-line break-words text-[12.5px] leading-relaxed text-ink-2">{task.description}</p>
                   ) : null}
-                  {task.estimatedDuration ? <p className="tabular-nums">Estimated: {formatDuration(task.estimatedDuration)}</p> : null}
+                  {done ? (
+                    <div className="space-y-0.5 text-[11.5px] text-ink-3">
+                      {completionLabel ? <p>{completionLabel}</p> : null}
+                      {focusedLabel ? (
+                        <p className="tabular-nums">
+                          Focused time: <span className="font-medium text-ink-2">{focusedLabel}</span>
+                        </p>
+                      ) : null}
+                      {task.estimatedDuration ? <p className="tabular-nums">Estimated: {formatDuration(task.estimatedDuration)}</p> : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
+
+            <button
+              type="button"
+              aria-label={subtasksToggleLabel}
+              aria-expanded={subtasksOpen}
+              title={subtasks.length > 0 ? `${completedSubtasks} of ${subtasks.length} subtasks completed` : 'Add subtask'}
+              onClick={() => setSubtasksOpen((isOpen) => !isOpen)}
+              className="mt-[-2px] inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] font-medium tabular-nums text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+            >
+              {subtasks.length > 0 ? <span>{completedSubtasks}/{subtasks.length}</span> : null}
+              {subtasks.length === 0 && !subtasksOpen ? <IconPlus width={15} height={15} /> : (
+                <IconChevronDown width={13} height={13} className={`transition-transform ${subtasksOpen ? 'rotate-180' : ''}`} />
+              )}
+            </button>
+          </div>
+
+          {subtasksOpen ? (
+            <TaskSubtasks
+              parentTaskId={task.id}
+              parentCompleted={done}
+              subtasks={subtasks}
+              autoFocusInput={subtasks.length === 0}
+            />
           ) : null}
         </div>
 

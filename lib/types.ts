@@ -95,6 +95,24 @@ export type TaskInput = {
   tags?: string[];
 };
 
+/** A lightweight checklist item owned by a parent Task; never a timed Task. */
+export interface Subtask {
+  id: ID;
+  parentTaskId: ID;
+  title: string;
+  completed: boolean;
+  /** Stable manual order within its parent task. */
+  position: number;
+  createdAt: ISODateTime;
+}
+
+export type SubtaskInput = {
+  parentTaskId: ID;
+  title: string;
+  /** Assigned by DataProvider based on the sibling list. */
+  position?: number;
+};
+
 /* ------------------------------------------------------------------ */
 /* Projects & goals                                                    */
 /* ------------------------------------------------------------------ */
@@ -292,6 +310,7 @@ export interface Settings {
 
 export interface AppData {
   tasks: Task[];
+  subtasks: Subtask[];
   projects: Project[];
   goals: Goal[];
   inbox: InboxItem[];

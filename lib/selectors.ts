@@ -8,6 +8,7 @@ import type {
   ISODate,
   MonthlyPriority,
   Project,
+  Subtask,
   Task,
   TaskStatus,
   WellbeingDay,
@@ -39,6 +40,13 @@ export function uncompletedTasksFirst(tasks: Task[]): Task[] {
   }
 
   return [...uncompleted, ...completed];
+}
+
+/** Subtasks belonging to one task, in stable creation/manual order. */
+export function subtasksForTask(subtasks: Subtask[], parentTaskId: string): Subtask[] {
+  return subtasks
+    .filter((subtask) => subtask.parentTaskId === parentTaskId)
+    .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 }
 
 /** Tasks currently planned for a given calendar day (not completed/cancelled). */

@@ -17,6 +17,8 @@ import type {
   Project,
   ProjectInput,
   Settings,
+  Subtask,
+  SubtaskInput,
   Task,
   TaskHistoryEntry,
   TaskInput,
@@ -65,6 +67,7 @@ export interface AppRepository {
   readonly kind: 'local' | 'supabase';
 
   tasks: EntityRepository<Task, TaskInput>;
+  subtasks: EntityRepository<Subtask, SubtaskInput>;
   projects: EntityRepository<Project, ProjectInput>;
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;

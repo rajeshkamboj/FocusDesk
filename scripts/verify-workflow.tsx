@@ -16,7 +16,7 @@ async function main() {
   const { AuthProvider } = await import('../components/auth/auth-provider');
   const { DataProvider, useData } = await import('../components/data/data-provider');
   const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
-  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds } = await import('../lib/selectors');
+  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, uncompletedTasksFirst } = await import('../lib/selectors');
   const { checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
@@ -88,6 +88,48 @@ async function main() {
     return c().data.tasks.find((t) => t.id === created.id)!;
   };
   const get = (id: string) => c().data.tasks.find((t) => t.id === id)!;
+
+  /* ------------------------------------------------------------------ */
+  /* Mixed project task lists keep active work above completed work      */
+  /* ------------------------------------------------------------------ */
+
+  const addProjectTask = async (title: string, scheduledDate?: string) => {
+    let created!: import('../lib/types').Task;
+    await run(async () => {
+      created = await c().actions.addTask({
+        title,
+        projectId: proj.id,
+        scheduledDate,
+        status: scheduledDate ? (scheduledDate === today ? 'today' : 'planned') : 'created',
+      });
+    });
+    return get(created.id);
+  };
+  const existingScheduled = await addProjectTask('Existing scheduled project task', tomorrow);
+  const existingUnscheduled = await addProjectTask('Existing unscheduled project task');
+  const newScheduled = await addProjectTask('New scheduled project task', addDays(today, 3));
+  const newUnscheduled = await addProjectTask('New unscheduled project task');
+  const projectTaskItems = () => c().data.tasks.filter((t) => t.projectId === proj.id && t.status !== 'cancelled');
+  const beforeCompletion = uncompletedTasksFirst(projectTaskItems());
+  const expectedActiveOrder = [existingScheduled.id, existingUnscheduled.id, newScheduled.id, newUnscheduled.id];
+  const activeBeforeCompletion = beforeCompletion.filter((t) => t.status !== 'completed').map((t) => t.id);
+  const completedBeforeCompletion = beforeCompletion.filter((t) => t.status === 'completed').map((t) => t.id);
+  ok(activeBeforeCompletion.join(',') === expectedActiveOrder.join(','),
+     'Project ordering: scheduled and unscheduled new tasks stay active, preserving the existing active order');
+  ok(completedBeforeCompletion.join(',') === ids[0]
+     && beforeCompletion.findIndex((t) => t.id === newScheduled.id) < beforeCompletion.findIndex((t) => t.status === 'completed')
+     && beforeCompletion.findIndex((t) => t.id === newUnscheduled.id) < beforeCompletion.findIndex((t) => t.status === 'completed'),
+     'Project ordering: both newly created tasks appear above the completed section');
+
+  await run(() => c().actions.completeTask(newUnscheduled.id));
+  const afterCompletion = uncompletedTasksFirst(projectTaskItems());
+  const activeAfterCompletion = afterCompletion.filter((t) => t.status !== 'completed').map((t) => t.id);
+  const completedAfterCompletion = afterCompletion.filter((t) => t.status === 'completed').map((t) => t.id);
+  ok(get(newUnscheduled.id).status === 'completed'
+     && activeAfterCompletion.join(',') === [existingScheduled.id, existingUnscheduled.id, newScheduled.id].join(',')
+     && completedAfterCompletion.join(',') === [ids[0], newUnscheduled.id].join(','),
+     'Project ordering: completing a new task moves it below all active tasks');
+
   const closeAndReopen = async () => {
     await act(async () => {
       window.dispatchEvent(new dom.window.Event('pagehide'));

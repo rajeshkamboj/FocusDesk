@@ -19,6 +19,8 @@ import type {
   Project,
   ProjectInput,
   Settings,
+  Subtask,
+  SubtaskInput,
   Task,
   TaskHistoryEntry,
   TaskInput,
@@ -264,6 +266,25 @@ const wellbeingDayMap = {
   }),
 };
 
+const subtaskMap = {
+  toRow: (s: Subtask): Row => ({
+    id: s.id,
+    parent_task_id: s.parentTaskId,
+    title: s.title,
+    completed: s.completed,
+    sort_order: s.position,
+    created_at: s.createdAt,
+  }),
+  fromRow: (r: Row): Subtask => ({
+    id: String(r.id),
+    parentTaskId: String(r.parent_task_id ?? ''),
+    title: String(r.title ?? ''),
+    completed: bool(r.completed),
+    position: num(r.sort_order) ?? 0,
+    createdAt: String(r.created_at ?? new Date().toISOString()),
+  }),
+};
+
 const historyMap = {
   toRow: (h: TaskHistoryEntry): Row => ({
     id: h.id,
@@ -291,10 +312,11 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
     private readonly table: string,
     private readonly map: { toRow: (item: T) => Row; fromRow: (row: Row) => T },
     private readonly make: (input: C) => T,
+    private readonly listOrder?: { column: string; ascending: boolean },
   ) {}
 
   async list(): Promise<T[]> {
-    const rows = await this.http.get(this.table);
+    const rows = await this.http.get(this.table, {}, this.listOrder);
     return rows.map(this.map.fromRow);
   }
 
@@ -387,6 +409,7 @@ export class SupabaseRepository implements AppRepository {
   private readonly http: SupabaseHttpClient;
 
   tasks: EntityRepository<Task, TaskInput>;
+  subtasks: EntityRepository<Subtask, SubtaskInput>;
   projects: EntityRepository<Project, ProjectInput>;
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
@@ -418,6 +441,21 @@ export class SupabaseRepository implements AppRepository {
       postponementCount: 0,
       archived: false,
     }));
+
+    this.subtasks = new RestCollection(
+      this.http,
+      'subtasks',
+      subtaskMap,
+      (input) => ({
+        id: uuid(),
+        parentTaskId: input.parentTaskId,
+        title: input.title.trim(),
+        completed: false,
+        position: input.position ?? 0,
+        createdAt: new Date().toISOString(),
+      }),
+      { column: 'sort_order', ascending: true },
+    );
 
     this.projects = new RestCollection(this.http, 'projects', projectMap, (input) => ({
       id: uuid(),
@@ -533,9 +571,10 @@ export class SupabaseRepository implements AppRepository {
   };
 
   async exportData(): Promise<AppData> {
-    const [tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
+    const [tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
       await Promise.all([
         this.tasks.list(),
+        this.subtasks.list(),
         this.projects.list(),
         this.goals.list(),
         this.inbox.list(),
@@ -547,13 +586,14 @@ export class SupabaseRepository implements AppRepository {
         this.wellbeingDays.list(),
         this.settings.get(),
       ]);
-    return { tasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings };
+    return { tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings };
   }
 
   async importData(data: AppData): Promise<void> {
     const base = emptyData();
     const payload: AppData = {
       tasks: data.tasks ?? [],
+      subtasks: data.subtasks ?? [],
       projects: data.projects ?? [],
       goals: data.goals ?? [],
       inbox: data.inbox ?? [],
@@ -570,6 +610,7 @@ export class SupabaseRepository implements AppRepository {
       },
     };
 
+    await this.http.clear('subtasks');
     await Promise.all([
       this.http.clear('tasks'),
       this.http.clear('projects'),
@@ -597,6 +638,8 @@ export class SupabaseRepository implements AppRepository {
       bulk('task_history', payload.taskHistory.map(historyMap.toRow)),
       bulk('wellbeing_days', payload.wellbeingDays.map(wellbeingDayMap.toRow)),
     ]);
+    // Subtasks reference parent task rows, so import them only after tasks.
+    await bulk('subtasks', payload.subtasks.map(subtaskMap.toRow));
     await this.settings.save(payload.settings);
   }
 }

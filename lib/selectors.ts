@@ -8,6 +8,7 @@ import type {
   ISODate,
   MonthlyPriority,
   Project,
+  Subtask,
   Task,
   TaskStatus,
   WellbeingDay,
@@ -21,6 +22,31 @@ export function isOpenTask(task: Task): boolean {
 
 export function isCompletedTask(task: Task): boolean {
   return task.status === 'completed';
+}
+
+/**
+ * Put uncompleted tasks before completed tasks without changing the order of
+ * either group. This is for mixed task lists (such as project and goal task
+ * lists), where newly created tasks are appended to the source array and must
+ * not end up below older completed tasks. Scheduling and manual/insertion
+ * order within the active group are preserved.
+ */
+export function uncompletedTasksFirst(tasks: Task[]): Task[] {
+  const uncompleted: Task[] = [];
+  const completed: Task[] = [];
+
+  for (const task of tasks) {
+    (isCompletedTask(task) ? completed : uncompleted).push(task);
+  }
+
+  return [...uncompleted, ...completed];
+}
+
+/** Subtasks belonging to one task, in stable creation/manual order. */
+export function subtasksForTask(subtasks: Subtask[], parentTaskId: string): Subtask[] {
+  return subtasks
+    .filter((subtask) => subtask.parentTaskId === parentTaskId)
+    .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 }
 
 /** Tasks currently planned for a given calendar day (not completed/cancelled). */

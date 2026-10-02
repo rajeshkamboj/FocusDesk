@@ -15,17 +15,30 @@ async function main() {
   const { act } = React;
   const { AuthProvider } = await import('../components/auth/auth-provider');
   const { DataProvider, useData } = await import('../components/data/data-provider');
+  const { TaskRow } = await import('../components/tasks/task-row');
   const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
-  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds } = await import('../lib/selectors');
-  const { checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
+  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst } = await import('../lib/selectors');
+  const { blockingTimerTask, checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
   const Probe = () => { ctx = useData(); return null; };
-  const mount = async () => {
+  const TaskRowProbe = ({ taskId }: { taskId: string }) => {
+    const { data } = useData();
+    const task = data.tasks.find((item) => item.id === taskId);
+    return task ? React.createElement('div', { id: 'subtask-test-row' }, React.createElement(TaskRow, { task, showDate: false })) : null;
+  };
+  const mount = async (taskId?: string) => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
     await act(async () => {
-      root.render(React.createElement(AuthProvider, null, React.createElement(DataProvider, null, React.createElement(Probe))));
+      root.render(React.createElement(
+        AuthProvider,
+        null,
+        React.createElement(DataProvider, null, React.createElement(React.Fragment, null,
+          React.createElement(Probe),
+          taskId ? React.createElement(TaskRowProbe, { taskId }) : null,
+        )),
+      ));
     });
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     return root;
@@ -34,10 +47,32 @@ async function main() {
   const ok = (cond: boolean, msg: string) => { if (!cond) { console.error('FAIL:', msg); process.exit(1); } console.log('✓', msg); };
   const run = (fn: () => Promise<unknown>) => act(async () => { await fn(); });
   const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
+  const click = async (element: Element | null, description: string) => {
+    if (!element) throw new Error(`Missing UI control: ${description}`);
+    await act(async () => {
+      element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    });
+  };
+  const setInputValue = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')?.set;
+      if (setter) setter.call(input, value);
+      else input.value = value;
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+  };
+  const submitForm = async (form: HTMLFormElement) => {
+    await act(async () => {
+      form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    });
+  };
 
   const today = todayISO(), tomorrow = addDays(today, 1);
   let root = await mount();
-  ok(c().ready && c().data.tasks.length === 0 && c().data.projects.length === 0, 'App starts empty — nothing hard-coded');
+  ok(c().ready && c().data.tasks.length === 0 && c().data.subtasks.length === 0 && c().data.projects.length === 0, 'App starts empty — nothing hard-coded');
 
   await run(() => c().actions.setDailyPriority('Ship the release'));
   ok(c().data.dailyPriorities.find((p) => p.date === today)?.title === 'Ship the release', 'Daily priority set');
@@ -88,6 +123,165 @@ async function main() {
     return c().data.tasks.find((t) => t.id === created.id)!;
   };
   const get = (id: string) => c().data.tasks.find((t) => t.id === id)!;
+
+  /* ------------------------------------------------------------------ */
+  /* Mixed project task lists keep active work above completed work      */
+  /* ------------------------------------------------------------------ */
+
+  const addProjectTask = async (title: string, scheduledDate?: string) => {
+    let created!: import('../lib/types').Task;
+    await run(async () => {
+      created = await c().actions.addTask({
+        title,
+        projectId: proj.id,
+        scheduledDate,
+        status: scheduledDate ? (scheduledDate === today ? 'today' : 'planned') : 'created',
+      });
+    });
+    return get(created.id);
+  };
+  const existingScheduled = await addProjectTask('Existing scheduled project task', tomorrow);
+  const existingUnscheduled = await addProjectTask('Existing unscheduled project task');
+  const newScheduled = await addProjectTask('New scheduled project task', addDays(today, 3));
+  const newUnscheduled = await addProjectTask('New unscheduled project task');
+  const projectTaskItems = () => c().data.tasks.filter((t) => t.projectId === proj.id && t.status !== 'cancelled');
+  const beforeCompletion = uncompletedTasksFirst(projectTaskItems());
+  const expectedActiveOrder = [existingScheduled.id, existingUnscheduled.id, newScheduled.id, newUnscheduled.id];
+  const activeBeforeCompletion = beforeCompletion.filter((t) => t.status !== 'completed').map((t) => t.id);
+  const completedBeforeCompletion = beforeCompletion.filter((t) => t.status === 'completed').map((t) => t.id);
+  ok(activeBeforeCompletion.join(',') === expectedActiveOrder.join(','),
+     'Project ordering: scheduled and unscheduled new tasks stay active, preserving the existing active order');
+  ok(completedBeforeCompletion.join(',') === ids[0]
+     && beforeCompletion.findIndex((t) => t.id === newScheduled.id) < beforeCompletion.findIndex((t) => t.status === 'completed')
+     && beforeCompletion.findIndex((t) => t.id === newUnscheduled.id) < beforeCompletion.findIndex((t) => t.status === 'completed'),
+     'Project ordering: both newly created tasks appear above the completed section');
+
+  await run(() => c().actions.completeTask(newUnscheduled.id));
+  const afterCompletion = uncompletedTasksFirst(projectTaskItems());
+  const activeAfterCompletion = afterCompletion.filter((t) => t.status !== 'completed').map((t) => t.id);
+  const completedAfterCompletion = afterCompletion.filter((t) => t.status === 'completed').map((t) => t.id);
+  ok(get(newUnscheduled.id).status === 'completed'
+     && activeAfterCompletion.join(',') === [existingScheduled.id, existingUnscheduled.id, newScheduled.id].join(',')
+     && completedAfterCompletion.join(',') === [ids[0], newUnscheduled.id].join(','),
+     'Project ordering: completing a new task moves it below all active tasks');
+
+  /* ------------------------------------------------------------------ */
+  /* Subtasks — checklist, persistence, and parent timer ownership       */
+  /* ------------------------------------------------------------------ */
+
+  const checklistParent = await makeTask('Checklist parent', undefined, proj.id);
+  const taskCountWithParent = c().data.tasks.length;
+  const projectCountWithParent = projectProgress(c().data.tasks, proj.id).total;
+  ok(c().data.subtasks.filter((subtask) => subtask.parentTaskId === checklistParent.id).length === 0
+     && c().data.tasks.some((task) => task.id === checklistParent.id),
+     'Subtasks A: an ordinary task with no checklist remains a normal task');
+
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount(checklistParent.id);
+  ok(document.querySelector('[data-subtask-panel]') === null
+     && document.querySelector('#subtask-test-row button[aria-label="Add subtask"]') !== null,
+     'Subtasks UI: checklist is collapsed by default with a compact add control');
+  await click(document.querySelector('#subtask-test-row button[aria-label="Add subtask"]'), 'Add subtask control');
+  const newSubtaskInput = document.querySelector('#subtask-test-row input[aria-label="New subtask"]') as HTMLInputElement | null;
+  if (!newSubtaskInput) throw new Error('Missing inline new-subtask input');
+  await setInputValue(newSubtaskInput, 'Find the latest event information');
+  const addSubtaskForm = newSubtaskInput.closest('form');
+  if (!addSubtaskForm) throw new Error('Missing inline add-subtask form');
+  await submitForm(addSubtaskForm);
+  const firstSubtask = c().data.subtasks.find((subtask) => subtask.parentTaskId === checklistParent.id);
+  if (!firstSubtask) throw new Error('Inline subtask was not persisted');
+  ok(firstSubtask.title === 'Find the latest event information'
+     && !firstSubtask.completed && firstSubtask.position === 0,
+     'Subtasks B: the inline form adds and persists one incomplete item in the parent checklist');
+
+  let secondSubtask!: import('../lib/types').Subtask | null;
+  let thirdSubtask!: import('../lib/types').Subtask | null;
+  await run(async () => { secondSubtask = await c().actions.addSubtask(checklistParent.id, 'Update the article content'); });
+  await run(async () => { thirdSubtask = await c().actions.addSubtask(checklistParent.id, 'Create or update the featured image'); });
+  if (!secondSubtask || !thirdSubtask) throw new Error('Could not add checklist test subtasks');
+  ok(subtasksForTask(c().data.subtasks, checklistParent.id).map((subtask) => subtask.title).join('|')
+     === 'Find the latest event information|Update the article content|Create or update the featured image'
+     && subtasksForTask(c().data.subtasks, checklistParent.id).map((subtask) => subtask.position).join(',') === '0,1,2',
+     'Subtasks C: multiple items keep their creation order');
+  ok(c().data.tasks.length === taskCountWithParent
+     && projectProgress(c().data.tasks, proj.id).total === projectCountWithParent
+     && !c().data.tasks.some((task) => [firstSubtask.title, secondSubtask!.title, thirdSubtask!.title].includes(task.title)),
+     'Subtasks K: checklist items do not appear as separate Tasks or Project tasks');
+
+  await run(() => c().actions.startTask(checklistParent.id));
+  ok(isTimerRunning(get(checklistParent.id))
+     && blockingTimerTask(c().data.tasks, 'another-task')?.id === checklistParent.id
+     && !('startedAt' in firstSubtask),
+     'Subtasks L: the parent remains the only timer-bearing task');
+  await click(document.querySelector(`#subtask-test-row button[aria-label="Complete subtask: ${firstSubtask.title}"]`), 'Complete first subtask');
+  ok(c().data.subtasks.find((subtask) => subtask.id === firstSubtask.id)?.completed === true
+     && c().data.subtasks.find((subtask) => subtask.id === secondSubtask!.id)?.completed === false
+     && get(checklistParent.id).status === 'in_progress' && isTimerRunning(get(checklistParent.id)),
+     'Subtasks D: checking one item affects only that item, not the parent or its timer');
+  await click(document.querySelector(`#subtask-test-row button[aria-label="Uncheck subtask: ${firstSubtask.title}"]`), 'Uncheck first subtask');
+  ok(c().data.subtasks.find((subtask) => subtask.id === firstSubtask.id)?.completed === false,
+     'Subtasks E: unchecking returns the item to incomplete');
+  await click(document.querySelector('#subtask-test-row button[aria-label="Edit subtask: Update the article content"]'), 'Edit second subtask');
+  const editSubtaskInput = document.querySelector('#subtask-test-row input[aria-label="Edit subtask: Update the article content"]') as HTMLInputElement | null;
+  if (!editSubtaskInput) throw new Error('Missing inline edit-subtask input');
+  await setInputValue(editSubtaskInput, 'Update the article content and SEO');
+  const editSubtaskForm = editSubtaskInput.closest('form');
+  if (!editSubtaskForm) throw new Error('Missing inline edit-subtask form');
+  await submitForm(editSubtaskForm);
+  ok(c().data.subtasks.find((subtask) => subtask.id === secondSubtask!.id)?.title === 'Update the article content and SEO',
+     'Subtasks G: editing a checklist item persists the new text');
+  await click(document.querySelector(`#subtask-test-row button[aria-label="Delete subtask: ${thirdSubtask.title}"]`), 'Delete third subtask');
+  ok(!c().data.subtasks.some((subtask) => subtask.id === thirdSubtask!.id),
+     'Subtasks F: deleting a checklist item removes it');
+  await click(document.querySelector('#subtask-test-row button[aria-label="Complete subtask: Update the article content and SEO"]'), 'Complete edited subtask');
+
+  const completedReviewCountBeforeParent = dailyReviewStats(c().data, today).completed.length;
+  const parentWasInTodayTasks = tasksOnDate(c().data.tasks, today).some((task) => task.id === checklistParent.id);
+  await run(() => c().actions.finishTask(checklistParent.id));
+  const checklistAfterParentCompletion = subtasksForTask(c().data.subtasks, checklistParent.id);
+  ok(get(checklistParent.id).status === 'completed'
+     && checklistAfterParentCompletion.length === 2
+     && checklistAfterParentCompletion[0].completed === false
+     && checklistAfterParentCompletion[1].completed === true,
+     'Subtasks I-J: completing the parent leaves incomplete subtasks attached and does not reset checked items');
+  ok(dailyReviewStats(c().data, today).completed.length === completedReviewCountBeforeParent + 1
+     && parentWasInTodayTasks
+     && !c().data.tasks.some((task) => [firstSubtask.title, 'Update the article content and SEO'].includes(task.title)),
+     'Subtasks K: Today/Review still count only the parent task');
+  ok(blockingTimerTask(c().data.tasks, 'another-task') === undefined
+     && get(checklistParent.id).status === 'completed'
+     && get(checklistParent.id).startedAt === undefined
+     && typeof get(checklistParent.id).actualDurationSeconds === 'number',
+     'Subtasks L: the parent timer completes through the existing timer path');
+
+  const exportWithSubtasks = await c().actions.exportData();
+  ok(exportWithSubtasks.subtasks.some((subtask) => subtask.id === firstSubtask.id),
+     'Subtasks: JSON backup/export includes checklist items');
+  await run(() => c().actions.importData(exportWithSubtasks));
+  ok(c().data.subtasks.some((subtask) => subtask.id === firstSubtask.id),
+     'Subtasks: importing a JSON backup restores checklist items');
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount(checklistParent.id);
+  const reloadedChecklist = subtasksForTask(c().data.subtasks, checklistParent.id);
+  ok(reloadedChecklist.map((subtask) => subtask.title).join('|') === 'Find the latest event information|Update the article content and SEO'
+     && reloadedChecklist[0].completed === false && reloadedChecklist[1].completed === true
+     && get(checklistParent.id).status === 'completed',
+     'Subtasks H: reload preserves checklist order, text, completion, and the completed parent');
+  ok(document.querySelector('[data-subtask-panel]') === null
+     && document.querySelector('#subtask-test-row button[aria-label="Expand subtasks: 1/2 complete"]') !== null,
+     'Subtasks UI: reloaded checklist stays collapsed and shows compact progress');
+  await click(document.querySelector('#subtask-test-row button[aria-label="Expand subtasks: 1/2 complete"]'), 'Expand subtasks control');
+  const expandedSubtasks = document.querySelector('[data-subtask-panel]');
+  ok(Boolean(expandedSubtasks)
+     && expandedSubtasks!.textContent?.includes('Find the latest event information')
+     && expandedSubtasks!.textContent?.includes('Update the article content and SEO')
+     && expandedSubtasks!.textContent?.includes('Parent completed · 1/2 subtasks completed'),
+     'Subtasks UI: expand reveals the checklist and the subtle incomplete-parent indication');
+  await click(document.querySelector('#subtask-test-row button[aria-label="Collapse subtasks: 1/2 complete"]'), 'Collapse subtasks control');
+  ok(document.querySelector('[data-subtask-panel]') === null, 'Subtasks UI: checklist can be collapsed again');
+
   const closeAndReopen = async () => {
     await act(async () => {
       window.dispatchEvent(new dom.window.Event('pagehide'));

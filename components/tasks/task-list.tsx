@@ -2,12 +2,15 @@
 
 import type { ReactNode } from 'react';
 import type { Task } from '@/lib/types';
+import { uncompletedTasksFirst } from '@/lib/selectors';
 import { TaskRow } from './task-row';
 
 export function TaskList({ tasks, showDates = true }: { tasks: Task[]; showDates?: boolean }) {
+  const orderedTasks = uncompletedTasksFirst(tasks);
+
   return (
     <div className="space-y-0.5">
-      {tasks.map((task) => (
+      {orderedTasks.map((task) => (
         <TaskRow key={task.id} task={task} showDate={showDates} />
       ))}
     </div>

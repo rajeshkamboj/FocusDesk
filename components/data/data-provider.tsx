@@ -43,6 +43,8 @@ import type {
   Project,
   ProjectInput,
   Settings,
+  Subtask,
+  SubtaskInput,
   Task,
   TaskInput,
   TaskStatus,
@@ -79,6 +81,9 @@ export type InboxConversion = 'task' | 'someday' | 'project' | 'goal' | 'idea';
 export interface DataActions {
   /* Tasks */
   addTask(input: TaskInput): Promise<Task>;
+  addSubtask(parentTaskId: string, title: string): Promise<Subtask | null>;
+  updateSubtask(id: string, patch: Pick<Subtask, 'title' | 'completed'>): Promise<boolean>;
+  deleteSubtask(id: string): Promise<boolean>;
   updateTask(id: string, patch: Partial<Task>): Promise<void>;
   deleteTask(id: string): Promise<void>;
   completeTask(id: string): Promise<void>;
@@ -210,9 +215,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [storedTasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
+        const [storedTasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
           await Promise.all([
             repo.tasks.list(),
+            repo.subtasks.list(),
             repo.projects.list(),
             repo.goals.list(),
             repo.inbox.list(),
@@ -243,6 +249,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const loaded: AppData = {
           tasks,
+          subtasks,
           projects,
           goals,
           inbox,
@@ -255,6 +262,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           settings,
         };
         wellbeingRef.current = wellbeingDays.find((w) => w.date === todayISO()) ?? null;
+        dataRef.current = loaded;
         setData(loaded);
         setReady(true);
 
@@ -318,6 +326,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const patchSubtaskState = useCallback((subtask: Subtask) => {
+    const subtasks = dataRef.current.subtasks.some((item) => item.id === subtask.id)
+      ? dataRef.current.subtasks.map((item) => (item.id === subtask.id ? subtask : item))
+      : [...dataRef.current.subtasks, subtask];
+    dataRef.current = { ...dataRef.current, subtasks };
+    setData((d) => ({
+      ...d,
+      subtasks: d.subtasks.some((item) => item.id === subtask.id)
+        ? d.subtasks.map((item) => (item.id === subtask.id ? subtask : item))
+        : [...d.subtasks, subtask],
+    }));
+  }, []);
+
+  const removeSubtaskState = useCallback((id: string) => {
+    dataRef.current = { ...dataRef.current, subtasks: dataRef.current.subtasks.filter((item) => item.id !== id) };
+    setData((d) => ({ ...d, subtasks: d.subtasks.filter((item) => item.id !== id) }));
+  }, []);
+
   const addTaskState = useCallback((task: Task) => {
     if (dataRef.current.tasks.some((t) => t.id === task.id)) {
       patchTaskState(task);
@@ -331,8 +357,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [patchTaskState]);
 
   const removeTaskState = useCallback((id: string) => {
-    dataRef.current = { ...dataRef.current, tasks: dataRef.current.tasks.filter((t) => t.id !== id) };
-    setData((d) => ({ ...d, tasks: d.tasks.filter((t) => t.id !== id) }));
+    dataRef.current = {
+      ...dataRef.current,
+      tasks: dataRef.current.tasks.filter((t) => t.id !== id),
+      subtasks: dataRef.current.subtasks.filter((subtask) => subtask.parentTaskId !== id),
+    };
+    setData((d) => ({
+      ...d,
+      tasks: d.tasks.filter((t) => t.id !== id),
+      subtasks: d.subtasks.filter((subtask) => subtask.parentTaskId !== id),
+    }));
   }, []);
 
   /** Replace (or add) one day's well-being record in the local snapshot. */
@@ -354,6 +388,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Timer transitions and checkpoints for one task must reach the repository
   // in order (especially for Supabase requests that can resolve out of order).
   const taskWriteQueueRef = useRef(new Map<string, Promise<Task>>());
+  const subtaskWriteQueueRef = useRef(new Map<string, Promise<Subtask>>());
+  const subtaskSeqRef = useRef(new Map<string, number>());
+  const subtaskPositionRef = useRef(new Map<string, number>());
   const priorityTimerStartRef = useRef(new Map<string, Promise<Task | null>>());
   const persistTaskUpdate = useCallback((id: string, patch: Partial<Task>): Promise<Task> => {
     const previous = taskWriteQueueRef.current.get(id);
@@ -366,6 +403,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
     return write;
   }, []);
+
+  const persistSubtaskUpdate = useCallback(
+    (id: string, patch: Pick<Subtask, 'title' | 'completed'>): Promise<Subtask> => {
+      const previous = subtaskWriteQueueRef.current.get(id);
+      const write = (previous ? previous.catch(() => undefined) : Promise.resolve(undefined))
+        .then(() => repo().subtasks.update(id, patch));
+      subtaskWriteQueueRef.current.set(id, write);
+      void write.then(
+        () => { if (subtaskWriteQueueRef.current.get(id) === write) subtaskWriteQueueRef.current.delete(id); },
+        () => { if (subtaskWriteQueueRef.current.get(id) === write) subtaskWriteQueueRef.current.delete(id); },
+      );
+      return write;
+    },
+    [],
+  );
+
+  const nextSubtaskSeq = useCallback((id: string) => {
+    const n = (subtaskSeqRef.current.get(id) ?? 0) + 1;
+    subtaskSeqRef.current.set(id, n);
+    return n;
+  }, []);
+  const isLatestSubtaskSeq = useCallback((id: string, seq: number) => {
+    return (subtaskSeqRef.current.get(id) ?? 0) === seq;
+  }, []);
+
+  const applySubtaskPatch = useCallback(
+    async (id: string, patch: Pick<Subtask, 'title' | 'completed'>): Promise<boolean> => {
+      const before = dataRef.current.subtasks.find((subtask) => subtask.id === id);
+      if (!before) return false;
+      const normalized = {
+        ...patch,
+        ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+      };
+      if (normalized.title !== undefined && normalized.title.length === 0) return false;
+      const seq = nextSubtaskSeq(id);
+      patchSubtaskState({ ...before, ...normalized });
+      try {
+        const updated = await persistSubtaskUpdate(id, normalized);
+        if (isLatestSubtaskSeq(id, seq)) patchSubtaskState(updated);
+        return true;
+      } catch (error) {
+        if (isLatestSubtaskSeq(id, seq)) patchSubtaskState(before);
+        notify('Could not update subtask — please try again');
+        console.error('Subtask update failed', error);
+        return false;
+      }
+    },
+    [isLatestSubtaskSeq, nextSubtaskSeq, notify, patchSubtaskState, persistSubtaskUpdate],
+  );
 
   /**
    * Serializes task writes: every mutation gets a per-task sequence number and
@@ -561,6 +647,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return task;
       },
 
+      addSubtask: async (parentTaskId, title) => {
+        const cleanTitle = title.trim();
+        if (!cleanTitle || !dataRef.current.tasks.some((task) => task.id === parentTaskId)) return null;
+        const siblings = dataRef.current.subtasks.filter((subtask) => subtask.parentTaskId === parentTaskId);
+        const lastPosition = siblings.reduce((max, subtask) => Math.max(max, subtask.position), -1);
+        const position = Math.max(lastPosition, subtaskPositionRef.current.get(parentTaskId) ?? -1) + 1;
+        subtaskPositionRef.current.set(parentTaskId, position);
+        const input: SubtaskInput = { parentTaskId, title: cleanTitle, position };
+        try {
+          const created = await repo().subtasks.create(input);
+          patchSubtaskState(created);
+          return created;
+        } catch (error) {
+          notify('Could not add subtask — please try again');
+          console.error('Subtask creation failed', error);
+          return null;
+        }
+      },
+
+      updateSubtask: async (id, patch) => applySubtaskPatch(id, patch),
+
+      deleteSubtask: async (id) => {
+        if (!dataRef.current.subtasks.some((subtask) => subtask.id === id)) return false;
+        try {
+          await repo().subtasks.delete(id);
+          removeSubtaskState(id);
+          return true;
+        } catch (error) {
+          notify('Could not delete subtask — please try again');
+          console.error('Subtask deletion failed', error);
+          return false;
+        }
+      },
+
       updateTask: async (id, patch) => {
         const before = dataRef.current.tasks.find((t) => t.id === id);
         const updated = await repo().tasks.update(id, patch);
@@ -587,6 +707,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       deleteTask: async (id) => {
+        const childSubtasks = dataRef.current.subtasks.filter((subtask) => subtask.parentTaskId === id);
+        await Promise.all(childSubtasks.map((subtask) => repo().subtasks.delete(subtask.id)));
         await repo().tasks.delete(id);
         removeTaskState(id);
       },
@@ -1122,6 +1244,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       importData: async (payload) => {
         await repo().importData(payload);
         const fresh = await repo().exportData();
+        dataRef.current = fresh;
         setData(fresh);
         notify('Data imported');
       },
@@ -1150,7 +1273,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [addTaskState, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchTaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
+    [addTaskState, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, removeSubtaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
   );
 
   const value = useMemo<DataContextValue>(

@@ -136,7 +136,16 @@ export function IdeasScreen() {
         </div>
       )}
 
-      <IdeaFormModal open={formOpen} onClose={() => setFormOpen(false)} idea={editing} />
+      {/* Keyed + conditionally mounted so every open starts from a clean component instance:
+          creating a new idea never inherits the previously typed title/notes. */}
+      {formOpen ? (
+        <IdeaFormModal
+          key={editing?.id ?? 'new'}
+          open
+          onClose={() => { setFormOpen(false); setEditing(undefined); }}
+          idea={editing}
+        />
+      ) : null}
 
       <DateModal
         open={scheduling !== undefined}
@@ -169,23 +178,24 @@ export function IdeasScreen() {
 
 function IdeaFormModal({ open, onClose, idea }: { open: boolean; onClose: () => void; idea?: Idea }) {
   const { actions } = useData();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  // Fresh instance per open (see key/conditional mount above), so props are the only initial state.
+  const [title, setTitle] = useState(idea?.title ?? '');
+  const [description, setDescription] = useState(idea?.description ?? '');
   const [saving, setSaving] = useState(false);
-  const [syncedId, setSyncedId] = useState<string | null>(null);
-
-  if (open && syncedId !== (idea?.id ?? 'new')) {
-    setSyncedId(idea?.id ?? 'new');
-    setTitle(idea?.title ?? '');
-    setDescription(idea?.description ?? '');
-    setSaving(false);
-  }
 
   const submit = async () => {
     if (!title.trim() || saving) return;
     setSaving(true);
-    if (idea) await actions.updateIdea(idea.id, { title: title.trim(), description: description.trim() || undefined });
-    else await actions.addIdea({ title: title.trim(), description: description.trim() || undefined });
+    try {
+      if (idea) await actions.updateIdea(idea.id, { title: title.trim(), description: description.trim() || undefined });
+      else await actions.addIdea({ title: title.trim(), description: description.trim() || undefined });
+    } catch (err) {
+      setSaving(false);
+      throw err;
+    }
+    setTitle('');
+    setDescription('');
+    setSaving(false);
     onClose();
   };
 

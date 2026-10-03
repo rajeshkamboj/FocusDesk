@@ -16,6 +16,7 @@ async function main() {
   const { AuthProvider } = await import('../components/auth/auth-provider');
   const { DataProvider, useData } = await import('../components/data/data-provider');
   const { TaskRow } = await import('../components/tasks/task-row');
+  const { WellbeingReview } = await import('../components/review/wellbeing-review');
   const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
   const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst } = await import('../lib/selectors');
   const { blockingTimerTask, checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
@@ -27,7 +28,7 @@ async function main() {
     const task = data.tasks.find((item) => item.id === taskId);
     return task ? React.createElement('div', { id: 'subtask-test-row' }, React.createElement(TaskRow, { task, showDate: false })) : null;
   };
-  const mount = async (taskId?: string) => {
+  const mount = async (taskId?: string, wellbeingReviewDate?: string) => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
     await act(async () => {
@@ -37,6 +38,7 @@ async function main() {
         React.createElement(DataProvider, null, React.createElement(React.Fragment, null,
           React.createElement(Probe),
           taskId ? React.createElement(TaskRowProbe, { taskId }) : null,
+          wellbeingReviewDate ? React.createElement(WellbeingReview, { date: wellbeingReviewDate }) : null,
         )),
       ));
     });
@@ -422,6 +424,97 @@ async function main() {
      'Well-being: yesterday stays as history');
   ok(flagsOf(wellbeingDay()).every((f) => f === undefined) && c().data.tasks.length > 0,
      'Well-being: a new day starts fresh without touching anything else');
+
+  /* ------------------------------------------------------------------ */
+  /* Daily well-being — history: open, correct and backfill past days    */
+  /* ------------------------------------------------------------------ */
+
+  const yesterday = addDays(today, -1);
+  const dayBeforeYesterday = addDays(today, -2);
+  const wellbeingOn = (date: string) => c().data.wellbeingDays.filter((w) => w.date === date);
+  const yesterdayRecordId = wellbeingOn(yesterday)[0].id;
+
+  // Backfill a day that has no record at all ("I did Nitnem Morning two days
+  // ago but forgot to tick it") — a new record is created for that date.
+  await run(() => c().actions.toggleWellbeing('nitnemMorning', dayBeforeYesterday));
+  ok(wellbeingOn(dayBeforeYesterday).length === 1
+     && flagsOf(wellbeingOn(dayBeforeYesterday)[0]).join() === 'false,true,false,false',
+     'Well-being history: a forgotten day can be recorded retrospectively');
+  ok(wellbeingOn(yesterday).length === 1
+     && wellbeingOn(yesterday)[0].id === yesterdayRecordId
+     && flagsOf(wellbeingOn(yesterday)[0]).join() === 'true,false,false,false',
+     'Well-being history: backfilling never overwrites an existing record');
+
+  // Correcting the same past day again updates that one record — same id, no
+  // duplicate rows, then unchecked again it stays off.
+  const backfilledId = wellbeingOn(dayBeforeYesterday)[0].id;
+  await run(() => c().actions.toggleWellbeing('nitnemNight', dayBeforeYesterday));
+  ok(wellbeingOn(dayBeforeYesterday).length === 1
+     && wellbeingOn(dayBeforeYesterday)[0].id === backfilledId
+     && flagsOf(wellbeingOn(dayBeforeYesterday)[0]).join() === 'false,true,false,true',
+     'Well-being history: more check-ins on a past day update its single record');
+  await run(() => c().actions.toggleWellbeing('nitnemNight', dayBeforeYesterday));
+  ok(wellbeingOn(dayBeforeYesterday)[0].nitnemNight === false
+     && c().data.wellbeingDays.length === 2,
+     'Well-being history: a past check-in can be unchecked again');
+
+  // Today keeps behaving exactly as before while past records exist.
+  await run(() => c().actions.toggleWellbeing('jogging'));
+  ok(wellbeingToday().length === 1 && wellbeingDay()!.jogging === true
+     && c().data.wellbeingDays.length === 3,
+     'Well-being: today still writes only to today’s own record');
+  ok(flagsOf(wellbeingOn(yesterday)[0]).join() === 'true,false,false,false'
+     && flagsOf(wellbeingOn(dayBeforeYesterday)[0]).join() === 'false,true,false,false',
+     'Well-being history: today’s check-in leaves every past day untouched');
+
+  // Today and all past records persist across a reload.
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount();
+  ok(c().data.wellbeingDays.length === 3
+     && wellbeingOn(yesterday)[0]?.jogging === true
+     && wellbeingOn(dayBeforeYesterday)[0]?.nitnemMorning === true
+     && wellbeingToday()[0]?.jogging === true,
+     'Well-being history: today and past records survive a reload');
+
+  // The Review section: an untouched day (no record anywhere) still opens as a
+  // real day — all four check-ins off, "0 of 4 completed" — and can be ticked.
+  const untouchedDay = addDays(today, -3);
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount(undefined, untouchedDay);
+  const historySection = document.querySelector('section[aria-labelledby="wellbeing-review-heading"]');
+  if (!historySection) throw new Error('Missing Review well-being section');
+  const historyBoxes = () => Array.from(historySection.querySelectorAll('[role="checkbox"]'));
+  const historyStates = () => historyBoxes().map((box) => box.getAttribute('aria-checked')).join();
+  ok(historyBoxes().length === 4 && historyStates() === 'false,false,false,false'
+     && historySection.textContent?.includes('0 of 4 completed') === true,
+     'Well-being history UI: a day with no record still opens as a real 0 of 4 day');
+  await click(historyBoxes()[0], 'Jogging check-in on an untouched past day');
+  ok(historyStates() === 'true,false,false,false'
+     && wellbeingOn(untouchedDay).length === 1 && wellbeingOn(untouchedDay)[0].jogging === true
+     && historySection.textContent?.includes('1 of 4 completed') === true,
+     'Well-being history UI: ticking a forgotten day records it on that day');
+  await click(historyBoxes()[0], 'Untick Jogging on the same past day');
+  ok(historyStates() === 'false,false,false,false'
+     && historySection.textContent?.includes('0 of 4 completed') === true,
+     'Well-being history UI: an unchecked-again day still shows as a real 0 of 4 day');
+  ok(wellbeingToday()[0].jogging === true && wellbeingOn(yesterday)[0].jogging === true,
+     'Well-being history UI: editing in Review never touches today or other days');
+
+  // A previous day with an existing record opens with its own check-ins, not
+  // today's: jogging on, the rest off, "1 of 4 completed".
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount(undefined, yesterday);
+  const yesterdaySection = document.querySelector('section[aria-labelledby="wellbeing-review-heading"]');
+  if (!yesterdaySection) throw new Error('Missing Review well-being section for yesterday');
+  const yesterdayStates = Array.from(yesterdaySection.querySelectorAll('[role="checkbox"]'))
+    .map((box) => box.getAttribute('aria-checked'))
+    .join();
+  ok(yesterdayStates === 'true,false,false,false'
+     && yesterdaySection.textContent?.includes('1 of 4 completed') === true,
+     'Well-being history UI: a previous day opens with its own check-ins');
 
   /* ------------------------------------------------------------------ */
   /* Timer lifecycle — unload pause and last-checkpoint recovery         */

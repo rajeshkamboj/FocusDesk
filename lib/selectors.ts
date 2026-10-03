@@ -93,10 +93,25 @@ export function tasksWithApproachingDeadline(tasks: Task[], days = 3, date: ISOD
 
 /**
  * The well-being record for a day, if the user checked anything that day.
- * An absent record is a fresh, untouched day — never an overdue one.
+ * An absent record is a fresh, untouched day — never an overdue one; in
+ * history it still represents a real day with 0 of 4 completed.
  */
 export function wellbeingOnDate(days: WellbeingDay[], date: ISODate = todayISO()): WellbeingDay | undefined {
   return days.find((d) => d.date === date);
+}
+
+/**
+ * How many of the four daily check-ins are done on a day. A missing record is
+ * a real day with nothing checked — it counts as 0, never "no day".
+ */
+export function wellbeingCompletedCount(day?: WellbeingDay): number {
+  if (!day) return 0;
+  return (
+    (day.jogging ? 1 : 0) +
+    (day.nitnemMorning ? 1 : 0) +
+    (day.nitnemEvening ? 1 : 0) +
+    (day.nitnemNight ? 1 : 0)
+  );
 }
 
 export interface Progress {

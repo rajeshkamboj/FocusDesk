@@ -10,6 +10,7 @@ import { Field, Textarea } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/icons';
 import { TaskList } from '@/components/tasks/task-list';
+import { WellbeingReview } from './wellbeing-review';
 import { addDays, daysBetween, formatFocusedTime, formatLongDate, formatTime, todayISO, weekdayName } from '@/lib/dates';
 import { dailyPriorityTimerTaskId, dailyReviewStats } from '@/lib/selectors';
 import type { DailyPriority, ISODate } from '@/lib/types';
@@ -195,6 +196,10 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
           value={stats.priorityCompleted === null ? '—' : stats.priorityCompleted ? 'Done' : 'Not yet'}
         />
       </div>
+
+      {/* Daily well-being — the day's four check-ins; navigate with the
+          arrows above to review or correct any previous day. */}
+      <WellbeingReview date={date} />
 
       {/* Tasks */}
       {stats.completed.length > 0 ? (

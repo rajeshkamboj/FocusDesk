@@ -8,8 +8,10 @@ export type CuriosityNewsItem = {
 
 export type CuriosityVideo = {
   title: string;
+  videoId: string;
   source: string;
-  thumbnail?: string;
+  thumbnail: string;
+  publishedAt: string;
   why: string;
   url: string;
 };

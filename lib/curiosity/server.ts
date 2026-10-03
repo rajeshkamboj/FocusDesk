@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache';
 import { dailyEditorial } from './content';
 import type { CuriosityBriefing, CuriosityNewsItem, DeveloperDiscovery, GurbaniItem } from './types';
+import { fetchVideos } from './youtube';
 
 const SOURCE_TIMEOUT_MS = 6_000;
 
@@ -61,16 +62,29 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
   }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, 10);
 }
 
-async function fetchGurbani(date: string): Promise<GurbaniItem | null> {
-  // Use the source's dated Hukamnama archive. We never derive an Ang or substitute a verse.
-  const [year, month, day] = date.split('-').map(Number);
+function firstValue(value: unknown, keys: string[]): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  for (const [key, nested] of Object.entries(value)) {
+    if (keys.includes(key.toLowerCase()) && (typeof nested === 'string' || typeof nested === 'number')) return String(nested).trim();
+    const found = firstValue(nested, keys);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export async function fetchGurbani(): Promise<GurbaniItem | null> {
+  // GurbaniNow documents this as the current Darbar Sahib Hukamnama endpoint.
+  // Daily caching above makes the result stable for this app's calendar day.
   try {
-    const response = await fetch(`https://api.gurbaninow.com/v2/hukamnama/${year}/${month}/${day}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
+    const response = await fetch('https://api.gurbaninow.com/v2/hukamnama/today', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
     if (!response.ok) return null;
-    const data = await response.json() as { hukamnama?: { gurmukhi?: string; translation?: string; ang?: number | string; source?: string } };
-    const verse = data.hukamnama;
-    if (!verse?.gurmukhi || !verse.ang) return null;
-    return { text: verse.gurmukhi, ang: String(verse.ang), translation: verse.translation ?? 'Translation unavailable from the authoritative source.', explanation: 'The dated Hukamnama supplied by the source for this day.', source: verse.source ?? 'GurbaniNow', url: 'https://gurbaninow.com/hukamnama' };
+    const data = await response.json() as unknown;
+    const gurbani = firstValue(data, ['gurbani', 'gurmukhi', 'unicode', 'content', 'text']);
+    const ang = firstValue(data, ['ang', 'page', 'pageno', 'pageNo']);
+    if (!gurbani || !ang) return null;
+    const translation = firstValue(data, ['translation', 'english']);
+    const reference = firstValue(data, ['date', 'reference', 'hukamnamaDate']);
+    return { text: gurbani, ang, translation: translation ?? 'Translation was not supplied by the source.', explanation: reference ? `Dated Hukamnama reference: ${reference}.` : 'The current Hukamnama supplied by the authoritative source.', source: 'GurbaniNow', url: 'https://gurbaninow.com/hukamnama' };
   } catch {
     return null;
   }
@@ -88,8 +102,8 @@ async function fetchDeveloperRadar(): Promise<DeveloperDiscovery[]> {
 }
 
 async function buildBriefing(date: string): Promise<CuriosityBriefing> {
-  const [gurbani, aiWorld, developerRadar] = await Promise.all([fetchGurbani(date), fetchNews(), fetchDeveloperRadar()]);
-  return { date, gurbani, aiWorld, videos: [], developerRadar, ...dailyEditorial(date) };
+  const [gurbani, aiWorld, videos, developerRadar] = await Promise.all([fetchGurbani(), fetchNews(), fetchVideos(), fetchDeveloperRadar()]);
+  return { date, gurbani, aiWorld, videos, developerRadar, ...dailyEditorial(date) };
 }
 
 export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity', date], { revalidate: 86_400, tags: [`curiosity:${date}`] })();

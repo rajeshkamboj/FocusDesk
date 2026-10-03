@@ -221,14 +221,15 @@ export function CalendarScreen() {
         <h2 id="calendar-wellbeing-summary-heading" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
           Well-being — {monthName(anchor)} {anchor.slice(0, 4)}
         </h2>
-        <div data-wellbeing-summary className="mt-1 max-w-xs">
+        {/* One compact row on wide screens; wraps naturally when narrow. */}
+        <div data-wellbeing-summary className="mt-1.5 flex flex-wrap items-baseline gap-x-5 gap-y-1.5">
           {WELLBEING_ROWS.map((row) => {
             const count = wellbeingSummary[row.habit];
             return (
-              <div key={row.habit} className="flex items-baseline gap-2.5 py-0.5 text-[13px]">
-                <span aria-hidden="true" className="w-4 shrink-0 text-center text-[11px] leading-none">{row.symbol}</span>
+              <div key={row.habit} className="inline-flex items-baseline gap-1.5 text-[13px]">
+                <span aria-hidden="true" className="shrink-0 text-[11px] leading-none">{row.symbol}</span>
                 <span className="text-ink-2">{row.label}</span>
-                <span className="ml-auto tabular-nums text-ink-3">
+                <span className="tabular-nums text-ink-3">
                   {count} {count === 1 ? 'day' : 'days'}
                 </span>
               </div>

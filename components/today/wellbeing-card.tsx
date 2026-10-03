@@ -2,7 +2,7 @@
 
 import { useData } from '@/components/data/data-provider';
 import { todayISO } from '@/lib/dates';
-import { wellbeingOnDate } from '@/lib/selectors';
+import { wellbeingCompletedCount, wellbeingOnDate } from '@/lib/selectors';
 import type { WellbeingHabit } from '@/lib/types';
 
 /**
@@ -11,25 +11,28 @@ import type { WellbeingHabit } from '@/lib/types';
  *
  * Two habits, four check-ins, no streaks, no scores. It stays visually
  * secondary to Today's Priority and the task list on purpose.
+ *
+ * The check-in definitions and the Checkin row are exported so the Review
+ * page can show (and correct) the exact same four check-ins for past days.
  */
 
-interface CheckinDef {
+export interface CheckinDef {
   habit: WellbeingHabit;
   label: string;
 }
 
-const JOGGING: CheckinDef = { habit: 'jogging', label: 'Jogging' };
+export const JOGGING: CheckinDef = { habit: 'jogging', label: 'Jogging' };
 
-const NITNEM: CheckinDef[] = [
+export const NITNEM: CheckinDef[] = [
   { habit: 'nitnemMorning', label: 'Morning' },
   { habit: 'nitnemEvening', label: 'Evening' },
   { habit: 'nitnemNight', label: 'Night' },
 ];
 
-const ALL_CHECKINS: CheckinDef[] = [JOGGING, ...NITNEM];
+export const ALL_CHECKINS: CheckinDef[] = [JOGGING, ...NITNEM];
 
 /** One check-in row: the whole row is the tap target. */
-function Checkin({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+export function Checkin({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
@@ -69,7 +72,7 @@ function Checkin({ label, checked, onToggle }: { label: string; checked: boolean
 export function WellbeingCard() {
   const { data, actions } = useData();
   const day = wellbeingOnDate(data.wellbeingDays, todayISO());
-  const completed = ALL_CHECKINS.filter((item) => day?.[item.habit]).length;
+  const completed = wellbeingCompletedCount(day);
 
   return (
     <section aria-labelledby="wellbeing-heading" className="rounded-2xl border border-line bg-surface p-5 shadow-card">

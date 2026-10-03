@@ -2,10 +2,11 @@
  * Pure derived-state helpers. No side effects — safe to use anywhere.
  */
 
-import { daysBetween, toISODate, todayISO } from './dates';
+import { daysBetween, monthKey, toISODate, todayISO } from './dates';
 import type {
   AppData,
   ISODate,
+  MonthKey,
   MonthlyPriority,
   Project,
   Subtask,
@@ -93,10 +94,53 @@ export function tasksWithApproachingDeadline(tasks: Task[], days = 3, date: ISOD
 
 /**
  * The well-being record for a day, if the user checked anything that day.
- * An absent record is a fresh, untouched day — never an overdue one.
+ * An absent record is a fresh, untouched day — never an overdue one; in
+ * history it still represents a real day with 0 of 4 completed.
  */
 export function wellbeingOnDate(days: WellbeingDay[], date: ISODate = todayISO()): WellbeingDay | undefined {
   return days.find((d) => d.date === date);
+}
+
+/**
+ * How many of the four daily check-ins are done on a day. A missing record is
+ * a real day with nothing checked — it counts as 0, never "no day".
+ */
+export function wellbeingCompletedCount(day?: WellbeingDay): number {
+  if (!day) return 0;
+  return (
+    (day.jogging ? 1 : 0) +
+    (day.nitnemMorning ? 1 : 0) +
+    (day.nitnemEvening ? 1 : 0) +
+    (day.nitnemNight ? 1 : 0)
+  );
+}
+
+export interface WellbeingMonthTotals {
+  jogging: number;
+  nitnemMorning: number;
+  nitnemEvening: number;
+  nitnemNight: number;
+}
+
+/**
+ * Distinct days on which each of the four check-ins was completed within one
+ * calendar month (MonthKey, e.g. "2026-10"), derived locally from the same
+ * wellbeing_days records the rest of the app uses. Both the wording — a day
+ * either happened or it did not — and the counting are deliberately plain:
+ * a date is counted once no matter how many writes its row received.
+ */
+export function monthlyWellbeingTotals(days: WellbeingDay[], month: MonthKey): WellbeingMonthTotals {
+  const seen = new Set<ISODate>();
+  const totals: WellbeingMonthTotals = { jogging: 0, nitnemMorning: 0, nitnemEvening: 0, nitnemNight: 0 };
+  for (const day of days) {
+    if (monthKey(day.date) !== month || seen.has(day.date)) continue;
+    seen.add(day.date);
+    if (day.jogging) totals.jogging += 1;
+    if (day.nitnemMorning) totals.nitnemMorning += 1;
+    if (day.nitnemEvening) totals.nitnemEvening += 1;
+    if (day.nitnemNight) totals.nitnemNight += 1;
+  }
+  return totals;
 }
 
 export interface Progress {

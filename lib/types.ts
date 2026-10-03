@@ -201,9 +201,11 @@ export interface MonthlyPriority {
 export type WellbeingHabit = 'jogging' | 'nitnemMorning' | 'nitnemEvening' | 'nitnemNight';
 
 /**
- * One day's well-being check-ins. A record only exists once the user has
- * checked something for that day — an absent record simply means "nothing
- * checked yet", which is how every fresh day starts.
+ * One day's well-being check-ins, for any calendar day — today or a past day
+ * recorded retrospectively. A record only exists once the user has checked
+ * something for that day; an absent record means "nothing checked that day"
+ * and is shown in history as a real day with 0 of 4 completed — never as a
+ * day that does not exist.
  */
 export interface WellbeingDay {
   id: ID;
@@ -319,7 +321,7 @@ export interface AppData {
   weeklyPriorities: WeeklyPriority[];
   monthlyPriorities: MonthlyPriority[];
   taskHistory: TaskHistoryEntry[];
-  /** One record per day the user checked at least one well-being item. */
+  /** One record per day with at least one check-in; a day without a record still shows as 0 of 4. */
   wellbeingDays: WellbeingDay[];
   settings: Settings;
 }

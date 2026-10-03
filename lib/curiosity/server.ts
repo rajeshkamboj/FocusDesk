@@ -5,6 +5,8 @@ import { fetchVideos } from './youtube';
 
 const SOURCE_TIMEOUT_MS = 6_000;
 
+const NEWS_SIGNAL = /model|api|release|launch|research|open source|developer|agent|benchmark|safety|inference|tool|platform|framework/i;
+
 const NEWS_FEEDS = [
   ['OpenAI', 'https://openai.com/news/rss.xml'],
   ['Anthropic', 'https://www.anthropic.com/news/rss.xml'],
@@ -54,7 +56,7 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
   const seen = new Set<string>();
   return batches.flat().filter((item) => {
     const published = Date.parse(item.publishedAt);
-    if (!Number.isFinite(published) || published < cutoff || published > Date.now()) return false;
+    if (!Number.isFinite(published) || published < cutoff || published > Date.now() || !NEWS_SIGNAL.test(item.title)) return false;
     const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen.has(key)) return false;
     seen.add(key);

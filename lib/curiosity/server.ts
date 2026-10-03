@@ -17,6 +17,15 @@ function text(value: string) {
   return value.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
 }
 
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function tag(item: string, name: string) {
   const match = item.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
   return match ? text(match[1]) : '';
@@ -34,14 +43,17 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
         const title = tag(item, 'title');
         const publishedAt = tag(item, 'pubDate') || tag(item, 'published') || tag(item, 'updated');
         const summary = tag(item, 'description') || tag(item, 'summary');
-        return title && link ? { title, source, publishedAt, summary: summary.slice(0, 280), url: link } : null;
+        return title && isHttpUrl(link) ? { title, source, publishedAt, summary: summary.slice(0, 280), url: link } : null;
       }).filter((item): item is CuriosityNewsItem => Boolean(item));
     } catch {
       return [];
     }
   }));
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const seen = new Set<string>();
   return batches.flat().filter((item) => {
+    const published = Date.parse(item.publishedAt);
+    if (!Number.isFinite(published) || published < cutoff || published > Date.now()) return false;
     const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen.has(key)) return false;
     seen.add(key);
@@ -50,16 +62,15 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
 }
 
 async function fetchGurbani(date: string): Promise<GurbaniItem | null> {
-  // GurbaniNow is a public Gurbani API. We do not substitute a verse when it is unavailable.
-  const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
-  const ang = (day % 1430) + 1;
+  // Use the source's dated Hukamnama archive. We never derive an Ang or substitute a verse.
+  const [year, month, day] = date.split('-').map(Number);
   try {
-    const response = await fetch(`https://api.gurbaninow.com/v2/ang/${ang}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
+    const response = await fetch(`https://api.gurbaninow.com/v2/hukamnama/${year}/${month}/${day}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
     if (!response.ok) return null;
-    const data = await response.json() as { shabads?: Array<{ gurmukhi?: string; transliteration?: string; translation?: string; ang?: number }> };
-    const verse = data.shabads?.[0];
-    if (!verse?.gurmukhi) return null;
-    return { text: verse.gurmukhi, ang: String(verse.ang ?? ang), translation: verse.translation ?? 'Translation unavailable from source.', explanation: 'A daily verse selected deterministically by date from the source’s Ang collection.', source: 'GurbaniNow', url: `https://gurbaninow.com/` };
+    const data = await response.json() as { hukamnama?: { gurmukhi?: string; translation?: string; ang?: number | string; source?: string } };
+    const verse = data.hukamnama;
+    if (!verse?.gurmukhi || !verse.ang) return null;
+    return { text: verse.gurmukhi, ang: String(verse.ang), translation: verse.translation ?? 'Translation unavailable from the authoritative source.', explanation: 'The dated Hukamnama supplied by the source for this day.', source: verse.source ?? 'GurbaniNow', url: 'https://gurbaninow.com/hukamnama' };
   } catch {
     return null;
   }
@@ -70,7 +81,7 @@ async function fetchDeveloperRadar(): Promise<DeveloperDiscovery[]> {
     const response = await fetch('https://api.github.com/search/repositories?q=topic%3Adeveloper-tools+language%3ATypeScript&sort=updated&order=desc&per_page=3', { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
     if (!response.ok) return [];
     const data = await response.json() as { items?: Array<{ name: string; description: string | null; html_url: string }> };
-    return (data.items ?? []).slice(0, 3).map((item) => ({ name: item.name, description: item.description ?? 'A TypeScript developer project.', why: 'A recently updated open-source project worth evaluating for modern web work.', pricing: 'Open source; confirm the repository license and any hosted-service terms.', url: item.html_url }));
+    return (data.items ?? []).slice(0, 3).filter((item) => isHttpUrl(item.html_url)).map((item) => ({ name: item.name, description: item.description ?? 'A TypeScript developer project.', why: 'A recently updated open-source project worth evaluating for modern web work.', pricing: 'Open source; confirm the repository license and any hosted-service terms.', url: item.html_url }));
   } catch {
     return [];
   }

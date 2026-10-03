@@ -298,3 +298,12 @@ export function IconCuriosity(props: IconProps) {
     </svg>
   );
 }
+
+export function IconBook(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
+      <path d="M4 5.5v16M8 7h8M8 11h8" />
+    </svg>
+  );
+}

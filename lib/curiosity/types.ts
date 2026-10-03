@@ -6,16 +6,6 @@ export type CuriosityNewsItem = {
   url: string;
 };
 
-export type CuriosityVideo = {
-  title: string;
-  videoId: string;
-  source: string;
-  thumbnail: string;
-  publishedAt: string;
-  why: string;
-  url: string;
-};
-
 export type DeveloperDiscovery = {
   name: string;
   description: string;
@@ -24,21 +14,11 @@ export type DeveloperDiscovery = {
   url: string;
 };
 
-export type GurbaniItem = {
-  text: string;
-  ang: string;
-  translation: string;
-  explanation: string;
-  source: string;
-  url: string;
-};
-
 export type CuriosityBriefing = {
   date: string;
-  gurbani: GurbaniItem | null;
   aiWorld: CuriosityNewsItem[];
-  videos: CuriosityVideo[];
   developerRadar: DeveloperDiscovery[];
   book: { title: string; author: string; description: string; why: string; url: string };
+  oneThing: { title: string; explanation: string; url?: string };
   learning: { topic: string; explanation: string; url?: string };
 };

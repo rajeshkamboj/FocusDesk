@@ -17,8 +17,9 @@ async function main() {
   const { DataProvider, useData } = await import('../components/data/data-provider');
   const { TaskRow } = await import('../components/tasks/task-row');
   const { WellbeingReview } = await import('../components/review/wellbeing-review');
-  const { todayISO, addDays, startOfWeek, endOfWeek, isoWeekKey, formatFocusedTime } = await import('../lib/dates');
-  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst } = await import('../lib/selectors');
+  const { CalendarScreen } = await import('../components/calendar/calendar-screen');
+  const { todayISO, addDays, addMonths, calendarGridStart, startOfWeek, endOfWeek, isoWeekKey, monthKey, monthName, formatFocusedTime } = await import('../lib/dates');
+  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst, monthlyWellbeingTotals } = await import('../lib/selectors');
   const { blockingTimerTask, checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
@@ -28,7 +29,7 @@ async function main() {
     const task = data.tasks.find((item) => item.id === taskId);
     return task ? React.createElement('div', { id: 'subtask-test-row' }, React.createElement(TaskRow, { task, showDate: false })) : null;
   };
-  const mount = async (taskId?: string, wellbeingReviewDate?: string) => {
+  const mount = async (taskId?: string, wellbeingReviewDate?: string, showCalendar = false) => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
     await act(async () => {
@@ -39,6 +40,7 @@ async function main() {
           React.createElement(Probe),
           taskId ? React.createElement(TaskRowProbe, { taskId }) : null,
           wellbeingReviewDate ? React.createElement(WellbeingReview, { date: wellbeingReviewDate }) : null,
+          showCalendar ? React.createElement(CalendarScreen) : null,
         )),
       ));
     });
@@ -515,6 +517,113 @@ async function main() {
   ok(yesterdayStates === 'true,false,false,false'
      && yesterdaySection.textContent?.includes('1 of 4 completed') === true,
      'Well-being history UI: a previous day opens with its own check-ins');
+
+  /* ------------------------------------------------------------------ */
+  /* Calendar — day dots, day detail and the monthly well-being summary  */
+  /* ------------------------------------------------------------------ */
+
+  // Prepare a precise 3-of-4 record (jogging + Nitnem Morning + Nitnem Night)
+  // on a day that is guaranteed to be visible in the current month grid:
+  // yesterday, unless the grid happens to start only today.
+  const preparedDayDate = yesterday >= calendarGridStart(today) ? yesterday : today;
+  await run(() => c().actions.toggleWellbeing('nitnemMorning', preparedDayDate));
+  await run(() => c().actions.toggleWellbeing('nitnemNight', preparedDayDate));
+  ok(flagsOf(wellbeingOn(preparedDayDate)[0]).join() === 'true,true,false,true',
+     'Calendar: an existing record grows in place into a 3-of-4 day (no overwrite)');
+
+  // The monthly summary selector: distinct days per check-in, scoped to one
+  // month, and a repeated row for one date can never double-count the day.
+  const probeMonth = monthKey(today);
+  const makeDay = (id: string, date: string, jogging = false, nitnemMorning = false, nitnemEvening = false, nitnemNight = false) =>
+    ({ id, date, jogging, nitnemMorning, nitnemEvening, nitnemNight });
+  const probeDays = [
+    makeDay('a', `${probeMonth}-01`, true),
+    makeDay('b', `${probeMonth}-01`, true, true, true, true), // duplicate date — ignored entirely
+    makeDay('c', `${probeMonth}-15`, true, true, true, true),
+    makeDay('d', '2020-01-10', true, true, true, true),       // another month entirely
+    makeDay('e', `${probeMonth}-20`),                          // a real 0-of-4 day — counts nothing
+  ];
+  const probeTotals = monthlyWellbeingTotals(probeDays, probeMonth);
+  ok(probeTotals.jogging === 2 && probeTotals.nitnemMorning === 1 && probeTotals.nitnemEvening === 1 && probeTotals.nitnemNight === 1,
+     'Calendar summary: distinct days per check-in; the same day is never counted twice');
+  const probeOther = monthlyWellbeingTotals(probeDays, '2020-01');
+  ok(probeOther.jogging === 1 && probeOther.nitnemMorning === 1 && probeOther.nitnemEvening === 1 && probeOther.nitnemNight === 1,
+     'Calendar summary: only days inside the displayed month are counted');
+
+  // Expected totals for any month, derived straight from the current data —
+  // exactly what the UI must display beneath the calendar.
+  const expectedMonthTotals = (mk: string) => {
+    const seen = new Set<string>();
+    let jogging = 0, morning = 0, evening = 0, night = 0;
+    for (const w of c().data.wellbeingDays) {
+      if (monthKey(w.date) !== mk || seen.has(w.date)) continue;
+      seen.add(w.date);
+      if (w.jogging) jogging += 1;
+      if (w.nitnemMorning) morning += 1;
+      if (w.nitnemEvening) evening += 1;
+      if (w.nitnemNight) night += 1;
+    }
+    return [jogging, morning, evening, night];
+  };
+  const checkSummaryFor = (anchorDate: string, label: string) => {
+    const section = document.querySelector('section[aria-labelledby="calendar-wellbeing-summary-heading"]');
+    if (!section) throw new Error('Missing monthly well-being summary below the calendar');
+    const expected = expectedMonthTotals(monthKey(anchorDate));
+    const heading = section.querySelector('h2')?.textContent ?? '';
+    const rows = Array.from(section.querySelector('[data-wellbeing-summary]')?.children ?? []).map((row) => row.textContent ?? '');
+    ok(heading === `Well-being — ${monthName(anchorDate)} ${anchorDate.slice(0, 4)}`
+       && rows.length === 4
+       && rows[0].includes('Jogging') && rows[1].includes('Nitnem Morning')
+       && rows[2].includes('Nitnem Evening') && rows[3].includes('Nitnem Night')
+       && rows.every((row, i) => row.includes(`${expected[i]} ${expected[i] === 1 ? 'day' : 'days'}`)),
+       `Calendar summary: ${label} shows exactly the four monthly totals (${expected.join('/')})`);
+  };
+
+  await act(async () => root.unmount());
+  ctx = null;
+  root = await mount(undefined, undefined, true);
+  checkSummaryFor(today, 'the current month');
+
+  // The summary always corresponds to the displayed month, never a fixed one.
+  await click(document.querySelector('button[aria-label="Previous month"]'), 'Previous month');
+  checkSummaryFor(addMonths(today, -1), 'after navigating a month back');
+  await click(document.querySelector('button[aria-label="Next month"]'), 'Next month (back)');
+  checkSummaryFor(today, 'back on the current month');
+
+  // Tiny day dots: exactly one dot per completed check-in on every visible
+  // grid day (including adjacent-month days shown at the grid's edges).
+  const gridStart = calendarGridStart(today);
+  const gridEnd = addDays(gridStart, 41);
+  const expectedDotCounts: number[] = [];
+  {
+    const seen = new Set<string>();
+    for (const w of c().data.wellbeingDays) {
+      if (seen.has(w.date) || w.date < gridStart || w.date > gridEnd) continue;
+      seen.add(w.date);
+      const n = [w.jogging, w.nitnemMorning, w.nitnemEvening, w.nitnemNight].filter(Boolean).length;
+      if (n > 0) expectedDotCounts.push(n);
+    }
+  }
+  const dotContainers = Array.from(document.querySelectorAll('[data-wellbeing-count]'));
+  const shownDotCounts = dotContainers.map((el) => Number(el.getAttribute('data-wellbeing-count')));
+  ok(shownDotCounts.length === expectedDotCounts.length
+     && [...shownDotCounts].sort().join() === [...expectedDotCounts].sort().join()
+     && dotContainers.every((el) => el.children.length === Number(el.getAttribute('data-wellbeing-count'))),
+     'Calendar: each day with check-ins shows exactly its tiny dots — no more, no less');
+
+  // Clicking the prepared day in the grid shows its exact check-ins in the
+  // day detail: three checked (jogging, morning, night), "3 of 4 completed".
+  const preparedCell = dotContainers.find((el) => el.getAttribute('data-wellbeing-count') === '3')?.closest('button');
+  if (!preparedCell) throw new Error('Missing day cell for the prepared 3-of-4 record');
+  await click(preparedCell, 'day cell with three completed check-ins');
+  const dayStrip = document.querySelector('[data-wellbeing-day]');
+  if (!dayStrip) throw new Error('Missing day-detail well-being strip');
+  ok(dayStrip.textContent?.includes('3 of 4 completed') === true
+     && dayStrip.querySelectorAll('svg').length === 3
+     && dayStrip.textContent?.includes('Jogging') === true
+     && dayStrip.textContent?.includes('Nitnem Morning') === true
+     && dayStrip.textContent?.includes('Nitnem Night') === true,
+     'Calendar: clicking a day shows its exact Jogging/Nitnem details');
 
   /* ------------------------------------------------------------------ */
   /* Timer lifecycle — unload pause and last-checkpoint recovery         */

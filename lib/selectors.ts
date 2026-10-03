@@ -2,10 +2,11 @@
  * Pure derived-state helpers. No side effects — safe to use anywhere.
  */
 
-import { daysBetween, toISODate, todayISO } from './dates';
+import { daysBetween, monthKey, toISODate, todayISO } from './dates';
 import type {
   AppData,
   ISODate,
+  MonthKey,
   MonthlyPriority,
   Project,
   Subtask,
@@ -112,6 +113,34 @@ export function wellbeingCompletedCount(day?: WellbeingDay): number {
     (day.nitnemEvening ? 1 : 0) +
     (day.nitnemNight ? 1 : 0)
   );
+}
+
+export interface WellbeingMonthTotals {
+  jogging: number;
+  nitnemMorning: number;
+  nitnemEvening: number;
+  nitnemNight: number;
+}
+
+/**
+ * Distinct days on which each of the four check-ins was completed within one
+ * calendar month (MonthKey, e.g. "2026-10"), derived locally from the same
+ * wellbeing_days records the rest of the app uses. Both the wording — a day
+ * either happened or it did not — and the counting are deliberately plain:
+ * a date is counted once no matter how many writes its row received.
+ */
+export function monthlyWellbeingTotals(days: WellbeingDay[], month: MonthKey): WellbeingMonthTotals {
+  const seen = new Set<ISODate>();
+  const totals: WellbeingMonthTotals = { jogging: 0, nitnemMorning: 0, nitnemEvening: 0, nitnemNight: 0 };
+  for (const day of days) {
+    if (monthKey(day.date) !== month || seen.has(day.date)) continue;
+    seen.add(day.date);
+    if (day.jogging) totals.jogging += 1;
+    if (day.nitnemMorning) totals.nitnemMorning += 1;
+    if (day.nitnemEvening) totals.nitnemEvening += 1;
+    if (day.nitnemNight) totals.nitnemNight += 1;
+  }
+  return totals;
 }
 
 export interface Progress {

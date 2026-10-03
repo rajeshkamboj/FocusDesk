@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { IconChevronLeft, IconChevronRight, IconFlag, IconFlame, IconPlus } from '@/components/ui/icons';
+import { IconCheck, IconChevronLeft, IconChevronRight, IconFlag, IconFlame, IconPlus } from '@/components/ui/icons';
 import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
@@ -18,13 +18,29 @@ import {
   parseISODate,
   todayISO,
 } from '@/lib/dates';
-import type { ISODate, Task } from '@/lib/types';
+import { monthlyWellbeingTotals, wellbeingCompletedCount } from '@/lib/selectors';
+import type { ISODate, Task, WellbeingDay, WellbeingHabit } from '@/lib/types';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /**
+ * The four daily well-being check-ins as shown on the Calendar: the same
+ * records as Today and Review — never a second tracking system.
+ */
+const WELLBEING_ROWS: { habit: WellbeingHabit; symbol: string; label: string }[] = [
+  { habit: 'jogging', symbol: '🏃', label: 'Jogging' },
+  { habit: 'nitnemMorning', symbol: '☀', label: 'Nitnem Morning' },
+  { habit: 'nitnemEvening', symbol: '◐', label: 'Nitnem Evening' },
+  { habit: 'nitnemNight', symbol: '☾', label: 'Nitnem Night' },
+];
+
+/**
  * A simple calendar — scheduled tasks, deadlines, priorities and completed
  * work at a glance. Not a Google Calendar replacement; just orientation.
+ *
+ * Well-being appears quietly at three levels, all read from the same
+ * wellbeing_days source: tiny dots on each day, the selected day's four
+ * check-ins in the day detail, and the displayed month's totals below.
  */
 export function CalendarScreen() {
   const { data } = useData();
@@ -36,6 +52,22 @@ export function CalendarScreen() {
   const days = useMemo(() => Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)), [gridStart]);
   const today = todayISO();
   const anchorMonth = monthKey(anchor);
+
+  // One record per day (first one wins — records are unique by date, this is
+  // just a cheap guard so a day could never be read twice).
+  const wellbeingByDay = useMemo(() => {
+    const map = new Map<ISODate, WellbeingDay>();
+    for (const w of data.wellbeingDays) if (!map.has(w.date)) map.set(w.date, w);
+    return map;
+  }, [data.wellbeingDays]);
+
+  // The displayed month's totals — derived locally from records already
+  // loaded with the app; no per-day fetching.
+  const wellbeingSummary = useMemo(
+    () => monthlyWellbeingTotals(data.wellbeingDays, anchorMonth),
+    [data.wellbeingDays, anchorMonth],
+  );
+  const selectedWellbeing = wellbeingByDay.get(selected);
 
   const byDay = useMemo(() => {
     const map = new Map<ISODate, { scheduled: Task[]; deadlines: Task[]; priority: boolean }>();
@@ -116,6 +148,7 @@ export function CalendarScreen() {
             const isToday = day === today;
             const isSelected = day === selected;
             const entry = byDay.get(day);
+            const wellbeingDone = wellbeingCompletedCount(wellbeingByDay.get(day));
             return (
               <button
                 key={day}
@@ -162,11 +195,47 @@ export function CalendarScreen() {
                     +{entry.scheduled.length + entry.deadlines.length - (entry.priority ? 3 : 4)} more
                   </div>
                 ) : null}
+
+                {/* Well-being history: one tiny dot per completed check-in —
+                    quick visual only, the details live in the day detail. */}
+                {wellbeingDone > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    data-wellbeing-count={wellbeingDone}
+                    className="absolute bottom-1.5 right-1.5 flex gap-[3px]"
+                  >
+                    {Array.from({ length: wellbeingDone }, (_, i) => (
+                      <span key={i} className="h-[3px] w-[3px] rounded-full bg-ink-3/70" />
+                    ))}
+                  </span>
+                ) : null}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Monthly well-being summary — four calm totals for the displayed
+          month, from the same wellbeing_days records as the day dots. */}
+      <section aria-labelledby="calendar-wellbeing-summary-heading" className="mt-5">
+        <h2 id="calendar-wellbeing-summary-heading" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+          Well-being — {monthName(anchor)} {anchor.slice(0, 4)}
+        </h2>
+        <div data-wellbeing-summary className="mt-1 max-w-xs">
+          {WELLBEING_ROWS.map((row) => {
+            const count = wellbeingSummary[row.habit];
+            return (
+              <div key={row.habit} className="flex items-baseline gap-2.5 py-0.5 text-[13px]">
+                <span aria-hidden="true" className="w-4 shrink-0 text-center text-[11px] leading-none">{row.symbol}</span>
+                <span className="text-ink-2">{row.label}</span>
+                <span className="ml-auto tabular-nums text-ink-3">
+                  {count} {count === 1 ? 'day' : 'days'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Day detail */}
       <section className="mt-6">
@@ -195,6 +264,28 @@ export function CalendarScreen() {
             <Badge tone="muted">Daily priority</Badge>
           </div>
         ) : null}
+
+        {/* Well-being — the selected day's four check-ins, exactly as recorded
+            on Today/Review. Every day counts as a real day, even 0 of 4. */}
+        <div data-wellbeing-day className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Well-being</span>
+          {WELLBEING_ROWS.map((row) => {
+            const done = selectedWellbeing?.[row.habit] ?? false;
+            return (
+              <span
+                key={row.habit}
+                className={`inline-flex items-center gap-1.5 text-[12.5px] ${done ? 'text-ink-2' : 'text-ink-3/50'}`}
+              >
+                <span aria-hidden="true" className="text-[11px] leading-none">{row.symbol}</span>
+                {row.label}
+                {done ? <IconCheck width={11} height={11} className="text-accent" /> : null}
+              </span>
+            );
+          })}
+          <span className="ml-auto text-[11px] tabular-nums text-ink-3">
+            {wellbeingCompletedCount(selectedWellbeing)} of {WELLBEING_ROWS.length} completed
+          </span>
+        </div>
 
         {selectedDayTasks.length > 0 ? <TaskList tasks={selectedDayTasks} showDates={false} /> : null}
 

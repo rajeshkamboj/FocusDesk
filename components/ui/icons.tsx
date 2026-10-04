@@ -235,6 +235,16 @@ export function IconPause(props: IconProps) {
   );
 }
 
+/** Picture-in-Picture: a window with a small floating window inside it. */
+export function IconPopOut(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5" />
+      <rect x="13" y="13" width="8" height="6" rx="1.5" />
+    </svg>
+  );
+}
+
 export function IconArrowRight(props: IconProps) {
   return (
     <svg {...base(props)}>

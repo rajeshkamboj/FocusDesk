@@ -71,6 +71,11 @@ export function dailyPriorityTimerTaskId(priorityId: string): string {
   return `daily-priority-timer:${priorityId}`;
 }
 
+/** Whether a task ID belongs to a daily priority's app-owned timer Task. */
+export function isDailyPriorityTimerTaskId(taskId: string): boolean {
+  return taskId.startsWith('daily-priority-timer:');
+}
+
 /** Focused time (seconds) invested in a project's completed tasks. */
 export function projectFocusedSeconds(tasks: Task[], projectId: string): number {
   return focusedSeconds(tasks.filter((t) => t.projectId === projectId && t.status === 'completed' && !t.archived));

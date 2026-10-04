@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { QuickAdd } from './quick-add';
+import { TimerDock } from './timer-dock';
 import { FocusMode } from './focus-mode';
 import { RegisterSW } from '@/components/pwa/register-sw';
 import { useNotificationScheduler } from '@/lib/notifications';
@@ -51,6 +52,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         )}
       </main>
       <QuickAdd />
+      <TimerDock />
       <FocusMode />
       <Toaster />
       <RegisterSW />

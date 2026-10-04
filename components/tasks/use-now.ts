@@ -11,6 +11,11 @@ import { useCallback, useSyncExternalStore } from 'react';
  * `useSyncExternalStore`. Elapsed time itself is always derived from
  * timestamps by the caller — this clock only drives re-renders — so throttled
  * background tabs and slow renders can never drift the measurement.
+ *
+ * `alsoTickFrom` lets a second, always-visible window (the Picture-in-Picture
+ * timers) drive the same refresh: a backgrounded tab may have its own interval
+ * throttled, and the popped-out clock has to stay live. It adds a render
+ * trigger only — never a second clock or a second measurement.
  */
 let clockCache = Date.now();
 
@@ -18,7 +23,7 @@ function refreshClock(): void {
   clockCache = Date.now();
 }
 
-export function useNow(active: boolean): number {
+export function useNow(active: boolean, alsoTickFrom?: Window | null): number {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       if (!active) return () => {};
@@ -30,15 +35,19 @@ export function useNow(active: boolean): number {
       // resumed displays the right value without waiting for the first tick.
       refreshClock();
       const id = window.setInterval(bump, 1000);
+      const extraId = alsoTickFrom?.setInterval(bump, 1000);
       document.addEventListener('visibilitychange', bump);
       window.addEventListener('focus', bump);
       return () => {
         window.clearInterval(id);
+        if (extraId !== undefined && alsoTickFrom && !alsoTickFrom.closed) {
+          alsoTickFrom.clearInterval(extraId);
+        }
         document.removeEventListener('visibilitychange', bump);
         window.removeEventListener('focus', bump);
       };
     },
-    [active],
+    [active, alsoTickFrom],
   );
 
   const getSnapshot = useCallback(() => clockCache, []);

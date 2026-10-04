@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useData } from '@/components/data/data-provider';
-import { IconClock, IconMinus, IconPause, IconPlay } from '@/components/ui/icons';
+import { IconClock, IconMinus, IconPause, IconPlay, IconPopOut } from '@/components/ui/icons';
 import { formatStopwatch } from '@/lib/dates';
 import { isDailyPriorityTimerTaskId } from '@/lib/selectors';
 import { blockingTimerTask, elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { useNow } from '@/components/tasks/use-now';
+import { TimerPipView, useTimerPip } from './timer-pip';
 import type { Task } from '@/lib/types';
 
 /**
@@ -22,6 +23,10 @@ import type { Task } from '@/lib/types';
  * Pause/Resume reuse the normal DataProvider actions. Resume applies the same
  * single-running-timer rule as every Start path (`blockingTimerTask`): a
  * running session blocks, a paused one never does.
+ *
+ * "Pop out" mirrors this same list into a native Document Picture-in-Picture
+ * window (see `./timer-pip`) — a second view of the list computed here, not a
+ * second timer.
  */
 
 const COLLAPSED_KEY = 'pace.timerDock.collapsed';
@@ -61,9 +66,13 @@ export function TimerDock() {
   }, [data.tasks]);
 
   const anyRunning = activeTasks.some(isTimerRunning);
-  const now = useNow(anyRunning);
+  const pip = useTimerPip();
+  const now = useNow(anyRunning, pip.pipWindow);
 
-  if (!ready || activeTasks.length === 0) return null;
+  // The dock hides itself when there is nothing to show, but the component
+  // stays mounted so an open pop-out window survives the last timer finishing
+  // (and keeps surviving route changes, as it always has).
+  const showDock = ready && activeTasks.length > 0;
 
   const setCollapsedPref = (value: boolean) => {
     setCollapsed(value);
@@ -101,72 +110,94 @@ export function TimerDock() {
   };
 
   return (
-    <div className="pointer-events-none fixed right-3 top-3 z-50 sm:right-4 sm:top-4 print:hidden">
-      {collapsed ? (
-        <button
-          onClick={() => setCollapsedPref(false)}
-          aria-label={`Expand active timers (${activeTasks.length})`}
-          className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] font-medium text-ink-2 shadow-card backdrop-blur-md transition-colors hover:border-line-strong hover:text-ink"
-        >
-          <IconClock width={13} height={13} className={anyRunning ? 'text-accent' : 'text-ink-3'} />
-          <span className="tabular-nums">
-            {activeTasks.length} {activeTasks.length === 1 ? 'timer' : 'timers'}
-          </span>
-        </button>
-      ) : (
-        <div className="pointer-events-auto w-56 rounded-2xl border border-line bg-surface/95 shadow-pop backdrop-blur-md sm:w-64">
-          <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">Active timers</p>
+    <>
+      {showDock ? (
+        <div className="pointer-events-none fixed right-3 top-3 z-50 sm:right-4 sm:top-4 print:hidden">
+          {collapsed ? (
             <button
-              onClick={() => setCollapsedPref(true)}
-              aria-label="Collapse active timers"
-              className="rounded-md p-0.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={() => setCollapsedPref(false)}
+              aria-label={`Expand active timers (${activeTasks.length})`}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] font-medium text-ink-2 shadow-card backdrop-blur-md transition-colors hover:border-line-strong hover:text-ink"
             >
-              <IconMinus width={14} height={14} />
+              <IconClock width={13} height={13} className={anyRunning ? 'text-accent' : 'text-ink-3'} />
+              <span className="tabular-nums">
+                {activeTasks.length} {activeTasks.length === 1 ? 'timer' : 'timers'}
+              </span>
             </button>
-          </div>
-          <ul className="max-h-56 overflow-y-auto p-1.5">
-            {activeTasks.map((task) => {
-              const running = isTimerRunning(task);
-              // Running: live elapsed time from the shared timestamps + clock.
-              // Paused: the frozen accumulated time (same as TaskRow shows).
-              const seconds = running ? elapsedActiveSeconds(task, now) : (task.actualDurationSeconds ?? 0);
-              return (
-                <li key={task.id} className="flex items-center gap-0.5">
-                  <button
-                    onClick={() => goToTask(task)}
-                    title={task.title}
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
-                  >
-                    {running ? (
-                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                    ) : (
-                      <IconPause width={10} height={10} className="shrink-0 text-ink-3" />
-                    )}
-                    <span className={`min-w-0 flex-1 truncate text-[13px] ${running ? 'text-ink' : 'text-ink-3'}`}>
-                      {task.title}
-                    </span>
-                    <span
-                      className={`shrink-0 font-mono text-[12px] tabular-nums ${running ? 'text-ink-2' : 'text-ink-3'}`}
+          ) : (
+            <div className="pointer-events-auto w-56 rounded-2xl border border-line bg-surface/95 shadow-pop backdrop-blur-md sm:w-64">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">Active timers</p>
+                <div className="flex items-center gap-0.5">
+                  {pip.supported ? (
+                    <button
+                      onClick={pip.open}
+                      aria-pressed={pip.pipWindow !== null}
+                      aria-label={pip.pipWindow ? 'Timers popped out — focus that window' : 'Pop out timers'}
+                      title={pip.pipWindow ? 'Timers popped out' : 'Pop out timers'}
+                      className={`rounded-md p-0.5 transition-colors hover:bg-surface-2 hover:text-ink ${
+                        pip.pipWindow ? 'text-accent' : 'text-ink-3'
+                      }`}
                     >
-                      {formatStopwatch(seconds)}
-                      <span className="sr-only">{running ? ' elapsed, running' : ' elapsed, paused'}</span>
-                    </span>
-                  </button>
+                      <IconPopOut width={14} height={14} />
+                    </button>
+                  ) : null}
                   <button
-                    disabled={busy}
-                    onClick={() => (running ? pause(task) : resume(task))}
-                    aria-label={running ? `Pause timer for ${task.title}` : `Resume timer for ${task.title}`}
-                    className="shrink-0 rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-45"
+                    onClick={() => setCollapsedPref(true)}
+                    aria-label="Collapse active timers"
+                    className="rounded-md p-0.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
                   >
-                    {running ? <IconPause width={12} height={12} /> : <IconPlay width={12} height={12} />}
+                    <IconMinus width={14} height={14} />
                   </button>
-                </li>
-              );
-            })}
-          </ul>
+                </div>
+              </div>
+              <ul className="max-h-56 overflow-y-auto p-1.5">
+                {activeTasks.map((task) => {
+                  const running = isTimerRunning(task);
+                  // Running: live elapsed time from the shared timestamps + clock.
+                  // Paused: the frozen accumulated time (same as TaskRow shows).
+                  const seconds = running ? elapsedActiveSeconds(task, now) : (task.actualDurationSeconds ?? 0);
+                  return (
+                    <li key={task.id} className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => goToTask(task)}
+                        title={task.title}
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
+                      >
+                        {running ? (
+                          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                        ) : (
+                          <IconPause width={10} height={10} className="shrink-0 text-ink-3" />
+                        )}
+                        <span className={`min-w-0 flex-1 truncate text-[13px] ${running ? 'text-ink' : 'text-ink-3'}`}>
+                          {task.title}
+                        </span>
+                        <span
+                          className={`shrink-0 font-mono text-[12px] tabular-nums ${running ? 'text-ink-2' : 'text-ink-3'}`}
+                        >
+                          {formatStopwatch(seconds)}
+                          <span className="sr-only">{running ? ' elapsed, running' : ' elapsed, paused'}</span>
+                        </span>
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() => (running ? pause(task) : resume(task))}
+                        aria-label={running ? `Pause timer for ${task.title}` : `Resume timer for ${task.title}`}
+                        className="shrink-0 rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-45"
+                      >
+                        {running ? <IconPause width={12} height={12} /> : <IconPlay width={12} height={12} />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      ) : null}
+
+      {/* The same list, rendered into the Picture-in-Picture window. */}
+      {pip.pipWindow ? <TimerPipView pipWindow={pip.pipWindow} tasks={activeTasks} now={now} /> : null}
+    </>
   );
 }

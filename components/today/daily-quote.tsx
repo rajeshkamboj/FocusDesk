@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Quote } from '@/lib/quotes';
 
 /**
- * A quiet editorial quote block — no card, no border, no decoration.
- * The words themselves carry the weight; everything else stays out of the way.
+ * A thought for today — a compact editorial panel.
+ * One step off the page background, a whisper of a border, a constrained
+ * measure: clearly its own section, never a heavy card. The words carry it.
+ * No shadow, no icons, no artwork — quieter than the dashboard cards around it.
  */
 export function DailyQuote({ quote }: { quote: Quote }) {
   const [copied, setCopied] = useState(false);
@@ -30,12 +32,12 @@ export function DailyQuote({ quote }: { quote: Quote }) {
   }, [quote.author, quote.text]);
 
   return (
-    <figure className="mt-8 max-w-[760px]">
+    <figure className="mt-8 max-w-[760px] rounded-2xl border border-line bg-surface px-7 py-8 sm:px-9">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3">
         A thought for today
       </p>
       <blockquote className="mt-3">
-        <p className="text-[23px] font-normal leading-[1.35] tracking-[-0.01em] text-ink sm:text-[26px] lg:text-[28px]">
+        <p className="max-w-[640px] text-[23px] font-normal leading-[1.35] tracking-[-0.01em] text-ink sm:text-[26px] lg:text-[28px]">
           {quote.text}
         </p>
       </blockquote>

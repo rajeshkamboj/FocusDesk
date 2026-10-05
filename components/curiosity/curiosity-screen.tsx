@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useLocalDate } from '@/lib/use-local-date';
 import { Card, EmptyState } from '@/components/ui/card';
 import { SectionTitle } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
+import { DailyQuote } from './daily-quote';
+import { getDailyQuote } from '@/lib/quotes';
 import {
   IconBook,
   IconCalendar,
@@ -295,6 +297,7 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
 export function CuriosityScreen({ briefing: initialBriefing }: { briefing: CuriosityBriefing }) {
   const date = useLocalDate(initialBriefing.date);
   const [briefing, setBriefing] = useState(initialBriefing);
+  const dailyQuote = useMemo(() => getDailyQuote(date), [date]);
   useEffect(() => {
     if (date === briefing.date) return;
     const controller = new AbortController();
@@ -323,6 +326,11 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
       </header>
 
       <div className="space-y-7">
+        {/* A Thought for Today */}
+        <section>
+          <DailyQuote quote={dailyQuote} />
+        </section>
+
         {/* 1. Today in History */}
         {briefing.history ? (
           <section>

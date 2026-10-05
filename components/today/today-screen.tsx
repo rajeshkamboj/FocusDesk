@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { DailyQuote } from './daily-quote';
 import { ProgressSegments } from './progress-segments';
 import { useLocalDate } from '@/lib/use-local-date';
 import { useMemo, useState, useSyncExternalStore } from 'react';
@@ -16,7 +15,6 @@ import { WellbeingCard } from './wellbeing-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
 import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
-import { getDailyQuote } from '@/lib/quotes';
 
 export function TodayScreen() {
   const { user } = useAuth();
@@ -36,7 +34,6 @@ export function TodayScreen() {
   );
 
   const displayName = getUserDisplayName(user, data.settings.general.displayName);
-  const dailyQuote = useMemo(() => getDailyQuote(today), [today]);
   const greeting = mounted
     ? (() => {
         const h = new Date().getHours();
@@ -102,8 +99,6 @@ export function TodayScreen() {
             ) : null}
           </div>
         </div>
-
-        <DailyQuote quote={dailyQuote} />
 
         {approaching.length > 0 ? (
           <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-line bg-warning-soft/60 px-4 py-3">

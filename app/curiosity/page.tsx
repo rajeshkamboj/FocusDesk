@@ -3,7 +3,7 @@ import { CuriosityScreen } from '@/components/curiosity/curiosity-screen';
 import { getDailyBriefing } from '@/lib/curiosity/server';
 
 export const metadata: Metadata = {
-  title: 'Curious',
+  title: 'Curiosity',
 };
 
 export const dynamic = 'force-dynamic';

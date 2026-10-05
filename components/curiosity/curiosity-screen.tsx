@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { DailyIllustration } from './daily-illustration';
+import { useLocalDate } from '@/lib/use-local-date';
 import { Card, EmptyState } from '@/components/ui/card';
 import { SectionTitle } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
@@ -111,16 +113,19 @@ function RadarItem({ item }: { item: DeveloperDiscovery }) {
 function SectionCard({
   label,
   className = '',
+  illustration,
   children,
 }: {
   label: React.ReactNode;
   className?: string;
+  illustration?: 'history' | 'literature' | 'sharpener';
   children: React.ReactNode;
 }) {
   return (
-    <Card className={`flex h-full flex-col p-4 sm:p-6 ${className}`}>
-      <SectionTitle>{label}</SectionTitle>
-      <div className="mt-3.5">{children}</div>
+    <Card className={`relative isolate flex h-full min-w-0 flex-col overflow-hidden p-4 sm:p-6 ${illustration ? `daily-${illustration}` : ''} ${className}`}>
+      {illustration ? <DailyIllustration kind={illustration} /> : null}
+      <div className="relative"><SectionTitle>{label}</SectionTitle></div>
+      <div className="relative mt-3.5">{children}</div>
     </Card>
   );
 }
@@ -138,7 +143,7 @@ function HistorySection({ event }: { event: HistoryEvent }) {
               {event.title}
             </h3>
             <span className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-2">
-              {event.year}
+              {event.date} · {event.year}
             </span>
           </div>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
@@ -155,6 +160,9 @@ function HistorySection({ event }: { event: HistoryEvent }) {
         {event.url ? (
           <p className="mt-2 text-[12.5px]">
             <LinkOut href={event.url}>Read more about this milestone →</LinkOut>
+            {event.url.startsWith('https://en.wikipedia.org/') ? (
+              <span className="mt-1 block text-[11px] text-ink-2">Source: Wikipedia contributors · <LinkOut href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</LinkOut></span>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -184,6 +192,7 @@ function LiteratureSection({ item }: { item: LiteratureItem }) {
         <p className="whitespace-pre-line font-serif text-[13.5px] italic leading-relaxed text-ink">
           {item.passage}
         </p>
+        {item.attribution ? <p className="mt-2 text-[11px] leading-relaxed text-ink-2">{item.attribution}</p> : null}
       </div>
 
       <p className="text-[13px] leading-relaxed text-ink-2">
@@ -202,6 +211,7 @@ function LiteratureSection({ item }: { item: LiteratureItem }) {
 
 function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
   const [showSolution, setShowSolution] = useState(false);
+  const solutionId = useId();
 
   return (
     <div className="space-y-3.5">
@@ -242,6 +252,8 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
           type="button"
           variant="secondary"
           size="sm"
+          aria-expanded={showSolution}
+          aria-controls={solutionId}
           onClick={() => setShowSolution((v) => !v)}
           className="gap-1.5"
         >
@@ -255,7 +267,7 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
       </div>
 
       {showSolution ? (
-        <div className="space-y-2.5 rounded-xl border border-accent/30 bg-accent-soft/25 p-3.5 animate-fade-in sm:p-4">
+        <div id={solutionId} className="space-y-2.5 rounded-xl border border-accent/30 bg-accent-soft/25 p-3.5 animate-fade-in sm:p-4">
           {sharpener.hint ? (
             <div className="border-b border-accent/20 pb-2 text-[12px] text-ink-2">
               <strong className="font-medium text-accent-ink">Hint:</strong>{' '}
@@ -284,7 +296,21 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
   );
 }
 
-export function CuriosityScreen({ briefing }: { briefing: CuriosityBriefing }) {
+export function CuriosityScreen({ briefing: initialBriefing }: { briefing: CuriosityBriefing }) {
+  const date = useLocalDate(initialBriefing.date);
+  const [briefing, setBriefing] = useState(initialBriefing);
+  useEffect(() => {
+    if (date === briefing.date) return;
+    const controller = new AbortController();
+    void fetch(`/api/curiosity?date=${date}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Briefing unavailable');
+        return response.json() as Promise<CuriosityBriefing>;
+      })
+      .then(setBriefing)
+      .catch(() => { /* Keep the explicitly dated previous briefing while offline. */ });
+    return () => controller.abort();
+  }, [date, briefing.date]);
   return (
     <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 lg:px-10 lg:py-12">
       <header className="mb-8 max-w-2xl">
@@ -304,11 +330,11 @@ export function CuriosityScreen({ briefing }: { briefing: CuriosityBriefing }) {
         {/* 1. Today in History */}
         {briefing.history ? (
           <section>
-            <SectionCard label="Today in History">
+            <SectionCard label="Today in History" illustration="history">
               <HistorySection event={briefing.history} />
             </SectionCard>
           </section>
-        ) : null}
+        ) : (<SectionCard label="Today in History" illustration="history"><p className="text-sm text-ink-2">Today’s historical source is temporarily unavailable. Please check back later.</p></SectionCard>)}
 
         {/* 2. AI World (Existing) */}
         <section>
@@ -389,7 +415,7 @@ export function CuriosityScreen({ briefing }: { briefing: CuriosityBriefing }) {
         <div className="grid gap-7 lg:grid-cols-2">
           {briefing.literature ? (
             <section className="h-full">
-              <SectionCard label="A Few Minutes of Literature">
+              <SectionCard label="A Few Minutes of Literature" illustration="literature">
                 <LiteratureSection item={briefing.literature} />
               </SectionCard>
             </section>
@@ -429,8 +455,8 @@ export function CuriosityScreen({ briefing }: { briefing: CuriosityBriefing }) {
         <div className="grid gap-7 lg:grid-cols-2">
           {briefing.sharpener ? (
             <section className="h-full">
-              <SectionCard label="Brain Sharpener">
-                <BrainSharpenerSection sharpener={briefing.sharpener} />
+              <SectionCard label="Brain Sharpener" illustration="sharpener">
+                <BrainSharpenerSection key={`${briefing.date}-${briefing.sharpener.id}`} sharpener={briefing.sharpener} />
               </SectionCard>
             </section>
           ) : null}

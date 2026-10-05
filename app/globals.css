@@ -7,7 +7,7 @@
 :root {
   color-scheme: light;
 
-  --background: #f6f6f3;
+  --background: #f8f7f2;
   --surface: #ffffff;
   --surface-2: #efefea;
   --surface-3: #e7e7e1;
@@ -16,7 +16,7 @@
 
   --ink: #1b1c18;
   --ink-2: #55574e;
-  --ink-3: #8b8d81;
+  --ink-3: #72756a;
 
   --accent: #1e6b52;
   --accent-hover: #175741;
@@ -44,7 +44,7 @@
 
   --ink: #ecece6;
   --ink-2: #a9aa9f;
-  --ink-3: #797b6f;
+  --ink-3: #96998b;
 
   --accent: #4fae8d;
   --accent-hover: #63bfa0;
@@ -115,6 +115,12 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.quote-card { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
+[data-theme="dark"] .quote-card svg { opacity: .3; }
+.daily-history { background: linear-gradient(135deg, var(--surface) 35%, var(--warning-soft)); }
+.daily-literature { background: linear-gradient(135deg, var(--surface) 35%, var(--accent-soft)); }
+.daily-sharpener { background: linear-gradient(135deg, var(--surface) 35%, var(--surface-2)); }
 
 input,
 textarea,

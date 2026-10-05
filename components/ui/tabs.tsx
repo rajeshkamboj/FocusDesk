@@ -36,10 +36,12 @@ export function Tabs({
      * than the labels getting squeezed.
      */
     <div className={`scroll-strip max-w-full min-w-0 ${className}`}>
-      <div className="inline-flex w-max items-center gap-1 rounded-xl border border-line bg-surface p-1">
+      <div className="inline-flex w-max items-center gap-1 rounded-xl border border-line bg-surface-2 p-1">
         {items.map((item) => (
           <button
             key={item.id}
+            type="button"
+            aria-pressed={active === item.id}
             onClick={() => onChange(item.id)}
             // `whitespace-nowrap` is safe — and necessary — here precisely
             // because the strip above scrolls: a label may leave the viewport,

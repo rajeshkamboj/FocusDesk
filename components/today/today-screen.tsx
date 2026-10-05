@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { QuoteCard } from './quote-card';
+import { ProgressSegments } from './progress-segments';
+import { useLocalDate } from '@/lib/use-local-date';
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
@@ -15,56 +18,10 @@ import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
 import { getDailyQuote } from '@/lib/quotes';
 
-function QuoteCardIllustration() {
-  return (
-    <div aria-hidden className="mx-auto mb-3 flex items-center justify-center text-accent">
-      <svg
-        width="110"
-        height="40"
-        viewBox="0 0 110 40"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="opacity-90"
-      >
-        {/* Soft rising sun / calm natural landscape & mountain silhouettes */}
-        <circle cx="55" cy="20" r="9" className="fill-accent-soft stroke-accent/40" strokeWidth="1" />
-        <path
-          d="M12 33 C 24 23, 38 21, 55 27 C 72 33, 86 21, 98 33"
-          className="stroke-accent"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M6 35 C 22 30, 48 29, 68 33 C 86 37, 98 33, 104 35"
-          className="stroke-line-strong"
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        {/* Subtle pine / tree markers */}
-        <path
-          d="M34 26 L34 32 M31 29 L34 26 L37 29 M32 31 L34 28 L36 31"
-          className="stroke-accent"
-          strokeWidth="1.1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M76 24 L76 31 M73 28 L76 24 L79 28 M74 30 L76 27 L78 30"
-          className="stroke-accent"
-          strokeWidth="1.1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-  );
-}
-
 export function TodayScreen() {
   const { user } = useAuth();
   const { data } = useData();
-  const today = todayISO();
+  const today = useLocalDate(todayISO());
   const [addOpen, setAddOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   // Defer any client-only, time-dependent rendering until after mount so SSR
@@ -129,43 +86,14 @@ export function TodayScreen() {
       <header className="mb-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3">{greeting}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3 [overflow-wrap:anywhere]">{greeting}</p>
             <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight text-ink">
               Today <span className="font-normal text-ink-3">— {dayName}</span>
             </h1>
             <p className="mt-1 text-sm text-ink-2">{formatLongDate(today)}</p>
           </div>
-          <div className="w-full sm:w-auto sm:min-w-[210px] max-w-xs">
-            <div className="mb-1.5 flex items-center justify-between text-[11px] text-ink-3">
-              <span className="font-semibold uppercase tracking-[0.14em]">Today&apos;s Progress</span>
-              <span className="font-medium tabular-nums text-ink-2">
-                {total > 0 ? `${done} of ${total} completed` : '0 tasks'}
-                <span className="ml-2 font-semibold text-ink">
-                  {total > 0 ? `${Math.round((done / total) * 100)}%` : '0%'}
-                </span>
-              </span>
-            </div>
-            {/* Segmented Progress Bar */}
-            {total > 0 ? (
-              <div
-                className="flex w-full items-center gap-1.5"
-                role="progressbar"
-                aria-valuenow={done}
-                aria-valuemin={0}
-                aria-valuemax={total}
-              >
-                {Array.from({ length: total }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 flex-1 rounded-full ${
-                      i < done ? 'bg-accent' : 'bg-surface-3'
-                    }`}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="h-2 w-full rounded-full bg-surface-3" />
-            )}
+          <div className="w-full sm:w-auto sm:min-w-[300px] sm:max-w-sm">
+            <ProgressSegments done={done} total={total} />
             {totalMinutes > 0 ? (
               <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-3">
                 <IconClock width={12} height={12} />
@@ -175,20 +103,7 @@ export function TodayScreen() {
           </div>
         </div>
 
-        {/* Illustrated Quote Card */}
-        <div className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6 shadow-card text-center">
-          <QuoteCardIllustration />
-          <blockquote className="mx-auto max-w-xl">
-            <p className="text-[14.5px] sm:text-[15.5px] font-medium leading-relaxed text-ink">
-              “{dailyQuote.text}”
-            </p>
-            {dailyQuote.author ? (
-              <cite className="mt-2 block text-[12px] font-normal not-italic text-ink-3">
-                — {dailyQuote.author}
-              </cite>
-            ) : null}
-          </blockquote>
-        </div>
+        <QuoteCard quote={dailyQuote} />
 
         {approaching.length > 0 ? (
           <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-line bg-warning-soft/60 px-4 py-3">

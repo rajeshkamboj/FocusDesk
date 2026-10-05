@@ -74,11 +74,14 @@ export function focusedSeconds(tasks: Task[]): number {
 
 /**
  * Focused time is the time FocusDesk's own task timers recorded. It is not a
- * claim about every minute worked, and it is deliberately never derived by
- * summing `Task.actualDurationSeconds`: that field is a task's lifetime
- * total, so a task worked on Monday and Tuesday would otherwise report its
- * whole total on both days. Days are attributed from timer sessions — the
- * individual runs between Start/Resume and Pause/Finish.
+ * claim about every minute worked, and the per-day attribution below is
+ * deliberately never derived by summing `Task.actualDurationSeconds`: that
+ * field is a task's lifetime total, so a task worked on Monday and Tuesday
+ * would otherwise report its whole total on both days. Days are attributed
+ * from timer sessions — the individual runs between Start/Resume and
+ * Pause/Finish. (The month summary, `focusedTimeInMonth`, is separate: it
+ * sums each completed task's total exactly once, in the month the task was
+ * completed.)
  */
 
 /** Milliseconds of `[fromMs, toMs)` that fall inside the local calendar day `day`. */
@@ -269,31 +272,44 @@ export function focusedTimeOnDate(
 
 export interface FocusedTimeMonth {
   month: MonthKey;
-  /** Focused seconds recorded in the month. */
+  /** Sum of the completed tasks' `actualDurationSeconds` for the month. */
   seconds: number;
-  /** Distinct days in the month with any recorded focused time. */
+  /** Distinct local dates in the month on which a task was completed. */
   daysWorked: number;
 }
 
-/** One month's focused time — the same records as the day view, grouped up. */
+/**
+ * One month's focused time, from the authoritative task-completion data.
+ *
+ * A month's focused time is the timer time of the work *completed* in it:
+ * every non-archived completed task whose `completedAt` falls on a local date
+ * inside the month contributes its timer's own accumulated total
+ * (`actualDurationSeconds` — the sum of every Start/Pause/Resume segment,
+ * finalized on Finish). That task field is the single source of truth, so no
+ * second duration is calculated and completions recorded before
+ * `timer_sessions` existed count exactly like any other. Planned/estimated
+ * durations are never read.
+ *
+ * Days worked counts the distinct local `completedAt` dates — five completions
+ * on one day are one worked day, completions on three different days are
+ * three. The date comes from `completedAt` (never `scheduledDate`) and is the
+ * user's local calendar date (`toISODate`), never a UTC slice of the
+ * timestamp.
+ */
 export function focusedTimeInMonth(
-  data: Pick<AppData, 'tasks' | 'timerSessions'>,
+  data: Pick<AppData, 'tasks'>,
   month: MonthKey,
-  nowMs: number = Date.now(),
 ): FocusedTimeMonth {
-  const tasks = liveTaskMap(data.tasks);
-  const liveIds = new Set(tasks.keys());
-  const byDay = focusedSecondsByDay(data.timerSessions, liveIds);
-  liveSessionSecondsByDay([...tasks.values()], nowMs, byDay);
-
+  const daysWorkedOn = new Set<ISODate>();
   let seconds = 0;
-  let daysWorked = 0;
-  for (const [day, value] of byDay) {
-    if (monthKey(day) !== month || value <= 0) continue;
-    seconds += value;
-    daysWorked += 1;
+  for (const task of data.tasks) {
+    if (task.archived) continue;
+    const day = completedOnDate(task);
+    if (day === undefined || monthKey(day) !== month) continue;
+    seconds += task.actualDurationSeconds ?? 0;
+    daysWorkedOn.add(day);
   }
-  return { month, seconds, daysWorked };
+  return { month, seconds, daysWorked: daysWorkedOn.size };
 }
 
 /** Stable ID for the normal Task record that stores a daily priority's timer session. */

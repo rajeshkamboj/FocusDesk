@@ -99,10 +99,11 @@ export function CalendarScreen() {
   }, [data.tasks, data.dailyPriorities]);
 
   /**
-   * Focused time — how long FocusDesk's task timers actually ran. It is
-   * attributed from the recorded runs (not from any task's lifetime total),
-   * so a task worked on two days reports each day separately, and a run that
-   * crossed midnight is divided between the two days it touched.
+   * The selected day's Focused time — how long FocusDesk's task timers
+   * actually ran on that day. It is attributed from the recorded runs (not
+   * from any task's lifetime total), so a task worked on two days reports
+   * each day separately, and a run that crossed midnight is divided between
+   * the two days it touched.
    *
    * A running timer contributes its uncheckpointed remainder too, so the
    * number stays truthful live; the clock below only ticks while something is
@@ -114,9 +115,12 @@ export function CalendarScreen() {
     () => focusedTimeOnDate(data, selected, now),
     [data, selected, now],
   );
+  // The month summary reads the completed tasks' own timer totals
+  // (`actualDurationSeconds`, finalized on Finish) against their `completedAt`
+  // local dates — the authoritative task records, not the live clock.
   const focusedMonth = useMemo(
-    () => focusedTimeInMonth(data, anchorMonth, now),
-    [data, anchorMonth, now],
+    () => focusedTimeInMonth(data, anchorMonth),
+    [data, anchorMonth],
   );
 
   const selectedDayTasks = data.tasks.filter((t) => t.scheduledDate === selected && !t.archived);
@@ -245,8 +249,8 @@ export function CalendarScreen() {
       </div>
 
       {/* Monthly focused time — two plain facts for the displayed month,
-          from the same recorded runs as the day summary below. No score, no
-          target, no trend: just how long the timers ran. */}
+          from the tasks completed in it and their recorded timer totals. No
+          score, no target, no trend: just how long the timers ran. */}
       <section aria-labelledby="calendar-focused-month-heading" className="mt-5">
         <h2 id="calendar-focused-month-heading" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
           {monthName(anchor)} {anchor.slice(0, 4)}

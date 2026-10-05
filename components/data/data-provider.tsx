@@ -42,6 +42,8 @@ import type {
   Goal,
   GoalInput,
   Idea,
+  Milestone,
+  MilestoneInput,
   InboxItem,
   MonthlyPriority,
   Project,
@@ -150,6 +152,11 @@ export interface DataActions {
   deleteIdea(id: string): Promise<void>;
   promoteIdea(id: string, kind: 'task' | 'project' | 'goal' | 'someday', extra?: Partial<TaskInput>): Promise<void>;
 
+  /* Milestones (learning timeline) */
+  addMilestone(input: MilestoneInput): Promise<Milestone>;
+  updateMilestone(id: string, patch: Partial<Milestone>): Promise<void>;
+  deleteMilestone(id: string): Promise<void>;
+
   /* Daily well-being */
   /**
    * Check or uncheck one of the four well-being check-ins for a day —
@@ -243,7 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [storedTasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
+        const [storedTasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
           await Promise.all([
             repo.tasks.list(),
             repo.subtasks.list(),
@@ -251,6 +258,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             repo.goals.list(),
             repo.inbox.list(),
             repo.ideas.list(),
+            repo.milestones.list(),
             repo.dailyPriorities.list(),
             repo.weeklyPriorities.list(),
             repo.monthlyPriorities.list(),
@@ -283,6 +291,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           goals,
           inbox,
           ideas,
+          milestones,
           dailyPriorities,
           weeklyPriorities,
           monthlyPriorities,
@@ -1406,6 +1415,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await repo().ideas.delete(id);
         setData((d) => ({ ...d, ideas: d.ideas.filter((i) => i.id !== id) }));
         notify('Promoted');
+      },
+
+      addMilestone: async (input) => {
+        const created = await repo().milestones.create(input);
+        setData((d) => ({ ...d, milestones: [created, ...d.milestones] }));
+        return created;
+      },
+
+      updateMilestone: async (id, patch) => {
+        const updated = await repo().milestones.update(id, patch);
+        setData((d) => ({ ...d, milestones: d.milestones.map((m) => (m.id === updated.id ? updated : m)) }));
+      },
+
+      deleteMilestone: async (id) => {
+        await repo().milestones.delete(id);
+        setData((d) => ({ ...d, milestones: d.milestones.filter((m) => m.id !== id) }));
       },
 
       updateSettings: async (patch) => {

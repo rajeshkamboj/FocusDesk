@@ -298,6 +298,48 @@ export interface Idea {
 }
 
 /* ------------------------------------------------------------------ */
+/* Milestones (learning timeline)                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A point on the personal learning timeline: the day/month/year a tool,
+ * framework, platform or concept was first picked up.
+ *
+ * `date` is deliberately a *partial* ISO date so memory can stay honest:
+ *   'YYYY'        — sometime that year
+ *   'YYYY-MM'     — sometime that month
+ *   'YYYY-MM-DD'  — that exact day
+ */
+export type MilestoneDate = string;
+
+export type MilestoneCategory =
+  | 'ai-tool'
+  | 'framework'
+  | 'platform'
+  | 'extension'
+  | 'language'
+  | 'concept'
+  | 'habit'
+  | 'other';
+
+export interface Milestone {
+  id: ID;
+  title: string;
+  category: MilestoneCategory;
+  description?: string;
+  /** Partial ISO date — see MilestoneDate. */
+  date: MilestoneDate;
+  createdAt: ISODateTime;
+}
+
+export type MilestoneInput = {
+  title: string;
+  category?: MilestoneCategory;
+  description?: string;
+  date: MilestoneDate;
+};
+
+/* ------------------------------------------------------------------ */
 /* History                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -360,6 +402,8 @@ export interface AppData {
   goals: Goal[];
   inbox: InboxItem[];
   ideas: Idea[];
+  /** Learning timeline — when each tool/idea was first picked up. */
+  milestones: Milestone[];
   dailyPriorities: DailyPriority[];
   weeklyPriorities: WeeklyPriority[];
   monthlyPriorities: MonthlyPriority[];

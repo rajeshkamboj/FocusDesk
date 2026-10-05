@@ -13,6 +13,8 @@ import type {
   GoalInput,
   InboxItem,
   Idea,
+  Milestone,
+  MilestoneInput,
   MonthlyPriority,
   Project,
   ProjectInput,
@@ -126,6 +128,7 @@ export class LocalRepository implements AppRepository {
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
   ideas: EntityRepository<Idea, IdeaInput>;
+  milestones: EntityRepository<Milestone, MilestoneInput>;
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
@@ -239,6 +242,20 @@ export class LocalRepository implements AppRepository {
         description: input.description?.trim() || undefined,
         createdAt: nowISO(),
         archived: false,
+      }),
+    );
+
+    this.milestones = new Collection<Milestone, MilestoneInput>(
+      () => this.data,
+      'milestones',
+      persist,
+      (input) => ({
+        id: createId(),
+        title: input.title.trim(),
+        category: input.category ?? 'other',
+        description: input.description?.trim() || undefined,
+        date: input.date,
+        createdAt: nowISO(),
       }),
     );
 
@@ -392,6 +409,7 @@ export class LocalRepository implements AppRepository {
       goals: data.goals ?? [],
       inbox: data.inbox ?? [],
       ideas: data.ideas ?? [],
+      milestones: data.milestones ?? [],
       dailyPriorities: data.dailyPriorities ?? [],
       weeklyPriorities: data.weeklyPriorities ?? [],
       monthlyPriorities: data.monthlyPriorities ?? [],

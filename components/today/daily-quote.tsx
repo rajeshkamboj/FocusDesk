@@ -32,7 +32,7 @@ export function DailyQuote({ quote }: { quote: Quote }) {
   }, [quote.author, quote.text]);
 
   return (
-    <figure className="mt-8 max-w-[760px] rounded-2xl border border-line bg-surface px-7 py-8 sm:px-9">
+    <figure className="mt-8 w-full rounded-2xl border border-line bg-surface px-7 py-8 sm:px-9">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3">
         A thought for today
       </p>

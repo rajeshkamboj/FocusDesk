@@ -116,8 +116,6 @@ body {
   outline-offset: 2px;
 }
 
-.quote-card { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
-
 input,
 textarea,
 select,

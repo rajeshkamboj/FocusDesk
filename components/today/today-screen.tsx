@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { QuoteCard } from './quote-card';
+import { DailyQuote } from './daily-quote';
 import { ProgressSegments } from './progress-segments';
 import { useLocalDate } from '@/lib/use-local-date';
 import { useMemo, useState, useSyncExternalStore } from 'react';
@@ -103,7 +103,7 @@ export function TodayScreen() {
           </div>
         </div>
 
-        <QuoteCard quote={dailyQuote} />
+        <DailyQuote quote={dailyQuote} />
 
         {approaching.length > 0 ? (
           <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-line bg-warning-soft/60 px-4 py-3">

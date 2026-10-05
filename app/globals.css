@@ -117,10 +117,6 @@ body {
 }
 
 .quote-card { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
-[data-theme="dark"] .quote-card svg { opacity: .3; }
-.daily-history { background: linear-gradient(135deg, var(--surface) 35%, var(--warning-soft)); }
-.daily-literature { background: linear-gradient(135deg, var(--surface) 35%, var(--accent-soft)); }
-.daily-sharpener { background: linear-gradient(135deg, var(--surface) 35%, var(--surface-2)); }
 
 input,
 textarea,

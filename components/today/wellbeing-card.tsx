@@ -99,7 +99,15 @@ export function Checkin({
  * `date` is passed straight through to the existing toggle action — omitted
  * on Today (which means "today"), explicit on Review.
  */
-export function WellbeingChecklist({ date, headingId }: { date?: ISODate; headingId: string }) {
+export function WellbeingChecklist({
+  date,
+  headingId,
+  desktopStacked = false,
+}: {
+  date?: ISODate;
+  headingId: string;
+  desktopStacked?: boolean;
+}) {
   const { data, actions } = useData();
   const day = wellbeingOnDate(data.wellbeingDays, date ?? todayISO());
   const completed = wellbeingCompletedCount(day);
@@ -123,8 +131,12 @@ export function WellbeingChecklist({ date, headingId }: { date?: ISODate; headin
         </span>
       </div>
 
-      {/* Main check-ins row: single row on mobile and desktop */}
-      <div className="mt-3 flex items-center justify-between gap-1 sm:justify-start sm:gap-3.5">
+      {/* Keep the compact inline layout everywhere except Today's desktop side card. */}
+      <div
+        className={`mt-3 flex items-center justify-between gap-1 sm:justify-start sm:gap-3.5 ${
+          desktopStacked ? 'xl:block' : ''
+        }`}
+      >
         {/* Jogging group */}
         <button
           type="button"
@@ -142,15 +154,26 @@ export function WellbeingChecklist({ date, headingId }: { date?: ISODate; headin
         </button>
 
         {/* Vertical divider */}
-        <div aria-hidden="true" className="h-4 w-px shrink-0 bg-line mx-0.5 sm:mx-1" />
+        <div
+          aria-hidden="true"
+          className={`h-4 w-px shrink-0 bg-line mx-0.5 sm:mx-1 ${desktopStacked ? 'xl:hidden' : ''}`}
+        />
 
         {/* Nitnem group */}
-        <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
+        <div
+          className={`flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2 ${
+            desktopStacked ? 'xl:mt-2 xl:block' : ''
+          }`}
+        >
           <span className="text-[11.5px] font-medium text-ink-3 sm:text-[12px]">
             Nitnem
           </span>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div
+            className={`flex items-center gap-1.5 sm:gap-2 ${
+              desktopStacked ? 'xl:mt-1.5 xl:w-full xl:justify-between xl:gap-0.5' : ''
+            }`}
+          >
             {NITNEM.map((item) => {
               const checked = day?.[item.habit] ?? false;
               return (
@@ -164,6 +187,11 @@ export function WellbeingChecklist({ date, headingId }: { date?: ISODate; headin
                   className="group inline-flex shrink-0 items-center gap-1 rounded-lg py-0.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                 >
                   <span className="text-[14px] leading-none select-none" aria-hidden="true">{item.icon}</span>
+                  {desktopStacked ? (
+                    <span className={`hidden text-[12px] font-medium leading-none xl:inline ${checked ? 'text-ink-2' : 'text-ink'}`}>
+                      {item.label}
+                    </span>
+                  ) : null}
                   <CheckinBox checked={checked} />
                 </button>
               );
@@ -181,7 +209,7 @@ export function WellbeingCard() {
       aria-labelledby="wellbeing-heading"
       className="rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:px-5 sm:py-4"
     >
-      <WellbeingChecklist headingId="wellbeing-heading" />
+      <WellbeingChecklist headingId="wellbeing-heading" desktopStacked />
     </section>
   );
 }

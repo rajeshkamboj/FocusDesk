@@ -11,6 +11,24 @@ import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer
 import { useNow } from '@/components/tasks/use-now';
 
 /**
+ * Shared shape of the Priority card's text inputs.
+ *
+ * Deliberately one single border and one single focus state: the border is
+ * 1px at all times and only changes colour on focus. The previous
+ * `focus:ring-2` sat on top of that coloured border (and on top of the global
+ * `:focus-visible` outline), which read as a doubled green ring — especially
+ * on a narrow screen where the field spans the whole card.
+ *
+ * Sizing is mobile-first and fluid: `w-full` + `box-border` means the field is
+ * exactly the card's content width at 320px just as it is at 430px, with no
+ * fixed desktop width to overflow out of. `h-12` keeps a comfortable ~48px
+ * touch target and `leading-normal` keeps the text optically centred in it.
+ */
+const PRIORITY_INPUT_CLASS =
+  'box-border h-12 w-full min-w-0 rounded-xl border border-line bg-surface px-4 leading-normal text-ink ' +
+  'placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none';
+
+/**
  * 🔥 Today's Priority — the one question that matters in the morning:
  * "What is the ONE thing that matters most today?"
  */
@@ -75,11 +93,15 @@ export function PriorityCard() {
             void actions.setDailyPriority(title).then(() => setDraft(''));
           }}
         >
+          {/* Mobile first: full card width, one 48px touch target, 16px text
+              (so iOS never zooms on focus). `flex-1` is applied from `sm` up
+              only — in the stacked column layout it would collapse the height
+              instead of growing the width. See PRIORITY_INPUT_CLASS. */}
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Enter today's priority"
-            className="h-12 flex-1 rounded-xl border border-line bg-surface px-4 text-[15px] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className={`${PRIORITY_INPUT_CLASS} text-base sm:flex-1 sm:text-[15px]`}
             autoFocus
           />
           <Button type="submit" variant="primary" size="lg" disabled={!draft.trim()}>
@@ -115,7 +137,7 @@ export function PriorityCard() {
           <input
             value={editDraft}
             onChange={(e) => setEditDraft(e.target.value)}
-            className="h-12 w-full rounded-xl border border-line bg-surface px-4 text-xl font-semibold tracking-tight text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className={`${PRIORITY_INPUT_CLASS} text-lg font-semibold tracking-tight sm:text-xl`}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Escape') setEditing(false);

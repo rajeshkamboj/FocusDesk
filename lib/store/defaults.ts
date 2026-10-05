@@ -35,6 +35,7 @@ export function emptyData(): AppData {
     monthlyPriorities: [],
     taskHistory: [],
     wellbeingDays: [],
+    timerSessions: [],
     settings: { ...defaultSettings, general: { ...defaultSettings.general }, notifications: { ...defaultSettings.notifications }, appearance: { ...defaultSettings.appearance } },
   };
 }

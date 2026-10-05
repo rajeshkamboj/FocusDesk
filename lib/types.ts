@@ -114,6 +114,47 @@ export type SubtaskInput = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Timer sessions                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One continuous run of a task timer — the segment between a Start/Resume and
+ * the next Pause/Finish (or, if the app was closed mid-session, the last
+ * durable checkpoint, exactly like `interruptedTimerPatch` recovers the task).
+ *
+ * Sessions exist for ONE reason: attributing focused time to the calendar day
+ * on which it was actually spent. `Task.actualDurationSeconds` keeps its
+ * meaning unchanged — the task's lifetime total across every day — and the
+ * sum of a task's session durations never exceeds it. Paused time is never
+ * part of a session, because a pause ends one and a resume starts the next.
+ *
+ * A session can legitimately span midnight; it is stored as the single run it
+ * was and split across local calendar days when read (see
+ * `sessionSecondsByDay` in lib/selectors.ts), so nothing is ever double
+ * counted and no day inherits another day's time.
+ */
+export interface TimerSession {
+  id: ID;
+  taskId: ID;
+  /** When this run of the timer began. */
+  startedAt: ISODateTime;
+  /**
+   * When this run stopped. While the timer is still running this is the last
+   * durable checkpoint — i.e. the instant through which time is credited.
+   */
+  endedAt: ISODateTime;
+  /** Active seconds credited by this run. Never includes paused time. */
+  durationSeconds: number;
+}
+
+export type TimerSessionInput = {
+  taskId: ID;
+  startedAt: ISODateTime;
+  endedAt: ISODateTime;
+  durationSeconds: number;
+};
+
+/* ------------------------------------------------------------------ */
 /* Projects & goals                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -323,5 +364,7 @@ export interface AppData {
   taskHistory: TaskHistoryEntry[];
   /** One record per day with at least one check-in; a day without a record still shows as 0 of 4. */
   wellbeingDays: WellbeingDay[];
+  /** One record per continuous run of a task timer — the basis of daily focused time. */
+  timerSessions: TimerSession[];
   settings: Settings;
 }

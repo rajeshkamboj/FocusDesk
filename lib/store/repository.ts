@@ -22,6 +22,8 @@ import type {
   Task,
   TaskHistoryEntry,
   TaskInput,
+  TimerSession,
+  TimerSessionInput,
   WeeklyPriority,
   WellbeingDay,
   WellbeingDayInput,
@@ -76,6 +78,11 @@ export interface AppRepository {
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
   wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
+  /**
+   * Continuous runs of the task timer. Written only by the timer lifecycle in
+   * DataProvider; read to attribute focused time to calendar days.
+   */
+  timerSessions: EntityRepository<TimerSession, TimerSessionInput>;
 
   taskHistory: {
     list(taskId?: string): Promise<TaskHistoryEntry[]>;

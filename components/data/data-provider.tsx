@@ -29,8 +29,12 @@ import {
   interruptedTimerPatch,
   isTimerPaused,
   isTimerRunning,
+  openTimerSession,
   pauseTimingPatch,
+  sessionCreditedSeconds,
   settleTimingPatch,
+  timerSessionInput,
+  type OpenTimerSession,
 } from '@/lib/timer';
 import type {
   AppData,
@@ -48,6 +52,7 @@ import type {
   Task,
   TaskInput,
   TaskStatus,
+  TimerSession,
   WeeklyPriority,
   WellbeingDay,
   WellbeingHabit,
@@ -198,6 +203,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const wellbeingRef = useRef<Map<ISODate, WellbeingDay>>(new Map());
   const wellbeingQueueRef = useRef<Map<ISODate, Promise<void>>>(new Map());
 
+  /**
+   * The run of the timer each running task is currently writing into.
+   *
+   * Sessions are a *recording* of the existing timer, never a second timer:
+   * the bookmark holds only where the run began and what the task's total was
+   * at that moment, so the credited duration is always derived from the same
+   * `actualDurationSeconds` the rest of the app uses. Nothing here changes
+   * when a timer starts, pauses, resumes or finishes — it only writes down
+   * what already happened, so it can be attributed to the right calendar day.
+   */
+  const openSessionRef = useRef(new Map<string, OpenTimerSession>());
+  const sessionWriteQueueRef = useRef(new Map<string, Promise<unknown>>());
+
   const notify = useCallback((message: string) => {
     const id = ++toastCounter;
     setToasts((prev) => [...prev, { id, message }]);
@@ -216,10 +234,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const repo = createRepository(user?.id);
     repoRef.current = repo;
+    // A different repository means different records: any run bookmarked
+    // against the previous one must never be written into this one. The
+    // sessions themselves are already durable on the backend they belong to,
+    // closed at their last checkpoint.
+    openSessionRef.current.clear();
+    sessionWriteQueueRef.current.clear();
 
     (async () => {
       try {
-        const [storedTasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
+        const [storedTasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
           await Promise.all([
             repo.tasks.list(),
             repo.subtasks.list(),
@@ -232,6 +256,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             repo.monthlyPriorities.list(),
             repo.taskHistory.list(),
             repo.wellbeingDays.list(),
+            repo.timerSessions.list(),
             repo.settings.get(),
           ]);
         if (cancelled) return;
@@ -263,6 +288,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
           monthlyPriorities,
           taskHistory,
           wellbeingDays,
+          // Sessions recorded by previous runs of the app. Any session that
+          // belonged to a timer still marked running above was already closed
+          // at its last durable checkpoint, exactly where
+          // `interruptedTimerPatch` stops the task — so recovery never
+          // invents, loses or double counts a second.
+          timerSessions,
           settings,
         };
         wellbeingRef.current = new Map(wellbeingDays.map((w) => [w.date, w]));
@@ -373,6 +404,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  /** Replace (or add) one timer session in the local snapshot. */
+  const applySessionState = useCallback((session: TimerSession) => {
+    const merge = (list: TimerSession[]) =>
+      list.some((s) => s.id === session.id)
+        ? list.map((s) => (s.id === session.id ? session : s))
+        : [...list, session];
+    dataRef.current = { ...dataRef.current, timerSessions: merge(dataRef.current.timerSessions) };
+    setData((d) => ({ ...d, timerSessions: merge(d.timerSessions) }));
+  }, []);
+
+  const removeSessionsForTask = useCallback((taskId: string) => {
+    const keep = (list: TimerSession[]) => list.filter((s) => s.taskId !== taskId);
+    dataRef.current = { ...dataRef.current, timerSessions: keep(dataRef.current.timerSessions) };
+    setData((d) => ({ ...d, timerSessions: keep(d.timerSessions) }));
+  }, []);
+
   /** Replace (or add) one day's well-being record in the local snapshot. */
   const applyWellbeing = useCallback((record: WellbeingDay) => {
     wellbeingRef.current.set(record.date, record);
@@ -422,6 +469,80 @@ export function DataProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  /* ---------------------------------------------------------------- */
+  /* Timer sessions                                                   */
+  /* ---------------------------------------------------------------- */
+
+  /** Keep a task's session writes in order (create before update, always). */
+  const queueSessionWrite = useCallback((taskId: string, write: () => Promise<void>) => {
+    const previous = sessionWriteQueueRef.current.get(taskId);
+    const next = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(write);
+    sessionWriteQueueRef.current.set(taskId, next);
+    void next.then(
+      () => { if (sessionWriteQueueRef.current.get(taskId) === next) sessionWriteQueueRef.current.delete(taskId); },
+      (error: unknown) => {
+        if (sessionWriteQueueRef.current.get(taskId) === next) sessionWriteQueueRef.current.delete(taskId);
+        // A lost session write costs day attribution, never recorded time:
+        // `actualDurationSeconds` is written separately and stays correct.
+        console.error('Could not record the timer session', error);
+      },
+    );
+    return next;
+  }, []);
+
+  /**
+   * Write the open run's progress using the task's authoritative total.
+   *
+   * Called on every checkpoint and whenever the timer stops. The row is
+   * created lazily, on the first whole second credited, so a Start that is
+   * immediately undone leaves nothing behind — matching the task, which also
+   * credits nothing in that case.
+   */
+  const recordTimerSession = useCallback(
+    (taskId: string, taskTotalSeconds: number, options: { close?: boolean; direct?: boolean } = {}) => {
+      const open = openSessionRef.current.get(taskId);
+      if (!open) return;
+      const duration = sessionCreditedSeconds(open, taskTotalSeconds);
+      if (options.close) openSessionRef.current.delete(taskId);
+      if (open.id === undefined && duration <= 0) return;
+      if (!options.close && open.writtenSeconds === duration) return;
+      open.writtenSeconds = duration;
+
+      const input = timerSessionInput(open, duration);
+      const write = async () => {
+        const repository = repoRef.current;
+        if (!repository) return;
+        if (open.id === undefined) {
+          const created = await repository.timerSessions.create(input);
+          open.id = created.id;
+          applySessionState(created);
+        } else {
+          const updated = await repository.timerSessions.update(open.id, {
+            endedAt: input.endedAt,
+            durationSeconds: input.durationSeconds,
+          });
+          applySessionState(updated);
+        }
+      };
+
+      // `direct` is the unload path: LocalRepository persists synchronously
+      // inside create/update, which is the most reliable write a closing page
+      // gets. Everything else goes through the per-task queue.
+      if (options.direct) {
+        void write().catch((error: unknown) => console.error('Could not record the timer session', error));
+        return;
+      }
+      void queueSessionWrite(taskId, write);
+    },
+    [applySessionState, queueSessionWrite],
+  );
+
+  /** Begin recording a run that just started/resumed at `startedAt`. */
+  const beginTimerSession = useCallback((task: Task, startedAt: string) => {
+    if (openSessionRef.current.has(task.id)) return;
+    openSessionRef.current.set(task.id, openTimerSession(task, startedAt));
+  }, []);
 
   const nextSubtaskSeq = useCallback((id: string) => {
     const n = (subtaskSeqRef.current.get(id) ?? 0) + 1;
@@ -502,22 +623,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const before = dataRef.current.tasks.find((t) => t.id === id);
     if (!before || before.status === 'completed' || before.status === 'cancelled') return null;
     if (isTimerRunning(before)) return before;
-    return applyTaskPatch(
+    const startedAt = new Date().toISOString();
+    const updated = await applyTaskPatch(
       id,
-      { status: 'in_progress', startedAt: new Date().toISOString(), pausedAt: undefined },
+      { status: 'in_progress', startedAt, pausedAt: undefined },
       'Could not start the timer — please try again',
     );
-  }, [applyTaskPatch]);
+    // Record the run only once the timer really started: a rejected write
+    // leaves no session, just as it leaves no elapsed time.
+    if (updated) beginTimerSession(updated, startedAt);
+    return updated;
+  }, [applyTaskPatch, beginTimerSession]);
 
   const resumeTimerForTask = useCallback(async (id: string): Promise<Task | null> => {
     const before = dataRef.current.tasks.find((t) => t.id === id);
     if (!before || !isTimerPaused(before)) return null;
-    return applyTaskPatch(
+    const startedAt = new Date().toISOString();
+    const updated = await applyTaskPatch(
       id,
-      { startedAt: new Date().toISOString(), pausedAt: undefined },
+      { startedAt, pausedAt: undefined },
       'Could not resume the timer — please try again',
     );
-  }, [applyTaskPatch]);
+    // A resume is a new run, so the time between pause and resume belongs to
+    // no day at all — which is exactly what "paused time is not counted" means.
+    if (updated) beginTimerSession(updated, startedAt);
+    return updated;
+  }, [applyTaskPatch, beginTimerSession]);
 
   const checkpointRunningTask = useCallback(
     (task: Task, nowMs: number) => {
@@ -534,8 +665,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // can retry; reopening will fall back to the last durable checkpoint.
         console.error('Timer checkpoint failed', error);
       });
+      // The same checkpoint, written to the run that is recording it: the
+      // session and the task always stop on the same second.
+      if (patch.actualDurationSeconds !== undefined) {
+        recordTimerSession(task.id, patch.actualDurationSeconds);
+      }
     },
-    [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate],
+    [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate, recordTimerSession],
   );
 
   const checkpointRunningTasks = useCallback(() => {
@@ -550,6 +686,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const id = window.setInterval(checkpointRunningTasks, TIMER_CHECKPOINT_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [checkpointRunningTasks, ready]);
+
+  /**
+   * A run ends exactly when its task stops running — whichever path stopped
+   * it: Pause, Finish, manual complete, cancel, reschedule, postpone, reopen,
+   * a daily priority being ticked off, or a failed write rolling the task
+   * back. Deriving the close from the task state instead of repeating it in
+   * every action means the two can never drift apart, and the final duration
+   * is read from the task's own settled `actualDurationSeconds`.
+   */
+  useEffect(() => {
+    if (openSessionRef.current.size === 0) return;
+    for (const taskId of [...openSessionRef.current.keys()]) {
+      const task = data.tasks.find((t) => t.id === taskId);
+      if (task && isTimerRunning(task)) continue;
+      recordTimerSession(taskId, task?.actualDurationSeconds ?? 0, { close: true });
+    }
+  }, [data.tasks, recordTimerSession]);
 
   /** Persist a pause before the page becomes unavailable; never tied to visibility. */
   const pauseRunningTasksOnExit = useCallback(() => {
@@ -575,8 +728,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }).catch((error: unknown) => {
         console.error('Could not pause timer while closing FocusDesk', error);
       });
+
+      // Close the run with the same final second the pause just stored. The
+      // state-driven safety net below cannot help here — a closing page never
+      // renders again — so this write has to happen inline.
+      recordTimerSession(task.id, patch.actualDurationSeconds ?? task.actualDurationSeconds ?? 0, {
+        close: true,
+        direct: repository.kind === 'local',
+      });
     }
-  }, [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate]);
+  }, [isLatestTaskSeq, nextTaskSeq, patchTaskState, persistTaskUpdate, recordTimerSession]);
 
   useEffect(() => {
     let closing = false;
@@ -713,7 +874,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteTask: async (id) => {
         const childSubtasks = dataRef.current.subtasks.filter((subtask) => subtask.parentTaskId === id);
         await Promise.all(childSubtasks.map((subtask) => repo().subtasks.delete(subtask.id)));
+        // The task's recorded runs go with it, so a deleted task never leaves
+        // orphaned focused time on a calendar day. (Supabase cascades too;
+        // this keeps local storage and the in-memory snapshot in step.)
+        openSessionRef.current.delete(id);
+        const sessions = dataRef.current.timerSessions.filter((session) => session.taskId === id);
+        await Promise.all(sessions.map((session) => repo().timerSessions.delete(session.id)));
         await repo().tasks.delete(id);
+        removeSessionsForTask(id);
         removeTaskState(id);
       },
 
@@ -1248,6 +1416,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       exportData: async () => repo().exportData(),
 
       importData: async (payload) => {
+        // An import replaces every record, so no in-flight run can still be
+        // recording into the data that is being thrown away.
+        openSessionRef.current.clear();
         await repo().importData(payload);
         const fresh = await repo().exportData();
         dataRef.current = fresh;
@@ -1279,7 +1450,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [addTaskState, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, removeSubtaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
+    [addTaskState, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
   );
 
   const value = useMemo<DataContextValue>(

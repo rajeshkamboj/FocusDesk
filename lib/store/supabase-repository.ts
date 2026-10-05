@@ -24,6 +24,8 @@ import type {
   Task,
   TaskHistoryEntry,
   TaskInput,
+  TimerSession,
+  TimerSessionInput,
   WeeklyPriority,
   WellbeingDay,
   WellbeingDayInput,
@@ -285,6 +287,29 @@ const subtaskMap = {
   }),
 };
 
+/**
+ * Timer sessions: one row per continuous run of a task timer. Deliberately
+ * flat — the day a session belongs to is derived in the client (local
+ * calendar days), never stored, so a session that spans midnight stays the
+ * single run it actually was.
+ */
+const timerSessionMap = {
+  toRow: (s: TimerSession): Row => ({
+    id: s.id,
+    task_id: s.taskId,
+    started_at: s.startedAt,
+    ended_at: s.endedAt,
+    duration_seconds: Math.max(0, Math.floor(s.durationSeconds)),
+  }),
+  fromRow: (r: Row): TimerSession => ({
+    id: String(r.id),
+    taskId: String(r.task_id ?? ''),
+    startedAt: String(r.started_at ?? new Date().toISOString()),
+    endedAt: String(r.ended_at ?? r.started_at ?? new Date().toISOString()),
+    durationSeconds: num(r.duration_seconds) ?? 0,
+  }),
+};
+
 const historyMap = {
   toRow: (h: TaskHistoryEntry): Row => ({
     id: h.id,
@@ -418,6 +443,7 @@ export class SupabaseRepository implements AppRepository {
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
   wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
+  timerSessions: EntityRepository<TimerSession, TimerSessionInput>;
 
   constructor(client: SupabaseClient, userId: string) {
     this.http = new SupabaseHttpClient(client, userId);
@@ -523,6 +549,20 @@ export class SupabaseRepository implements AppRepository {
       nitnemEvening: input.nitnemEvening ?? false,
       nitnemNight: input.nitnemNight ?? false,
     }));
+
+    this.timerSessions = new RestCollection(
+      this.http,
+      'timer_sessions',
+      timerSessionMap,
+      (input) => ({
+        id: uuid(),
+        taskId: input.taskId,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        durationSeconds: Math.max(0, Math.floor(input.durationSeconds)),
+      }),
+      { column: 'started_at', ascending: true },
+    );
   }
 
   taskHistory = {
@@ -571,7 +611,7 @@ export class SupabaseRepository implements AppRepository {
   };
 
   async exportData(): Promise<AppData> {
-    const [tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings] =
+    const [tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
       await Promise.all([
         this.tasks.list(),
         this.subtasks.list(),
@@ -584,9 +624,10 @@ export class SupabaseRepository implements AppRepository {
         this.monthlyPriorities.list(),
         this.taskHistory.list(),
         this.wellbeingDays.list(),
+        this.timerSessions.list(),
         this.settings.get(),
       ]);
-    return { tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, settings };
+    return { tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings };
   }
 
   async importData(data: AppData): Promise<void> {
@@ -603,6 +644,7 @@ export class SupabaseRepository implements AppRepository {
       monthlyPriorities: data.monthlyPriorities ?? [],
       taskHistory: data.taskHistory ?? [],
       wellbeingDays: data.wellbeingDays ?? [],
+      timerSessions: data.timerSessions ?? [],
       settings: {
         general: { ...base.settings.general, ...data.settings?.general },
         notifications: { ...base.settings.notifications, ...data.settings?.notifications },
@@ -611,6 +653,7 @@ export class SupabaseRepository implements AppRepository {
     };
 
     await this.http.clear('subtasks');
+    await this.http.clear('timer_sessions');
     await Promise.all([
       this.http.clear('tasks'),
       this.http.clear('projects'),
@@ -638,8 +681,12 @@ export class SupabaseRepository implements AppRepository {
       bulk('task_history', payload.taskHistory.map(historyMap.toRow)),
       bulk('wellbeing_days', payload.wellbeingDays.map(wellbeingDayMap.toRow)),
     ]);
-    // Subtasks reference parent task rows, so import them only after tasks.
-    await bulk('subtasks', payload.subtasks.map(subtaskMap.toRow));
+    // Subtasks and timer sessions reference parent task rows, so import them
+    // only after tasks.
+    await Promise.all([
+      bulk('subtasks', payload.subtasks.map(subtaskMap.toRow)),
+      bulk('timer_sessions', payload.timerSessions.map(timerSessionMap.toRow)),
+    ]);
     await this.settings.save(payload.settings);
   }
 }

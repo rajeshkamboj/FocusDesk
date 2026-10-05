@@ -2,7 +2,8 @@
  * Pure derived-state helpers. No side effects — safe to use anywhere.
  */
 
-import { daysBetween, monthKey, toISODate, todayISO } from './dates';
+import { addDays, daysBetween, monthKey, parseISODate, toISODate, todayISO } from './dates';
+import { isTimerRunning } from './timer';
 import type {
   AppData,
   ISODate,
@@ -12,6 +13,7 @@ import type {
   Subtask,
   Task,
   TaskStatus,
+  TimerSession,
   WellbeingDay,
 } from './types';
 
@@ -64,6 +66,234 @@ export function tasksOnDate(tasks: Task[], date: ISODate): Task[] {
  */
 export function focusedSeconds(tasks: Task[]): number {
   return tasks.reduce((sum, t) => sum + (t.actualDurationSeconds ?? 0), 0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Focused time — daily attribution of recorded timer sessions         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Focused time is the time FocusDesk's own task timers recorded. It is not a
+ * claim about every minute worked, and it is deliberately never derived by
+ * summing `Task.actualDurationSeconds`: that field is a task's lifetime
+ * total, so a task worked on Monday and Tuesday would otherwise report its
+ * whole total on both days. Days are attributed from timer sessions — the
+ * individual runs between Start/Resume and Pause/Finish.
+ */
+
+/** Milliseconds of `[fromMs, toMs)` that fall inside the local calendar day `day`. */
+function overlapWithDay(day: ISODate, fromMs: number, toMs: number): number {
+  const dayStart = parseISODate(day).getTime();
+  const dayEnd = parseISODate(addDays(day, 1)).getTime();
+  return Math.max(0, Math.min(toMs, dayEnd) - Math.max(fromMs, dayStart));
+}
+
+/**
+ * Split one recorded run across the local calendar days it actually spans and
+ * add the result into `into`.
+ *
+ * A run that starts at 23:40 and ends at 00:20 contributes 20 minutes to each
+ * of the two days — the whole point of storing runs instead of per-task
+ * totals. Day boundaries come from `parseISODate`, i.e. local midnight, so
+ * DST-shortened and DST-lengthened days are handled by the calendar itself.
+ *
+ * `durationSeconds` is authoritative (it is the credited active time); the
+ * wall-clock span only decides *how* it is distributed. The last slice
+ * absorbs the rounding remainder, so the split always sums back to exactly
+ * `durationSeconds` and a day can never gain or lose a second.
+ */
+export function sessionSecondsByDay(
+  session: Pick<TimerSession, 'startedAt' | 'endedAt' | 'durationSeconds'>,
+  into: Map<ISODate, number> = new Map(),
+): Map<ISODate, number> {
+  const duration = Math.max(0, Math.floor(session.durationSeconds));
+  if (duration <= 0) return into;
+
+  const startMs = Date.parse(session.startedAt);
+  if (Number.isNaN(startMs)) return into;
+  const parsedEnd = Date.parse(session.endedAt);
+  const endMs = Number.isNaN(parsedEnd) || parsedEnd <= startMs ? startMs + duration * 1000 : parsedEnd;
+
+  const add = (day: ISODate, seconds: number) => {
+    if (seconds > 0) into.set(day, (into.get(day) ?? 0) + seconds);
+  };
+
+  const spanMs = endMs - startMs;
+  if (spanMs <= 0) {
+    add(toISODate(new Date(startMs)), duration);
+    return into;
+  }
+
+  // Walk the local days the run touches. Guarded against a non-advancing
+  // cursor so a pathological timestamp can never spin here.
+  const slices: { day: ISODate; ms: number }[] = [];
+  let cursor = startMs;
+  while (cursor < endMs && slices.length < 400) {
+    const day = toISODate(new Date(cursor));
+    const ms = overlapWithDay(day, cursor, endMs);
+    const next = cursor + Math.max(ms, 1);
+    slices.push({ day, ms });
+    cursor = next;
+  }
+  if (slices.length === 0) {
+    add(toISODate(new Date(startMs)), duration);
+    return into;
+  }
+
+  let assigned = 0;
+  slices.forEach((slice, index) => {
+    const seconds =
+      index === slices.length - 1 ? duration - assigned : Math.round((slice.ms / spanMs) * duration);
+    assigned += seconds;
+    add(slice.day, seconds);
+  });
+  return into;
+}
+
+/**
+ * Seconds a *running* timer has accumulated since its last durable
+ * checkpoint — the part not yet written to any session row.
+ *
+ * `checkpointTimingPatch` advances `startedAt` by exactly the seconds it
+ * credits, so `[startedAt, now]` is precisely the uncredited remainder. The
+ * stored session covers everything before it. Adding the two therefore shows
+ * a live total without ever counting the same second twice.
+ */
+export function liveSessionSecondsByDay(
+  tasks: Task[],
+  nowMs: number,
+  into: Map<ISODate, number> = new Map(),
+): Map<ISODate, number> {
+  for (const task of tasks) {
+    if (task.archived || !isTimerRunning(task) || !task.startedAt) continue;
+    const startedMs = Date.parse(task.startedAt);
+    if (Number.isNaN(startedMs) || nowMs <= startedMs) continue;
+    sessionSecondsByDay(
+      {
+        startedAt: task.startedAt,
+        endedAt: new Date(nowMs).toISOString(),
+        durationSeconds: Math.floor((nowMs - startedMs) / 1000),
+      },
+      into,
+    );
+  }
+  return into;
+}
+
+/** Recorded focused seconds per local calendar day, across all given sessions. */
+export function focusedSecondsByDay(
+  sessions: TimerSession[],
+  taskIds?: Set<string>,
+): Map<ISODate, number> {
+  const byDay = new Map<ISODate, number>();
+  for (const session of sessions) {
+    if (taskIds && !taskIds.has(session.taskId)) continue;
+    sessionSecondsByDay(session, byDay);
+  }
+  return byDay;
+}
+
+export interface FocusedTimeEntry {
+  task: Task;
+  seconds: number;
+}
+
+export interface FocusedTimeDay {
+  date: ISODate;
+  /** Focused seconds recorded by FocusDesk's task timers on this day. */
+  seconds: number;
+  /** Per-task breakdown for the day, largest first. */
+  byTask: FocusedTimeEntry[];
+}
+
+/** Live-task set used for attribution: archived tasks are left out everywhere. */
+function liveTaskMap(tasks: Task[]): Map<string, Task> {
+  const map = new Map<string, Task>();
+  for (const task of tasks) if (!task.archived) map.set(task.id, task);
+  return map;
+}
+
+/**
+ * One day's focused time and its per-task breakdown.
+ *
+ * Includes the running timer's uncheckpointed remainder so the number is
+ * truthful while a session is in progress; pass a fixed `nowMs` for a stable
+ * snapshot.
+ */
+export function focusedTimeOnDate(
+  data: Pick<AppData, 'tasks' | 'timerSessions'>,
+  date: ISODate,
+  nowMs: number = Date.now(),
+): FocusedTimeDay {
+  const tasks = liveTaskMap(data.tasks);
+  const byTask = new Map<string, number>();
+
+  const credit = (taskId: string, seconds: number) => {
+    if (seconds <= 0 || !tasks.has(taskId)) return;
+    byTask.set(taskId, (byTask.get(taskId) ?? 0) + seconds);
+  };
+
+  // Only runs that actually overlap this local day can contribute, so most
+  // of the history is skipped without being split.
+  const dayStartMs = parseISODate(date).getTime();
+  const dayEndMs = parseISODate(addDays(date, 1)).getTime();
+  const touchesDay = (startedAt: string, endedAt: string, durationSeconds: number) => {
+    const startMs = Date.parse(startedAt);
+    if (Number.isNaN(startMs)) return false;
+    const parsedEnd = Date.parse(endedAt);
+    const endMs = Number.isNaN(parsedEnd) || parsedEnd <= startMs ? startMs + durationSeconds * 1000 : parsedEnd;
+    return startMs < dayEndMs && endMs > dayStartMs;
+  };
+
+  for (const session of data.timerSessions) {
+    if (!tasks.has(session.taskId)) continue;
+    if (!touchesDay(session.startedAt, session.endedAt, session.durationSeconds)) continue;
+    credit(session.taskId, sessionSecondsByDay(session).get(date) ?? 0);
+  }
+  for (const task of tasks.values()) {
+    if (!isTimerRunning(task)) continue;
+    credit(task.id, liveSessionSecondsByDay([task], nowMs).get(date) ?? 0);
+  }
+
+  const entries: FocusedTimeEntry[] = [...byTask.entries()]
+    .map(([taskId, seconds]) => ({ task: tasks.get(taskId)!, seconds }))
+    .filter((entry) => entry.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds || a.task.title.localeCompare(b.task.title));
+
+  return {
+    date,
+    seconds: entries.reduce((sum, entry) => sum + entry.seconds, 0),
+    byTask: entries,
+  };
+}
+
+export interface FocusedTimeMonth {
+  month: MonthKey;
+  /** Focused seconds recorded in the month. */
+  seconds: number;
+  /** Distinct days in the month with any recorded focused time. */
+  daysWorked: number;
+}
+
+/** One month's focused time — the same records as the day view, grouped up. */
+export function focusedTimeInMonth(
+  data: Pick<AppData, 'tasks' | 'timerSessions'>,
+  month: MonthKey,
+  nowMs: number = Date.now(),
+): FocusedTimeMonth {
+  const tasks = liveTaskMap(data.tasks);
+  const liveIds = new Set(tasks.keys());
+  const byDay = focusedSecondsByDay(data.timerSessions, liveIds);
+  liveSessionSecondsByDay([...tasks.values()], nowMs, byDay);
+
+  let seconds = 0;
+  let daysWorked = 0;
+  for (const [day, value] of byDay) {
+    if (monthKey(day) !== month || value <= 0) continue;
+    seconds += value;
+    daysWorked += 1;
+  }
+  return { month, seconds, daysWorked };
 }
 
 /** Stable ID for the normal Task record that stores a daily priority's timer session. */

@@ -81,10 +81,10 @@ export function TodayScreen() {
   const dayName = weekdayName(today);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 2xl:max-w-6xl">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 xl:max-w-6xl">
       {/* Header */}
       <header className="mb-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_290px] sm:items-start sm:gap-x-8">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3 [overflow-wrap:anywhere]">{greeting}</p>
             <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight text-ink">
@@ -92,7 +92,7 @@ export function TodayScreen() {
             </h1>
             <p className="mt-1 text-sm text-ink-2">{formatLongDate(today)}</p>
           </div>
-          <div className="w-full sm:w-auto sm:min-w-[300px] sm:max-w-sm">
+          <div className="w-full min-w-0 sm:justify-self-end">
             <ProgressSegments done={done} total={total} />
             {totalMinutes > 0 ? (
               <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-3">
@@ -119,17 +119,21 @@ export function TodayScreen() {
         ) : null}
       </header>
 
-      {/* On wide screens the priority and the task list keep the main column
-          while Daily well-being sits quietly in the unused space on the right.
-          On smaller screens everything simply stacks in the same order. */}
-      <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_264px] 2xl:items-start 2xl:gap-x-8">
+      {/* Priority, well-being, tasks and review all sit on the same master grid.
+          On smaller screens the two columns collapse into the natural document flow. */}
+      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_290px] xl:items-start xl:gap-x-8">
         {/* Priority */}
-        <div className="2xl:col-start-1 2xl:row-start-1">
+        <div className="xl:col-start-1 xl:row-start-1">
           <PriorityCard />
         </div>
 
+        {/* Daily well-being — quiet and secondary, never a task list */}
+        <aside className="mt-9 xl:col-start-2 xl:row-start-1 xl:mt-0">
+          <WellbeingCard />
+        </aside>
+
         {/* Tasks */}
-        <div className="mt-9 space-y-6 2xl:col-start-1 2xl:row-start-2">
+        <div className="mt-9 space-y-6 xl:col-start-1 xl:row-start-2">
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Today&apos;s tasks</h2>
             <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
@@ -182,13 +186,8 @@ export function TodayScreen() {
           )}
         </div>
 
-        {/* Daily well-being — quiet and secondary, never a task list */}
-        <aside className="mt-9 2xl:sticky 2xl:top-10 2xl:col-start-2 2xl:row-start-1 2xl:row-end-3 2xl:mt-0">
-          <WellbeingCard />
-        </aside>
-
         {/* End of day */}
-        <div className="mt-12 2xl:col-start-1 2xl:row-start-3 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-6 py-5 shadow-card">
+        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-6 py-5 shadow-card xl:col-start-1 xl:row-start-3">
           <div>
             <p className="text-[15px] font-medium text-ink">End-of-day review</p>
             <p className="mt-0.5 text-[13px] text-ink-2">Did you actually accomplish what mattered?</p>

@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/card';
 import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Menu, MenuItem } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
-import { IconMilestones, IconMore, IconPencil, IconPlus, IconTrash } from '@/components/ui/icons';
+import { IconMilestones, IconMore, IconPencil, IconPlus, IconTrash, IconUpload } from '@/components/ui/icons';
 import { PageHeader } from '@/components/layout/page-header';
 import {
   MILESTONE_CATEGORIES,
@@ -19,6 +19,8 @@ import {
   isValidMilestoneDate,
   precisionOf,
 } from '@/lib/milestones';
+import { parseMilestones } from '@/lib/milestones-import';
+import { MILESTONE_SEED } from '@/lib/milestones-seed';
 import type { Milestone, MilestoneCategory } from '@/lib/types';
 
 type CategoryFilter = 'all' | MilestoneCategory;
@@ -35,6 +37,7 @@ export function MilestonesScreen() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Milestone | undefined>(undefined);
   const [deleting, setDeleting] = useState<Milestone | undefined>(undefined);
+  const [importOpen, setImportOpen] = useState(false);
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
 
@@ -74,10 +77,16 @@ export function MilestonesScreen() {
         title="Milestones"
         subtitle="When you first picked something up — tools, frameworks, ideas. Newest first."
         actions={
-          <Button variant="primary" onClick={openNew}>
-            <IconPlus width={16} height={16} />
-            New Milestone
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <IconUpload width={16} height={16} />
+              Import
+            </Button>
+            <Button variant="primary" onClick={openNew}>
+              <IconPlus width={16} height={16} />
+              New Milestone
+            </Button>
+          </div>
         }
       />
 
@@ -117,10 +126,16 @@ export function MilestonesScreen() {
           }
           action={
             milestones.length === 0 ? (
-              <Button variant="primary" size="sm" onClick={openNew}>
-                <IconPlus width={15} height={15} />
-                New Milestone
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="primary" size="sm" onClick={openNew}>
+                  <IconPlus width={15} height={15} />
+                  New Milestone
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+                  <IconUpload width={15} height={15} />
+                  Import many at once
+                </Button>
+              </div>
             ) : undefined
           }
         />
@@ -175,6 +190,8 @@ export function MilestonesScreen() {
           onClose={() => { setFormOpen(false); setEditing(undefined); }}
         />
       ) : null}
+
+      {importOpen ? <MilestoneImportModal open onClose={() => setImportOpen(false)} /> : null}
 
       <ConfirmDialog
         open={deleting !== undefined}
@@ -388,6 +405,127 @@ function MilestoneFormModal({
 
         {!dateValid ? (
           <p className="text-[12px] text-danger">That date is not valid — check the year.</p>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Bulk import — paste a whole history at once.
+ *
+ * Nothing is written until the parse has been shown: the count of readable
+ * rows, the count of duplicates that will be skipped, and every line that
+ * could not be understood (with its line number), so a typo is fixed rather
+ * than quietly dropped.
+ */
+function MilestoneImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data, actions } = useData();
+  const [text, setText] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [failed, setFailed] = useState<string[]>([]);
+
+  const parsed = useMemo(() => parseMilestones(text), [text]);
+
+  // A milestone is "already there" when the same title sits on the same date,
+  // so re-importing the same paste twice cannot double the timeline.
+  const existingKeys = useMemo(
+    () => new Set(data.milestones.map((m) => `${m.date}::${m.title.toLowerCase()}`)),
+    [data.milestones],
+  );
+  const fresh = parsed.valid.filter((m) => !existingKeys.has(`${m.date}::${m.title.toLowerCase()}`));
+  const duplicates = parsed.valid.length - fresh.length;
+
+  const run = async () => {
+    if (fresh.length === 0 || importing) return;
+    setImporting(true);
+    setFailed([]);
+    const problems: string[] = [];
+    // Sequential on purpose: one failing row must not take the rest with it,
+    // and the backend sees a steady trickle rather than 50 parallel writes.
+    for (let i = 0; i < fresh.length; i += 1) {
+      try {
+        await actions.addMilestone(fresh[i]);
+      } catch {
+        problems.push(fresh[i].title);
+      }
+      setProgress(i + 1);
+    }
+    setImporting(false);
+    if (problems.length > 0) {
+      setFailed(problems);
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={importing ? () => {} : onClose}
+      title="Import milestones"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={importing}>
+            {failed.length > 0 ? 'Close' : 'Cancel'}
+          </Button>
+          <Button variant="primary" onClick={() => void run()} disabled={fresh.length === 0 || importing}>
+            {importing ? `Adding ${progress} of ${fresh.length}…` : `Add ${fresh.length || ''} ${fresh.length === 1 ? 'milestone' : 'milestones'}`.trim()}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-[13px] leading-relaxed text-ink-2">
+          One milestone per line: <code className="text-ink">date | title | category | description</code>.
+          The date can be <code className="text-ink">2025</code>, <code className="text-ink">2025-08</code>,{' '}
+          <code className="text-ink">2025-08-14</code> or <code className="text-ink">Aug 2025</code>. Commas work
+          instead of pipes, and category and description are optional.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setText(MILESTONE_SEED)} disabled={importing}>
+            Load my starter timeline
+          </Button>
+          {text ? (
+            <Button size="sm" variant="ghost" onClick={() => setText('')} disabled={importing}>
+              Clear
+            </Button>
+          ) : null}
+        </div>
+
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={'2026-10 | Dyad | ai-tool | Tried it for app scaffolding'}
+          className="min-h-48 font-mono text-[12px]"
+          disabled={importing}
+        />
+
+        {text.trim() ? (
+          <div className="space-y-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-[12.5px]">
+            <p className="text-ink-2">
+              <strong className="text-ink">{fresh.length}</strong> ready to add
+              {duplicates > 0 ? <> · {duplicates} already on the timeline (skipped)</> : null}
+              {parsed.errors.length > 0 ? <> · {parsed.errors.length} unreadable</> : null}
+            </p>
+            {parsed.errors.length > 0 ? (
+              <ul className="space-y-1 text-[12px] text-danger">
+                {parsed.errors.slice(0, 5).map((e) => (
+                  <li key={e.line}>Line {e.line}: {e.error}</li>
+                ))}
+                {parsed.errors.length > 5 ? <li>…and {parsed.errors.length - 5} more</li> : null}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {failed.length > 0 ? (
+          <p className="text-[12.5px] text-danger">
+            {failed.length} could not be saved ({failed.slice(0, 3).join(', ')}
+            {failed.length > 3 ? '…' : ''}). Everything else was added — close and try those again.
+          </p>
         ) : null}
       </div>
     </Modal>

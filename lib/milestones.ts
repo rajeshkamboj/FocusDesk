@@ -88,7 +88,8 @@ export function formatMilestoneDate(date: MilestoneDate): string {
 }
 
 export function monthLabel(month: number): string {
-  return month === 0 ? 'Undated month' : MONTHS[month - 1];
+  // Year-only entries get an honest heading rather than a fake month.
+  return month === 0 ? 'Sometime that year' : MONTHS[month - 1];
 }
 
 export interface MilestoneMonthGroup {

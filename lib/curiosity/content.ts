@@ -82,12 +82,12 @@ const historyEvents: HistoryEvent[] = [
   {
     date: 'October 5',
     year: 1923,
-    title: 'Edwin Hubble discovers Cepheid variable star in Andromeda',
+    title: 'A photograph that changed our view of the universe',
     explanation:
-      'Using the 100-inch Hooker Telescope at Mount Wilson Observatory, Edwin Hubble identified a Cepheid variable star (V1) in the Andromeda Nebula. Calculating its distance proved Andromeda was an independent galaxy located far outside our Milky Way.',
+      'On the night of October 5–6, 1923, Edwin Hubble photographed Andromeda at Mount Wilson. Comparing this plate with earlier exposures later revealed a Cepheid variable star, which helped establish that Andromeda lies beyond the Milky Way.',
     significance:
       'Fundamentally expanded humanity’s conception of the cosmos from a single galaxy to a universe containing billions of galaxies.',
-    url: 'https://science.nasa.gov/mission/hubble/science/science-highlights/measuring-the-universe/',
+    url: 'https://science.nasa.gov/missions/hubble/hubble-views-the-star-that-changed-the-universe/',
   },
   {
     date: 'September 28',
@@ -182,21 +182,22 @@ const literatureWorks: LiteratureItem[] = [
     eraOrCountry: 'American Poetry (1916)',
     format: 'poem',
     passage:
-      'Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\nAnd be one traveler, long I stood\nAnd looked down one as far as I could\nTo where it bent in the undergrowth;\n\nI took the one less traveled by,\nAnd that has made all the difference.',
+      'Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\nAnd be one traveler, long I stood\nAnd looked down one as far as I could\nTo where it bent in the undergrowth;\n[…]\nI took the one less traveled by,\nAnd that has made all the difference.',
     whyItMatters:
       'A timeless reflection on choice, individuality, and the narratives we build around life’s defining paths.',
     url: 'https://www.poetryfoundation.org/poems/44272/the-road-not-taken',
   },
   {
-    title: 'Letters to a Young Poet (Letter Eight)',
+    title: 'Letters to a Young Poet (Letter Four)',
     author: 'Rainer Maria Rilke',
     eraOrCountry: 'Austrian Literature (1903)',
     format: 'passage',
     passage:
-      'Be patient toward all that is unsolved in your heart and try to love the questions themselves, like locked rooms and like books that are now written in a very foreign tongue. Do not now seek the answers, which cannot be given you because you would not be able to live them. And the point is, to live everything. Live the questions now.',
+      'Live the questions now.',
+    attribution: 'Brief excerpt; translated by M. D. Herter Norton.',
     whyItMatters:
       'Encourages gentle patience with uncertainty and recognizing that maturity is a process of lived experience.',
-    url: 'https://www.gutenberg.org/ebooks/70388',
+    url: 'https://rilkepoetry.com/letters-to-a-young-poet/letter-four/',
   },
   {
     title: 'Gitanjali (Song 35)',
@@ -204,7 +205,7 @@ const literatureWorks: LiteratureItem[] = [
     eraOrCountry: 'Indian Poetry (1910)',
     format: 'poem',
     passage:
-      'Where the mind is without fear and the head is held high;\nWhere knowledge is free;\nWhere the world has not been broken up into fragments by narrow domestic walls;\nWhere words come out from the depth of truth;\nWhere tireless striving stretches its arms towards perfection;\nInto that heaven of freedom, my Father, let my country awake.',
+      'Where the mind is without fear and the head is held high;\nWhere knowledge is free;\nWhere the world has not been broken up into fragments by narrow domestic walls;\nWhere words come out from the depth of truth;\nWhere tireless striving stretches its arms towards perfection;\n[…]\nInto that heaven of freedom, my Father, let my country awake.',
     whyItMatters:
       'A luminous prayer for moral integrity, unchained intellect, and freedom from narrow prejudice.',
     url: 'https://www.nobelprize.org/prizes/literature/1913/tagore/poetry/',
@@ -215,10 +216,11 @@ const literatureWorks: LiteratureItem[] = [
     eraOrCountry: 'Stoic Philosophy (c. 175 CE)',
     format: 'passage',
     passage:
-      'Men look for retreats for themselves, the country, the sea-shore, the hills; and you yourself, too, are peculiarly accustomed to long for such things. But this is the very commonest mark of ordinary men, for it is possible to retire into yourself at any hour you wish. For nowhere does a person retire into more quiet or more freedom than into his own soul.',
+      'Men seek retreats for themselves, houses in the country, sea-shores, and mountains; and thou too art wont to desire such things very much. But this is altogether a mark of the most common sort of men, for it is in thy power whenever thou shalt choose to retire into thyself.',
+    attribution: 'Book IV, section 3; public-domain translation by George Long.',
     whyItMatters:
       'Reminds us that genuine calm and composure are cultivated from within, not found in physical flight.',
-    url: 'https://classics.mit.edu/Antoninus/meditations.html',
+    url: 'https://classics.mit.edu/Antoninus/meditations.4.four.html',
   },
   {
     title: 'The Prophet: On Work',
@@ -237,7 +239,8 @@ const literatureWorks: LiteratureItem[] = [
     eraOrCountry: 'Japanese Haibun (1689)',
     format: 'passage',
     passage:
-      'The moon and sun are travelers through eternity. Even the years wander on. Those who steer a boat across the sea or drive a horse over the earth until caught by the weight of time, spend every minute on the road. The journey itself is home.',
+      'Every day is a journey, and the journey itself is home.',
+    attribution: 'Brief excerpt; translated by Sam Hamill.',
     whyItMatters:
       'A serene meditation on impermanence, mindful travel, and the poetry of everyday observation.',
     url: 'https://en.wikipedia.org/wiki/Oku_no_Hosomichi',
@@ -294,34 +297,33 @@ const brainSharpeners: BrainSharpener[] = [
     topic: 'Kinematics & Gravity',
     title: 'The Height of the Bridge',
     problem:
-      'A stone is dropped from rest from a bridge into the river below. Exactly 3.0 seconds later, you hear the splash of the stone striking the water. Assuming g = 9.8 m/s² and ignoring sound travel delay, calculate the height of the bridge above the water.',
+      'A stone is dropped from rest from a bridge into the river below. Exactly 3.0 seconds later, you hear the splash. Assuming g = 9.8 m/s² and a sound speed of 343 m/s, calculate the height of the bridge, including the time the sound takes to return. Ignore air resistance.',
     givenInfo: [
       'Initial velocity u = 0 m/s',
-      'Time of flight t = 3.0 s',
+      'Total fall + sound travel time = 3.0 s',
       'Acceleration g = 9.8 m/s²',
-      'Kinematic equation: h = ut + ½gt²',
+      'Sound speed = 343 m/s',
     ],
-    hint: 'Since the stone was dropped from rest, u = 0. Calculate h = ½ · g · t².',
-    solution:
-      '1. Kinematic formula for distance from rest: h = ½ · g · t².\n2. Substitute: h = 0.5 × 9.8 m/s² × (3.0 s)².\n3. h = 4.9 × 9.0 = 44.1 meters.',
-    answer: '44.1 meters',
+    hint: 'Let t be the falling time. The sound travels the height h in the remaining 3 − t seconds.',
+    solution: '1. Falling distance h = 4.9t². Sound travel time = h/343.\n2. Therefore t + 4.9t²/343 = 3, or t² + 70t − 210 = 0.\n3. The positive root is t = (√5740 − 70)/2 ≈ 2.8814 s.\n4. h = 4.9t² ≈ 40.68 m. The remaining 0.1186 s is sound travel time.',
+    answer: 'Approximately 40.68 metres',
   },
   {
     id: 'math-arithmetic-sum',
     subject: 'mathematics',
     topic: 'Sequences & Patterns',
-    title: 'Sum of Consecutive Odd Numbers',
+    title: 'The Spread of Odd Numbers',
     problem:
-      'What is the exact sum of the first 50 positive odd integers: 1 + 3 + 5 + ... + 99?',
+      'For the first 50 positive odd integers (1, 3, 5, …, 99), find their sum, their mean, and the mean squared distance from that mean. Can you find the last quantity without adding 50 individual squared differences?',
     givenInfo: [
       'Sequence: 1, 3, 5, ..., (2n - 1)',
       'Number of terms n = 50',
       'Last term = 2(50) - 1 = 99',
     ],
-    hint: 'Notice that 1 = 1², 1 + 3 = 4 = 2², 1 + 3 + 5 = 9 = 3². The sum of the first n odd integers equals n².',
+    hint: 'Use mean squared distance = mean of the squares − square of the mean. Expand (2k − 1)² and use the sums of k and k².',
     solution:
-      '1. Using arithmetic series formula: Sₙ = n/2 × (first + last) = 50/2 × (1 + 99) = 25 × 100 = 2,500.\n2. Or using the identity for odd integers: Sₙ = n² = 50² = 2,500.',
-    answer: '2,500',
+      '1. The sum is 50(1 + 99)/2 = 2,500, so the mean is 50.\n2. Sum (2k − 1)² = 4 sum k² − 4 sum k + 50.\n3. For k = 1 to 50, sum k = 1,275 and sum k² = 50 × 51 × 101 / 6 = 42,925. Thus the sum of the odd squares is 166,650.\n4. Mean square = 166,650/50 = 3,333. Subtract the squared mean: 3,333 − 2,500 = 833.',
+    answer: 'Sum = 2,500; mean = 50; mean squared distance = 833',
   },
   {
     id: 'physics-circuit-current',
@@ -333,8 +335,6 @@ const brainSharpeners: BrainSharpener[] = [
     givenInfo: [
       'Voltage V = 12 V',
       'Three resistors: R₁ = 6 Ω, R₂ = 6 Ω, R₃ = 6 Ω',
-      'R₂ and R₃ are parallel: R_p = (6 × 6) / (6 + 6) = 3 Ω',
-      'Total resistance R_total = R₁ + R_p',
     ],
     hint: 'First find the equivalent resistance of the parallel pair (3 Ω), then add the 6 Ω series resistor. Apply Ohm’s Law I = V / R.',
     solution:
@@ -347,15 +347,15 @@ const brainSharpeners: BrainSharpener[] = [
     topic: 'Probability & Combinatorics',
     title: 'Sum of Two Dice',
     problem:
-      'Two standard fair 6-sided dice are rolled simultaneously. What is the exact probability that the sum of the two numbers rolled is either 7 or 11?',
+      'Two standard fair 6-sided dice are rolled. You are told that at least one die is even. Given that information, what is the exact probability that the sum is either 7 or 11?',
     givenInfo: [
       'Each die has faces {1, 2, 3, 4, 5, 6}',
       'Total possible outcomes = 6 × 6 = 36',
     ],
-    hint: 'Count the distinct pairs (d₁, d₂) that add to 7, and the pairs that add to 11. Divide favorable outcomes by 36.',
+    hint: 'Restrict the sample space first: exclude the pairs in which both dice are odd. Then count the pairs summing to 7 or 11.',
     solution:
-      '1. Total outcomes = 36.\n2. Pairs summing to 7: (1,6), (2,5), (3,4), (4,3), (5,2), (6,1) → 6 pairs.\n3. Pairs summing to 11: (5,6), (6,5) → 2 pairs.\n4. Total favorable = 6 + 2 = 8.\n5. Probability = 8 / 36 = 2 / 9 ≈ 22.2%.',
-    answer: '2/9 (or approx. 22.2%)',
+      '1. Of 36 ordered outcomes, 3 × 3 = 9 have two odd dice, leaving 27 equally likely outcomes.\n2. Six pairs sum to 7: (1,6), (2,5), (3,4), (4,3), (5,2), (6,1). Two sum to 11: (5,6), (6,5).\n3. All eight contain an even die, so all remain in the conditional sample space.\n4. The conditional probability is 8/27 ≈ 29.63%.',
+    answer: '8/27 (approximately 29.63%)',
   },
   {
     id: 'physics-stopping-distance',
@@ -392,7 +392,7 @@ export function dailyEditorial(date: string): Pick<
     book: books[safeDay % books.length],
     oneThing: oneThings[safeDay % oneThings.length],
     learning: lessons[safeDay % lessons.length],
-    history: historyEvents[safeDay % historyEvents.length],
+    history: historyEvents.find((event) => event.date === new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }) && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible') ?? null,
     literature: literatureWorks[safeDay % literatureWorks.length],
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
   };

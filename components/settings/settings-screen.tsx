@@ -1,5 +1,6 @@
 'use client';
 
+import { DisplayNameSetting } from './display-name-setting';
 import { useRef, useState } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
@@ -98,30 +99,7 @@ export function SettingsScreen() {
         <section>
           <SectionTitle>General</SectionTitle>
           <div className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
-            <SettingRow
-              label="Your name"
-              hint="Used for your greeting in FocusDesk."
-            >
-              <Input
-                type="text"
-                placeholder="Rajesh"
-                value={general.displayName ?? ''}
-                onChange={(e) => {
-                  void actions.updateSettings({
-                    general: { ...general, displayName: e.target.value },
-                  });
-                }}
-                onBlur={(e) => {
-                  const trimmed = e.target.value.trim();
-                  if (trimmed !== e.target.value) {
-                    void actions.updateSettings({
-                      general: { ...general, displayName: trimmed },
-                    });
-                  }
-                }}
-                className="w-36 sm:w-48 shrink-0"
-              />
-            </SettingRow>
+            <DisplayNameSetting savedName={general.displayName ?? ''} />
             <SettingRow
               label="Start on Today"
               hint="Open the app on the Today screen. When off, you return to the last section you visited."

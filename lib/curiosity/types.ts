@@ -29,6 +29,7 @@ export interface LiteratureItem {
   eraOrCountry?: string;
   format?: 'excerpt' | 'poem' | 'passage' | 'fable' | 'essay';
   passage: string;
+  attribution?: string;
   whyItMatters: string;
   url?: string;
 }
@@ -52,7 +53,7 @@ export type CuriosityBriefing = {
   book: { title: string; author: string; description: string; why: string; url: string };
   oneThing: { title: string; explanation: string; url?: string };
   learning: { topic: string; explanation: string; url?: string };
-  history: HistoryEvent;
+  history: HistoryEvent | null;
   literature: LiteratureItem;
   sharpener: BrainSharpener;
 };

@@ -14,6 +14,7 @@ import { WellbeingCard } from './wellbeing-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
 import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
+import { getDailyQuote } from '@/lib/quotes';
 
 export function TodayScreen() {
   const { user } = useAuth();
@@ -32,7 +33,8 @@ export function TodayScreen() {
     () => false,
   );
 
-  const displayName = getUserDisplayName(user);
+  const displayName = getUserDisplayName(user, data.settings.general.displayName);
+  const dailyQuote = useMemo(() => getDailyQuote(today), [today]);
   const greeting = mounted
     ? (() => {
         const h = new Date().getHours();
@@ -103,6 +105,18 @@ export function TodayScreen() {
               </p>
             ) : null}
           </div>
+        </div>
+
+        {/* Motivational quote */}
+        <div className="mt-5 border-t border-line/60 pt-3.5">
+          <p className="text-[12.5px] leading-relaxed text-ink-2 sm:text-[13px]">
+            <span className="italic">“{dailyQuote.text}”</span>
+            {dailyQuote.author ? (
+              <span className="ml-1.5 text-[11.5px] text-ink-3 sm:text-[12px]">
+                — {dailyQuote.author}
+              </span>
+            ) : null}
+          </p>
         </div>
 
         {approaching.length > 0 ? (

@@ -2,6 +2,7 @@ import type { AppData, Settings } from '../types';
 
 export const defaultSettings: Settings = {
   general: {
+    displayName: '',
     startOnToday: true,
     confirmTaskDeletion: true,
     automaticCarryForward: true,

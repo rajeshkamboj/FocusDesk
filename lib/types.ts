@@ -328,6 +328,8 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 
 export interface Settings {
   general: {
+    /** Custom display name used for the user greeting. */
+    displayName?: string;
     /** Open the app on the Today screen instead of the last visited section. */
     startOnToday: boolean;
     confirmTaskDeletion: boolean;

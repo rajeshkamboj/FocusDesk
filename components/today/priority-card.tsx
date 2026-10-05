@@ -29,6 +29,22 @@ const PRIORITY_INPUT_CLASS =
   'placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none';
 
 /**
+ * Mobile density note.
+ *
+ * The card is the tallest thing on Today, and on a phone it pushed the rest of
+ * the screen below the fold. The vertical space it spends on *spacing* — as
+ * opposed to content — was 94px: 48px of card padding, 16px above the
+ * question, 20px above the form and a 10px gap inside it. Below `sm` that is
+ * now 76px (40 + 12 + 16 + 8), a 19% cut, and the narrower horizontal padding
+ * also gives the balanced question line ~8px more room to fit in fewer lines.
+ *
+ * Every reduction is padding, margin or gap. No font size, line height, label
+ * or control changed: the eyebrow, the question, the 48px input and the
+ * Set Priority button are exactly as they were, and from `sm` up every
+ * original value is restored, so the desktop card is untouched.
+ */
+
+/**
  * 🔥 Today's Priority — the one question that matters in the morning:
  * "What is the ONE thing that matters most today?"
  */
@@ -76,16 +92,16 @@ export function PriorityCard() {
 
   if (!priority) {
     return (
-      <div className="animate-rise-in rounded-2xl border border-line bg-surface p-6 shadow-card sm:p-8">
+      <div className="animate-rise-in rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
         <div className="flex items-center gap-2 text-accent">
           <IconFlame width={18} height={18} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">Today&apos;s priority</span>
         </div>
-        <h2 className="mt-4 text-balance text-xl font-semibold leading-snug tracking-tight text-ink sm:text-2xl">
+        <h2 className="mt-3 text-balance text-xl font-semibold leading-snug tracking-tight text-ink sm:mt-4 sm:text-2xl">
           What is the ONE thing that matters most today?
         </h2>
         <form
-          className="mt-5 flex flex-col gap-2.5 sm:flex-row"
+          className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:gap-2.5"
           onSubmit={(e) => {
             e.preventDefault();
             const title = draft.trim();
@@ -113,7 +129,7 @@ export function PriorityCard() {
   }
 
   return (
-    <div className="animate-rise-in rounded-2xl border border-line bg-surface p-6 shadow-card sm:p-8">
+    <div className="animate-rise-in rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
       <div className="flex items-center gap-2 text-accent">
         <IconFlame width={18} height={18} />
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">Today&apos;s priority</span>
@@ -163,7 +179,7 @@ export function PriorityCard() {
           </p>
           {timerLabel ? <p className="mt-2 text-[12px] font-medium tabular-nums text-ink-3">{timerLabel}</p> : null}
 
-          <div className="mt-6 flex flex-wrap items-center gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-2 sm:mt-6">
             {!priority.completed ? (
               <>
                 <Button variant="primary" onClick={() => void actions.toggleDailyPriority(priority.id)}>

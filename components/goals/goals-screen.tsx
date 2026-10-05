@@ -37,7 +37,7 @@ export function GoalsScreen() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Goals"
         subtitle="Broader outcomes you are moving toward. A goal can own projects — or stand on its own."
@@ -261,7 +261,7 @@ export function GoalFormModal({
         <Field label="Description">
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Why does this matter?" className="min-h-16" />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Status">
             <Select value={status} onChange={(e) => setStatus(e.target.value as GoalStatus)}>
               {(['active', 'completed', 'archived'] as GoalStatus[]).map((s) => (

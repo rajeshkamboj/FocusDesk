@@ -126,7 +126,7 @@ export function CalendarScreen() {
   const selectedPriority = data.dailyPriorities.find((p) => p.date === selected);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-5xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Calendar"
         subtitle="Scheduled tasks, deadlines and priorities — a calm overview of your days."
@@ -147,7 +147,7 @@ export function CalendarScreen() {
         >
           <IconChevronLeft width={17} height={17} />
         </button>
-        <p className="min-w-36 text-center text-[15px] font-semibold text-ink">
+        <p className="min-w-0 truncate text-center text-[15px] font-semibold text-ink sm:min-w-36">
           {monthName(anchor)} {anchor.slice(0, 4)}
         </p>
         <button

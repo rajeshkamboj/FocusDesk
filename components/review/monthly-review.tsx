@@ -152,7 +152,7 @@ export function MonthlyReview() {
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}
               placeholder="A priority for this month…"
-              className="h-10 flex-1 rounded-xl border border-line bg-surface px-3.5 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
             />
             <Button type="submit" variant="primary" disabled={!titleDraft.trim()}>
               <IconPlus width={15} height={15} />
@@ -203,10 +203,10 @@ export function MonthlyReview() {
             <p className="text-[13px] font-medium text-ink">Project progress</p>
             <div className="mt-2 space-y-2">
               {stats.projectProgress.map(({ project, progress }) => (
-                <div key={project.id} className="flex items-center gap-3">
-                  <span className="w-40 truncate text-[13px] text-ink-2">{project.name}</span>
-                  <ProgressBar done={progress.done} total={progress.total} className="max-w-44" />
-                  <span className="text-[11px] tabular-nums text-ink-3">
+                <div key={project.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="w-full truncate text-[13px] text-ink-2 sm:w-40">{project.name}</span>
+                  <ProgressBar done={progress.done} total={progress.total} className="min-w-0 flex-1 sm:max-w-44" />
+                  <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
                     {progress.done}/{progress.total}
                   </span>
                 </div>

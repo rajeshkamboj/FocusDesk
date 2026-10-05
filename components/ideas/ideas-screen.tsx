@@ -30,7 +30,7 @@ export function IdeasScreen() {
   const ideas = data.ideas.filter((i) => (tab === 'archived' ? i.archived : !i.archived));
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Ideas"
         subtitle="A parking lot for things that are not tasks — yet. They never appear in Today on their own."

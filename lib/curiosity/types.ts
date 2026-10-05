@@ -1,3 +1,19 @@
+export type CuriosityNewsItem = {
+  title: string;
+  source: string;
+  publishedAt: string;
+  summary: string;
+  url: string;
+};
+
+export type DeveloperDiscovery = {
+  name: string;
+  description: string;
+  why: string;
+  pricing: string;
+  url: string;
+};
+
 export interface HistoryEvent {
   date: string;
   year: number | string;
@@ -7,31 +23,36 @@ export interface HistoryEvent {
   url?: string;
 }
 
-export interface ReadingItem {
+export interface LiteratureItem {
   title: string;
   author: string;
   eraOrCountry?: string;
-  format: 'excerpt' | 'poem' | 'passage' | 'fable' | 'essay';
+  format?: 'excerpt' | 'poem' | 'passage' | 'fable' | 'essay';
   passage: string;
   whyItMatters: string;
   url?: string;
 }
 
-export interface BrainExercise {
+export interface BrainSharpener {
   id: string;
   subject: 'mathematics' | 'physics';
   topic: string;
   title: string;
   problem: string;
   givenInfo?: string[];
-  hint: string;
+  hint?: string;
   solution: string;
   answer: string;
 }
 
-export interface CuriousBriefing {
+export type CuriosityBriefing = {
   date: string;
+  aiWorld: CuriosityNewsItem[];
+  developerRadar: DeveloperDiscovery[];
+  book: { title: string; author: string; description: string; why: string; url: string };
+  oneThing: { title: string; explanation: string; url?: string };
+  learning: { topic: string; explanation: string; url?: string };
   history: HistoryEvent;
-  reading: ReadingItem;
-  exercise: BrainExercise;
-}
+  literature: LiteratureItem;
+  sharpener: BrainSharpener;
+};

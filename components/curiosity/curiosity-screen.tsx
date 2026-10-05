@@ -1,342 +1,467 @@
 'use client';
 
 import { useState } from 'react';
-import { Card } from '@/components/ui/card';
+import { Card, EmptyState } from '@/components/ui/card';
+import { SectionTitle } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
-import { IconChevronDown, IconLink } from '@/components/ui/icons';
-import { formatLongDate } from '@/lib/dates';
-import type { CuriousBriefing } from '@/lib/curiosity/types';
+import {
+  IconBook,
+  IconCalendar,
+  IconChevronDown,
+  IconIdeas,
+  IconProjects,
+  IconReview,
+} from '@/components/ui/icons';
+import type {
+  BrainSharpener,
+  CuriosityBriefing,
+  CuriosityNewsItem,
+  DeveloperDiscovery,
+  HistoryEvent,
+  LiteratureItem,
+} from '@/lib/curiosity/types';
 
-/* ------------------------------------------------------------------ */
-/* Subtle Calm Illustrations                                          */
-/* ------------------------------------------------------------------ */
-
-function HistoryIllustration() {
+function LinkOut({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <div aria-hidden className="flex h-20 w-full items-center justify-center rounded-xl bg-accent-soft/40 text-accent sm:h-24">
-      <svg width="140" height="54" viewBox="0 0 140 54" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-90">
-        {/* Ancient column & globe / timeline motif */}
-        <circle cx="70" cy="27" r="16" className="stroke-accent/50 fill-surface" strokeWidth="1.5" />
-        <ellipse cx="70" cy="27" rx="16" ry="6" className="stroke-accent/40" strokeWidth="1" strokeDasharray="2 2" />
-        <line x1="70" y1="11" x2="70" y2="43" className="stroke-accent/40" strokeWidth="1" />
-        {/* Column left */}
-        <rect x="22" y="18" width="12" height="24" rx="1" className="stroke-accent fill-surface" strokeWidth="1.2" />
-        <line x1="18" y1="18" x2="38" y2="18" className="stroke-accent" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="18" y1="42" x2="38" y2="42" className="stroke-accent" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="26" y1="21" x2="26" y2="39" className="stroke-accent/40" strokeWidth="1" />
-        <line x1="30" y1="21" x2="30" y2="39" className="stroke-accent/40" strokeWidth="1" />
-        {/* Scroll right */}
-        <path d="M104 18 C 100 18, 98 22, 102 26 L 118 26 C 122 26, 122 32, 118 32 L 102 32 C 98 32, 98 38, 102 38 L 122 38" className="stroke-accent" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        {/* Horizon */}
-        <line x1="6" y1="47" x2="134" y2="47" className="stroke-line-strong/60" strokeWidth="1" strokeLinecap="round" />
-      </svg>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-accent transition-colors hover:text-accent-hover hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+function VisualMark({
+  children,
+  tone = 'bg-accent-soft text-accent',
+}: {
+  children: React.ReactNode;
+  tone?: string;
+}) {
+  return (
+    <div
+      aria-hidden
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone}`}
+    >
+      {children}
     </div>
   );
 }
 
-function ReadingIllustration() {
+function NewsItem({ item }: { item: CuriosityNewsItem }) {
   return (
-    <div aria-hidden className="flex h-20 w-full items-center justify-center rounded-xl bg-accent-soft/40 text-accent sm:h-24">
-      <svg width="140" height="54" viewBox="0 0 140 54" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-90">
-        {/* Open book & quill */}
-        <path d="M70 38 C 58 32, 40 32, 28 35 L 28 17 C 40 14, 58 14, 70 20 C 82 14, 100 14, 112 17 L 112 35 C 100 32, 82 32, 70 38 Z" className="stroke-accent fill-surface" strokeWidth="1.4" strokeLinejoin="round" />
-        <line x1="70" y1="20" x2="70" y2="38" className="stroke-accent" strokeWidth="1.2" />
-        {/* Subtle page lines */}
-        <line x1="36" y1="22" x2="62" y2="24" className="stroke-accent/30" strokeWidth="1" />
-        <line x1="36" y1="26" x2="62" y2="28" className="stroke-accent/30" strokeWidth="1" />
-        <line x1="78" y1="24" x2="104" y2="22" className="stroke-accent/30" strokeWidth="1" />
-        <line x1="78" y1="28" x2="104" y2="26" className="stroke-accent/30" strokeWidth="1" />
-        {/* Quill */}
-        <path d="M116 10 C 114 16, 110 24, 104 30 L 102 34 L 106 32 C 110 26, 118 18, 122 8 Z" className="stroke-accent/70 fill-accent-soft/60" strokeWidth="1" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-function BrainIllustration({ subject }: { subject: 'mathematics' | 'physics' }) {
-  return (
-    <div aria-hidden className="flex h-20 w-full items-center justify-center rounded-xl bg-accent-soft/40 text-accent sm:h-24">
-      <svg width="140" height="54" viewBox="0 0 140 54" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-90">
-        {subject === 'mathematics' ? (
-          <>
-            {/* Geometric compass & right triangle */}
-            <path d="M25 40 L 55 40 L 25 18 Z" className="stroke-accent fill-surface" strokeWidth="1.2" strokeLinejoin="round" />
-            <path d="M25 36 L 29 36 L 29 40" className="stroke-accent/60" strokeWidth="1" />
-            {/* Compass */}
-            <circle cx="95" cy="14" r="3" className="stroke-accent fill-surface" strokeWidth="1.2" />
-            <line x1="94" y1="17" x2="80" y2="40" className="stroke-accent" strokeWidth="1.4" strokeLinecap="round" />
-            <line x1="96" y1="17" x2="110" y2="40" className="stroke-accent" strokeWidth="1.4" strokeLinecap="round" />
-            <path d="M84 32 C 92 35, 98 35, 106 32" className="stroke-accent/40" strokeWidth="1" />
-            {/* Mathematical symbols */}
-            <text x="64" y="28" className="fill-accent text-[12px] font-serif italic">Σ</text>
-            <text x="63" y="42" className="fill-accent/70 text-[11px] font-serif italic">∫</text>
-          </>
-        ) : (
-          <>
-            {/* Pendulum / optics & waves */}
-            <line x1="20" y1="12" x2="60" y2="12" className="stroke-line-strong" strokeWidth="1.5" strokeLinecap="round" />
-            <line x1="40" y1="12" x2="52" y2="34" className="stroke-accent" strokeWidth="1.2" />
-            <circle cx="54" cy="38" r="5" className="stroke-accent fill-accent-soft" strokeWidth="1.2" />
-            <path d="M30 42 C 40 45, 54 45, 62 42" className="stroke-accent/30" strokeWidth="1" strokeDasharray="2 2" />
-            {/* Prism / Waves right */}
-            <path d="M85 38 C 92 28, 98 48, 105 38 C 112 28, 118 48, 125 38" className="stroke-accent" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            <text x="96" y="22" className="fill-accent text-[11px] font-sans font-medium">λ</text>
-            <text x="75" y="24" className="fill-accent/70 text-[11px] font-sans font-medium">ΔE</text>
-          </>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Curious Screen Component                                           */
-/* ------------------------------------------------------------------ */
-
-export function CuriosityScreen({ briefing }: { briefing: CuriousBriefing }) {
-  const [hintOpen, setHintOpen] = useState(false);
-  const [solutionOpen, setSolutionOpen] = useState(false);
-  const { history, reading, exercise } = briefing;
-
-  const displayDate = briefing.date ? formatLongDate(briefing.date) : 'Today';
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pb-24 sm:pt-10">
-      {/* Header */}
-      <header className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-          Daily Learning Briefing
+    <article className="border-b border-line py-4 first:pt-0 last:border-0 last:pb-0">
+      <div className="flex gap-3">
+        <VisualMark>
+          <span className="text-xs font-semibold">AI</span>
+        </VisualMark>
+        <div className="min-w-0">
+          <LinkOut href={item.url}>
+            <h3 className="text-[15px] font-medium leading-snug text-ink">
+              {item.title}
+            </h3>
+          </LinkOut>
+          <p className="mt-1 text-[12px] text-ink-3">
+            {item.source}
+            {item.publishedAt
+              ? ` · ${new Date(item.publishedAt).toLocaleDateString('en', {
+                  month: 'short',
+                  day: 'numeric',
+                })}`
+              : ''}
+          </p>
+        </div>
+      </div>
+      {item.summary ? (
+        <p className="mt-2 pl-12 text-[13px] leading-relaxed text-ink-2">
+          {item.summary}
         </p>
-        <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight text-ink sm:text-[28px]">
-          Curious
-        </h1>
-        <p className="mt-1 text-sm text-ink-2">
-          A daily dose of learning, ideas and inspiration.
-        </p>
-        <p className="mt-1 text-[11.5px] text-ink-3">{displayDate}</p>
-      </header>
+      ) : null}
+    </article>
+  );
+}
 
-      <div className="space-y-8">
-        {/* ------------------------------------------------------------ */}
-        {/* A. TODAY IN HISTORY                                          */}
-        {/* ------------------------------------------------------------ */}
-        <section>
-          <Card className="p-6 sm:p-8">
-            <HistoryIllustration />
+function RadarItem({ item }: { item: DeveloperDiscovery }) {
+  return (
+    <article className="border-b border-line py-4 first:pt-0 last:border-0 last:pb-0">
+      <div className="flex gap-3">
+        <VisualMark tone="bg-surface-2 text-ink-2">
+          <IconProjects width={17} height={17} />
+        </VisualMark>
+        <div className="min-w-0">
+          <LinkOut href={item.url}>
+            <h3 className="text-[15px] font-medium text-ink">{item.name}</h3>
+          </LinkOut>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+            {item.description}
+          </p>
+        </div>
+      </div>
+      <p className="mt-2 pl-12 text-[12px] leading-relaxed text-ink-3">
+        <strong className="font-medium text-ink-2">Why it may help:</strong>{' '}
+        {item.why} {item.pricing}
+      </p>
+    </article>
+  );
+}
 
-            <div className="mt-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-                  Today in History
-                </span>
-                <span className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-ink-2">
-                  {history.year}
-                </span>
-              </div>
+function SectionCard({
+  label,
+  className = '',
+  children,
+}: {
+  label: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className={`flex h-full flex-col p-4 sm:p-6 ${className}`}>
+      <SectionTitle>{label}</SectionTitle>
+      <div className="mt-3.5">{children}</div>
+    </Card>
+  );
+}
 
-              <h2 className="mt-2 text-[19px] font-semibold leading-snug tracking-tight text-ink sm:text-[21px]">
-                {history.title}
-              </h2>
-
-              <p className="mt-3 text-[14px] leading-relaxed text-ink-2 sm:text-[14.5px]">
-                {history.explanation}
-              </p>
-
-              <div className="mt-4 rounded-xl border border-line/80 bg-surface-2/60 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                  Why It Matters
-                </p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-                  {history.significance}
-                </p>
-              </div>
-
-              {history.url ? (
-                <div className="mt-4 pt-2">
-                  <a
-                    href={history.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover hover:underline"
-                  >
-                    Read more about this milestone <IconLink width={13} height={13} />
-                  </a>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-        </section>
-
-        {/* ------------------------------------------------------------ */}
-        {/* B. TODAY'S READING                                           */}
-        {/* ------------------------------------------------------------ */}
-        <section>
-          <Card className="p-6 sm:p-8">
-            <ReadingIllustration />
-
-            <div className="mt-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-                  Today&apos;s Reading
-                </span>
-                {reading.eraOrCountry ? (
-                  <span className="text-[11.5px] text-ink-3">
-                    {reading.eraOrCountry}
-                  </span>
-                ) : null}
-              </div>
-
-              <h2 className="mt-2 text-[19px] font-semibold leading-snug tracking-tight text-ink sm:text-[21px]">
-                {reading.title}
-              </h2>
-              <p className="mt-0.5 text-[13.5px] text-ink-3 font-medium">
-                by {reading.author}
-              </p>
-
-              {/* Passage / excerpt */}
-              <div className="mt-4 rounded-xl border border-line bg-surface-2/40 p-4 sm:p-5">
-                <p className="whitespace-pre-line text-[14px] leading-relaxed text-ink italic font-serif">
-                  {reading.passage}
-                </p>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-[13px] leading-relaxed text-ink-2">
-                  <strong className="font-medium text-ink">Why read it:</strong> {reading.whyItMatters}
-                </p>
-              </div>
-
-              {reading.url ? (
-                <div className="mt-4 pt-2">
-                  <a
-                    href={reading.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover hover:underline"
-                  >
-                    Read the work <IconLink width={13} height={13} />
-                  </a>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-        </section>
-
-        {/* ------------------------------------------------------------ */}
-        {/* C. BRAIN EXERCISE                                            */}
-        {/* ------------------------------------------------------------ */}
-        <section>
-          <Card className="p-6 sm:p-8">
-            <BrainIllustration subject={exercise.subject} />
-
-            <div className="mt-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-                    Brain Exercise
-                  </span>
-                  <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-accent-ink">
-                    {exercise.subject}
-                  </span>
-                </div>
-                <span className="text-[11.5px] text-ink-3">
-                  {exercise.topic}
-                </span>
-              </div>
-
-              <h2 className="mt-2 text-[19px] font-semibold leading-snug tracking-tight text-ink sm:text-[21px]">
-                {exercise.title}
-              </h2>
-
-              <p className="mt-3 text-[14px] leading-relaxed text-ink sm:text-[14.5px]">
-                {exercise.problem}
-              </p>
-
-              {exercise.givenInfo && exercise.givenInfo.length > 0 ? (
-                <div className="mt-3.5 space-y-1 rounded-xl border border-line/70 bg-surface-2/40 px-3.5 py-2.5 text-[12px] text-ink-2">
-                  <p className="font-medium text-ink-3">Given information & formulas:</p>
-                  <ul className="list-inside list-disc space-y-0.5 font-mono text-[11.5px]">
-                    {exercise.givenInfo.map((info, i) => (
-                      <li key={i}>{info}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {/* Action buttons: Hint and Solution */}
-              <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setHintOpen((v) => !v)}
-                  className="gap-1.5"
-                >
-                  <IconChevronDown
-                    width={14}
-                    height={14}
-                    className={`transition-transform duration-150 ${hintOpen ? 'rotate-180' : ''}`}
-                  />
-                  {hintOpen ? 'Hide Hint' : 'Show Hint'}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSolutionOpen((v) => !v)}
-                  className="gap-1.5"
-                >
-                  <IconChevronDown
-                    width={14}
-                    height={14}
-                    className={`transition-transform duration-150 ${solutionOpen ? 'rotate-180' : ''}`}
-                  />
-                  {solutionOpen ? 'Hide Solution' : 'Reveal Solution'}
-                </Button>
-              </div>
-
-              {/* Hint Box */}
-              {hintOpen ? (
-                <div className="mt-3.5 rounded-xl border border-line bg-surface-2/70 p-4 animate-fade-in">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Hint
-                  </p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-                    {exercise.hint}
-                  </p>
-                </div>
-              ) : null}
-
-              {/* Solution Box */}
-              {solutionOpen ? (
-                <div className="mt-3.5 space-y-3 rounded-xl border border-accent/30 bg-accent-soft/30 p-4 animate-fade-in">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">
-                      Step-by-Step Derivation
-                    </p>
-                    <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-ink font-mono">
-                      {exercise.solution}
-                    </p>
-                  </div>
-                  <div className="border-t border-accent/20 pt-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">
-                      Final Answer
-                    </p>
-                    <p className="mt-0.5 text-[14px] font-semibold text-ink">
-                      {exercise.answer}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-        </section>
+function HistorySection({ event }: { event: HistoryEvent }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-3.5">
+        <VisualMark tone="bg-accent-soft text-accent">
+          <IconCalendar width={18} height={18} />
+        </VisualMark>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-[17px] font-medium leading-snug text-ink">
+              {event.title}
+            </h3>
+            <span className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-2">
+              {event.year}
+            </span>
+          </div>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
+            {event.explanation}
+          </p>
+        </div>
       </div>
 
-      {/* Finite briefing footer */}
-      <footer className="mt-12 border-t border-line pt-6 text-center text-xs text-ink-3">
-        That&apos;s today&apos;s briefing. Come back tomorrow for a new set.
+      <div className="rounded-xl border border-line bg-surface-2/50 p-3.5 sm:ml-12 sm:p-4">
+        <p className="text-[12.5px] leading-relaxed text-ink-2">
+          <strong className="font-medium text-ink">Why it matters:</strong>{' '}
+          {event.significance}
+        </p>
+        {event.url ? (
+          <p className="mt-2 text-[12.5px]">
+            <LinkOut href={event.url}>Read more about this milestone →</LinkOut>
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function LiteratureSection({ item }: { item: LiteratureItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-3.5">
+        <VisualMark tone="bg-warning-soft text-warning">
+          <IconBook width={18} height={18} />
+        </VisualMark>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-medium leading-snug text-ink">
+            {item.title}
+          </h3>
+          <p className="mt-0.5 text-[13px] text-ink-3">
+            by <span className="font-medium text-ink-2">{item.author}</span>
+            {item.eraOrCountry ? ` · ${item.eraOrCountry}` : ''}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-surface-2/40 p-4">
+        <p className="whitespace-pre-line font-serif text-[13.5px] italic leading-relaxed text-ink">
+          {item.passage}
+        </p>
+      </div>
+
+      <p className="text-[13px] leading-relaxed text-ink-2">
+        <strong className="font-medium text-ink">Why read it:</strong>{' '}
+        {item.whyItMatters}
+      </p>
+
+      {item.url ? (
+        <p className="text-sm">
+          <LinkOut href={item.url}>Explore the work →</LinkOut>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
+  const [showSolution, setShowSolution] = useState(false);
+
+  return (
+    <div className="space-y-3.5">
+      <div className="flex gap-3.5">
+        <VisualMark tone="bg-surface-2 text-ink-2">
+          <IconReview width={18} height={18} />
+        </VisualMark>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-[17px] font-medium leading-snug text-ink">
+              {sharpener.title}
+            </h3>
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-accent-ink">
+              {sharpener.subject}
+            </span>
+          </div>
+          <p className="text-[12px] text-ink-3">{sharpener.topic}</p>
+        </div>
+      </div>
+
+      <p className="text-[13.5px] leading-relaxed text-ink">
+        {sharpener.problem}
+      </p>
+
+      {sharpener.givenInfo && sharpener.givenInfo.length > 0 ? (
+        <div className="space-y-1 rounded-xl border border-line/70 bg-surface-2/40 px-3.5 py-2.5 text-[11.5px] text-ink-2">
+          <p className="font-medium text-ink-3">Given information:</p>
+          <ul className="list-inside list-disc space-y-0.5 font-mono text-[11px]">
+            {sharpener.givenInfo.map((info, idx) => (
+              <li key={idx}>{info}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => setShowSolution((v) => !v)}
+          className="gap-1.5"
+        >
+          <IconChevronDown
+            width={14}
+            height={14}
+            className={`transition-transform duration-150 ${showSolution ? 'rotate-180' : ''}`}
+          />
+          {showSolution ? 'Hide solution' : 'Show solution'}
+        </Button>
+      </div>
+
+      {showSolution ? (
+        <div className="space-y-2.5 rounded-xl border border-accent/30 bg-accent-soft/25 p-3.5 animate-fade-in sm:p-4">
+          {sharpener.hint ? (
+            <div className="border-b border-accent/20 pb-2 text-[12px] text-ink-2">
+              <strong className="font-medium text-accent-ink">Hint:</strong>{' '}
+              {sharpener.hint}
+            </div>
+          ) : null}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">
+              Step-by-Step Solution
+            </p>
+            <p className="mt-1 whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink">
+              {sharpener.solution}
+            </p>
+          </div>
+          <div className="border-t border-accent/20 pt-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">
+              Final Answer
+            </p>
+            <p className="mt-0.5 text-[13.5px] font-semibold text-ink">
+              {sharpener.answer}
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function CuriosityScreen({ briefing }: { briefing: CuriosityBriefing }) {
+  return (
+    <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 lg:px-10 lg:py-12">
+      <header className="mb-8 max-w-2xl">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+          Optional learning break
+        </p>
+        <h1 className="text-[26px] font-semibold tracking-tight text-ink">
+          Today&apos;s Curiosity
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-2">
+          A few things worth knowing today. This is a finite briefing, not a feed.
+        </p>
+        <p className="mt-2 text-xs text-ink-3">{briefing.date}</p>
+      </header>
+
+      <div className="space-y-7">
+        {/* 1. Today in History */}
+        {briefing.history ? (
+          <section>
+            <SectionCard label="Today in History">
+              <HistorySection event={briefing.history} />
+            </SectionCard>
+          </section>
+        ) : null}
+
+        {/* 2. AI World (Existing) */}
+        <section>
+          <SectionCard
+            label={
+              <>
+                AI World{' '}
+                <span className="ml-2 font-normal tracking-normal text-ink-3">
+                  up to 10
+                </span>
+              </>
+            }
+          >
+            {briefing.aiWorld && briefing.aiWorld.length ? (
+              briefing.aiWorld.map((item) => (
+                <NewsItem key={`${item.source}-${item.url}`} item={item} />
+              ))
+            ) : (
+              <EmptyState
+                title="No AI updates available right now"
+                hint="Sources could not be reached or had no meaningful recent developments."
+              />
+            )}
+          </SectionCard>
+        </section>
+
+        {/* 3. Developer Radar & One Thing Worth Knowing (Existing) */}
+        <div className="grid gap-7 lg:grid-cols-2">
+          <section className="h-full">
+            <SectionCard
+              label={
+                <>
+                  Developer Radar{' '}
+                  <span className="ml-2 font-normal tracking-normal text-ink-3">
+                    up to 3
+                  </span>
+                </>
+              }
+            >
+              {briefing.developerRadar && briefing.developerRadar.length ? (
+                briefing.developerRadar.map((item) => (
+                  <RadarItem key={item.url} item={item} />
+                ))
+              ) : (
+                <EmptyState
+                  title="Developer Radar is unavailable"
+                  hint="The source could not be reached. No unverified recommendations are shown."
+                />
+              )}
+            </SectionCard>
+          </section>
+
+          <section className="h-full">
+            <SectionCard label="One Thing Worth Knowing">
+              <div className="flex gap-3">
+                <VisualMark>
+                  <IconIdeas width={18} height={18} />
+                </VisualMark>
+                <h3 className="pt-1 text-[17px] font-medium leading-snug text-ink">
+                  {briefing.oneThing.title}
+                </h3>
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-ink-2">
+                {briefing.oneThing.explanation}
+              </p>
+              {briefing.oneThing.url ? (
+                <p className="mt-4 text-sm">
+                  <LinkOut href={briefing.oneThing.url}>
+                    Explore further →
+                  </LinkOut>
+                </p>
+              ) : null}
+            </SectionCard>
+          </section>
+        </div>
+
+        {/* 4. A Few Minutes of Literature & One Book */}
+        <div className="grid gap-7 lg:grid-cols-2">
+          {briefing.literature ? (
+            <section className="h-full">
+              <SectionCard label="A Few Minutes of Literature">
+                <LiteratureSection item={briefing.literature} />
+              </SectionCard>
+            </section>
+          ) : null}
+
+          <section className="h-full">
+            <SectionCard label="One Book">
+              <div className="flex gap-4">
+                <VisualMark tone="bg-warning-soft text-warning">
+                  <IconBook width={18} height={18} />
+                </VisualMark>
+                <div>
+                  <LinkOut href={briefing.book.url}>
+                    <h3 className="text-lg font-medium text-ink">
+                      {briefing.book.title}
+                    </h3>
+                  </LinkOut>
+                  <p className="mt-1 text-sm text-ink-2">
+                    by {briefing.book.author}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-ink-2">
+                {briefing.book.description}
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-2">
+                <strong className="font-medium text-ink">
+                  Why it may help:
+                </strong>{' '}
+                {briefing.book.why}
+              </p>
+            </SectionCard>
+          </section>
+        </div>
+
+        {/* 5. Brain Sharpener & Learn Something */}
+        <div className="grid gap-7 lg:grid-cols-2">
+          {briefing.sharpener ? (
+            <section className="h-full">
+              <SectionCard label="Brain Sharpener">
+                <BrainSharpenerSection sharpener={briefing.sharpener} />
+              </SectionCard>
+            </section>
+          ) : null}
+
+          <section className="h-full">
+            <SectionCard label="Learn Something">
+              <div className="flex gap-3">
+                <VisualMark tone="bg-surface-2 text-ink-2">
+                  <IconReview width={18} height={18} />
+                </VisualMark>
+                <h3 className="pt-1 text-lg font-medium text-ink">
+                  {briefing.learning.topic}
+                </h3>
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-ink-2">
+                {briefing.learning.explanation}
+              </p>
+              {briefing.learning.url ? (
+                <p className="mt-4 text-sm">
+                  <LinkOut href={briefing.learning.url}>
+                    Read a source →
+                  </LinkOut>
+                </p>
+              ) : null}
+            </SectionCard>
+          </section>
+        </div>
+      </div>
+
+      <footer className="mt-10 border-t border-line pt-5 text-center text-sm text-ink-3">
+        That&apos;s today&apos;s briefing.
       </footer>
     </div>
   );

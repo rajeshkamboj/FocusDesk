@@ -1,10 +1,16 @@
 /**
- * Headless check of daily focused time.
+ * Headless check of daily and monthly focused time.
  *
  * Focused time answers one question: how long did FocusDesk's task timers
  * actually run on a given day? It must never be a task's lifetime total
  * (`actualDurationSeconds`) reported again on every day the task was touched,
  * and it must never count a second twice.
+ *
+ * The month summary answers the complementary question: how much timer time
+ * was completed in a month, and on how many distinct local dates? It sums the
+ * completed tasks' own `actualDurationSeconds` (so Start/Pause/Resume
+ * accumulation and pre-session data both count) and counts distinct local
+ * `completedAt` dates — never `scheduledDate`.
  *
  * Part A exercises the pure attribution helpers directly (midnight crossing,
  * DST, rounding). Part B drives the real DataProvider + LocalRepository
@@ -108,6 +114,119 @@ async function main() {
     ];
     const byDay = focusedSecondsByDay(sessions);
     ok(byDay.get(today) === 105 * 60, 'Cases 9 & 10: several runs and several tasks on one day are summed');
+  }
+
+  /* ================================================================== */
+  /* Part A2 — month summary (pure)                                     */
+  /* ================================================================== */
+  console.log('\n— Month summary (pure) —');
+
+  const monthTask = (id: string, completedLocal: string, seconds?: number, extra: Partial<Task> = {}): Task => ({
+    id,
+    title: id,
+    status: 'completed',
+    priority: 'medium',
+    createdAt: completedLocal,
+    tags: [],
+    postponementCount: 0,
+    archived: false,
+    completedAt: completedLocal,
+    actualDurationSeconds: seconds,
+    ...extra,
+  });
+  const october = '2026-10';
+
+  // A completed task with recorded time contributes its accumulated total —
+  // with no timer_sessions rows at all (data recorded before that table
+  // existed must still count).
+  {
+    const m = focusedTimeInMonth({ tasks: [monthTask('a', at('2026-10-02', '14:00'), 1800)] }, october);
+    ok(m.seconds === 1800 && m.daysWorked === 1,
+       'A completed task with actualDurationSeconds contributes its focused time, with no session rows');
+  }
+
+  // Five completions on one date are ONE worked day; different dates count
+  // separately.
+  {
+    const m = focusedTimeInMonth({
+      tasks: [
+        monthTask('a', at('2026-10-02', '10:00'), 1800),
+        monthTask('b', at('2026-10-04', '09:00'), 600),
+        monthTask('c', at('2026-10-04', '15:00'), 300),
+        monthTask('d', at('2026-10-04', '18:00'), 120),
+      ],
+    }, october);
+    ok(m.seconds === 2820 && m.daysWorked === 2,
+       'Several completions on one date count as one day worked; other dates count separately');
+  }
+
+  // Month boundary: neighbouring months never leak in.
+  {
+    const data = {
+      tasks: [
+        monthTask('a', at('2026-10-02', '10:00'), 1800),
+        monthTask('sep', at('2026-09-28', '10:00'), 7200),
+        monthTask('nov', at('2026-11-03', '10:00'), 3600),
+      ],
+    };
+    const oct = focusedTimeInMonth(data, october);
+    ok(oct.seconds === 1800 && oct.daysWorked === 1, 'October counts only October completions');
+    ok(focusedTimeInMonth(data, '2026-09').seconds === 7200, 'September activity stays in September');
+    ok(focusedTimeInMonth(data, '2026-11').seconds === 3600, 'November activity stays in November');
+  }
+
+  // completedAt decides the month — never scheduledDate.
+  {
+    const m = focusedTimeInMonth(
+      { tasks: [monthTask('a', at('2026-10-04', '10:00'), 900, { scheduledDate: '2026-09-30' })] },
+      october,
+    );
+    ok(m.seconds === 900 && m.daysWorked === 1,
+       'A task scheduled in September but completed in October belongs to October (completedAt, not scheduledDate)');
+    ok(focusedTimeInMonth({ tasks: [monthTask('a', at('2026-10-04', '10:00'), 900, { scheduledDate: '2026-09-30' })] }, '2026-09').seconds === 0,
+       '…and September does not count it');
+  }
+
+  // Local calendar dates, never UTC slices of completedAt: a completion at
+  // 23:30 local on Oct 31 is an October day even where its UTC instant is
+  // Nov 1; a completion at 00:30 local on Nov 1 is November even where its
+  // UTC instant is still Oct 31.
+  {
+    const data = {
+      tasks: [
+        monthTask('late', at('2026-10-31', '23:30'), 600),
+        monthTask('early', at('2026-11-01', '00:30'), 300),
+      ],
+    };
+    const oct = focusedTimeInMonth(data, october);
+    ok(oct.seconds === 600 && oct.daysWorked === 1,
+       'A completion at 23:30 local on Oct 31 belongs to October (local date, not UTC)');
+    ok(focusedTimeInMonth(data, '2026-11').seconds === 300 && focusedTimeInMonth(data, '2026-11').daysWorked === 1,
+       'A completion at 00:30 local on Nov 1 belongs to November (local date, not UTC)');
+  }
+
+  // Only completed, non-archived tasks count.
+  {
+    const m = focusedTimeInMonth({
+      tasks: [
+        monthTask('open', at('2026-10-02', '10:00'), 1800, { status: 'in_progress' }),
+        monthTask('archived', at('2026-10-02', '11:00'), 600, { archived: true }),
+        monthTask('broken', 'not-a-timestamp', 999),
+      ],
+    }, october);
+    ok(m.seconds === 0 && m.daysWorked === 0,
+       'Open, archived and damaged records contribute nothing');
+  }
+
+  // A completion without the timer still marks its day as worked — with 0
+  // focused seconds, and never its planned/estimated duration.
+  {
+    const m = focusedTimeInMonth(
+      { tasks: [monthTask('notimed', at('2026-10-02', '10:00'), undefined, { estimatedDuration: 45 })] },
+      october,
+    );
+    ok(m.seconds === 0 && m.daysWorked === 1,
+       'A completion without the timer counts as a worked day with 0 focused seconds — never the estimate');
   }
 
   /* ================================================================== */
@@ -268,11 +387,11 @@ async function main() {
      'The breakdown adds up to the day headline');
   ok(breakdown.byTask[0].seconds >= breakdown.byTask[1].seconds, 'The breakdown is ordered by time spent');
 
-  const month = focusedTimeInMonth(c().data, monthKey(today), Date.now());
-  const expectedDays = new Set([yesterday, today].filter((d) => monthKey(d) === monthKey(today) && dayTotal(d) > 0));
-  ok(month.daysWorked === expectedDays.size, `Month summary counts ${expectedDays.size} day(s) worked`);
-  ok(month.seconds === [...expectedDays].reduce((sum, d) => sum + dayTotal(d), 0),
-     'Month summary equals the sum of its days');
+  const month = focusedTimeInMonth(c().data, monthKey(today));
+  ok(month.daysWorked === 1,
+     'Month summary counts one day worked — the day the task was completed (completedAt), not every day it ran');
+  ok(month.seconds === taskTotal,
+     'Month summary sums the completed task’s accumulated Start/Pause/Resume total exactly once');
   ok(formatFocusedTime(4 * 3600 + 37 * 60) === '4h 37m' && formatFocusedTime(48 * 60) === '48 min',
      'Focused time reuses the existing duration formatting');
 
@@ -337,7 +456,7 @@ async function main() {
 
   const monthBlock = host!.querySelector('[data-focused-month]');
   const monthText = monthBlock?.textContent ?? '';
-  const monthStats = focusedTimeInMonth(c().data, monthKey(today), Date.now());
+  const monthStats = focusedTimeInMonth(c().data, monthKey(today));
   ok(monthBlock !== null && /Focused time/.test(monthText) && /Days worked/.test(monthText),
      'The month summary shows "Focused time" and "Days worked"');
   ok(monthText.includes(formatFocusedTime(monthStats.seconds)) && monthText.includes(String(monthStats.daysWorked)),

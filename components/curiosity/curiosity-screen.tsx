@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { DailyIllustration } from './daily-illustration';
 import { useLocalDate } from '@/lib/use-local-date';
 import { Card, EmptyState } from '@/components/ui/card';
 import { SectionTitle } from '@/components/layout/page-header';
@@ -113,17 +112,14 @@ function RadarItem({ item }: { item: DeveloperDiscovery }) {
 function SectionCard({
   label,
   className = '',
-  illustration,
   children,
 }: {
   label: React.ReactNode;
   className?: string;
-  illustration?: 'history' | 'literature' | 'sharpener';
   children: React.ReactNode;
 }) {
   return (
-    <Card className={`relative isolate flex h-full min-w-0 flex-col overflow-hidden p-4 sm:p-6 ${illustration ? `daily-${illustration}` : ''} ${className}`}>
-      {illustration ? <DailyIllustration kind={illustration} /> : null}
+    <Card className={`relative isolate flex h-full min-w-0 flex-col overflow-hidden p-4 sm:p-6 ${className}`}>
       <div className="relative"><SectionTitle>{label}</SectionTitle></div>
       <div className="relative mt-3.5">{children}</div>
     </Card>
@@ -330,11 +326,11 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         {/* 1. Today in History */}
         {briefing.history ? (
           <section>
-            <SectionCard label="Today in History" illustration="history">
+            <SectionCard label="Today in History">
               <HistorySection event={briefing.history} />
             </SectionCard>
           </section>
-        ) : (<SectionCard label="Today in History" illustration="history"><p className="text-sm text-ink-2">Today’s historical source is temporarily unavailable. Please check back later.</p></SectionCard>)}
+        ) : (<SectionCard label="Today in History"><p className="text-sm text-ink-2">Today’s historical source is temporarily unavailable. Please check back later.</p></SectionCard>)}
 
         {/* 2. AI World (Existing) */}
         <section>
@@ -415,7 +411,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         <div className="grid gap-7 lg:grid-cols-2">
           {briefing.literature ? (
             <section className="h-full">
-              <SectionCard label="A Few Minutes of Literature" illustration="literature">
+              <SectionCard label="A Few Minutes of Literature">
                 <LiteratureSection item={briefing.literature} />
               </SectionCard>
             </section>
@@ -455,7 +451,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         <div className="grid gap-7 lg:grid-cols-2">
           {briefing.sharpener ? (
             <section className="h-full">
-              <SectionCard label="Brain Sharpener" illustration="sharpener">
+              <SectionCard label="Brain Sharpener">
                 <BrainSharpenerSection key={`${briefing.date}-${briefing.sharpener.id}`} sharpener={briefing.sharpener} />
               </SectionCard>
             </section>

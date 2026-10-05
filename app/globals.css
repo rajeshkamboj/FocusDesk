@@ -118,19 +118,6 @@ body {
 
 .quote-card { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
 
-/* The quote card's artwork is a real photograph in its own absolutely positioned
-   layer, not a CSS illustration and not part of the text flow. Two flat washes
-   keep it low-contrast: the photo's own opacity, then one veil of the card's own
-   surface colour, so it reads as a surface the quote is printed on rather than
-   a picture floating above the words. */
-.quote-card__art { opacity: .18; }
-.quote-card__veil { background-color: var(--surface); opacity: .55; }
-[data-theme="dark"] .quote-card__art { opacity: .2; }
-[data-theme="dark"] .quote-card__veil { opacity: .58; }
-.daily-history { background: linear-gradient(135deg, var(--surface) 35%, var(--warning-soft)); }
-.daily-literature { background: linear-gradient(135deg, var(--surface) 35%, var(--accent-soft)); }
-.daily-sharpener { background: linear-gradient(135deg, var(--surface) 35%, var(--surface-2)); }
-
 input,
 textarea,
 select,

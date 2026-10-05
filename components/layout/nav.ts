@@ -27,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/calendar', label: 'Calendar', icon: IconCalendar },
   { href: '/review', label: 'Review', icon: IconReview },
   { href: '/ideas', label: 'Ideas', icon: IconIdeas },
-  { href: '/curiosity', label: 'Curious', icon: IconCuriosity },
+  { href: '/curiosity', label: 'Curiosity', icon: IconCuriosity },
   { href: '/settings', label: 'Settings', icon: IconSettings },
 ];
 

@@ -20,12 +20,13 @@ async function main() {
   };
   const shots = '.next/ui-verification';
   fs.mkdirSync(shots, { recursive: true });
-  await visit('today');
-  assert.equal(await page.getByRole('progressbar').getAttribute('aria-valuenow'), '0');
+  await visit('curiosity');
   const quote = await page.locator('blockquote').innerText();
   await page.reload();
   await page.locator('blockquote').waitFor();
   assert.equal(await page.locator('blockquote').innerText(), quote);
+  await visit('today');
+  assert.equal(await page.getByRole('progressbar').getAttribute('aria-valuenow'), '0');
   await visit('settings');
   await page.getByLabel('Your name', { exact: true }).fill('  Rajesh  ');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

@@ -11,81 +11,91 @@ import type { ISODate, WellbeingHabit } from '@/lib/types';
  *
  * Two habits, four check-ins, no streaks, no scores. It stays visually
  * secondary to Today's Priority and the task list on purpose.
- *
- * The check-in definitions, the Checkin control and the whole card body are
- * exported so the Review page can show (and correct) the exact same four
- * check-ins for past days.
- *
- * Layout: the card body is a container query context, so it lays itself out
- * from the space it is actually given rather than from the viewport. Wide
- * enough (the full-width card on Today below 2xl, and on Review) and
- * everything sits on one compact row; narrow (the 264px sidebar on very wide
- * screens, or any phone) and it falls back to the original stacked list.
  */
 
 export interface CheckinDef {
   habit: WellbeingHabit;
   label: string;
+  icon?: string;
+  ariaLabel?: string;
 }
 
-export const JOGGING: CheckinDef = { habit: 'jogging', label: 'Jogging' };
+export const JOGGING: CheckinDef = { habit: 'jogging', label: 'Jogging', icon: '🏃', ariaLabel: 'Jogging' };
 
 export const NITNEM: CheckinDef[] = [
-  { habit: 'nitnemMorning', label: 'Morning' },
-  { habit: 'nitnemEvening', label: 'Evening' },
-  { habit: 'nitnemNight', label: 'Night' },
+  { habit: 'nitnemMorning', label: 'Morning', icon: '🌅', ariaLabel: 'Nitnem Morning' },
+  { habit: 'nitnemEvening', label: 'Evening', icon: '🌆', ariaLabel: 'Nitnem Evening' },
+  { habit: 'nitnemNight', label: 'Night', icon: '🌃', ariaLabel: 'Nitnem Night' },
 ];
 
 export const ALL_CHECKINS: CheckinDef[] = [JOGGING, ...NITNEM];
 
+export function CheckinBox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border transition-all duration-150 ${
+        checked
+          ? 'border-accent bg-accent text-white'
+          : 'border-line-strong bg-surface group-hover:border-ink-3'
+      }`}
+    >
+      {checked ? (
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m5 12 5 5L20 7" />
+        </svg>
+      ) : null}
+    </span>
+  );
+}
+
 /**
- * One check-in: the whole control is the tap target. Full-width row when the
- * card is narrow, a compact inline chip once there is room for a single row.
+ * Backward compatible Checkin component.
  */
-export function Checkin({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+export function Checkin({
+  label,
+  checked,
+  onToggle,
+  icon,
+  ariaLabel,
+}: {
+  label?: string;
+  checked: boolean;
+  onToggle: () => void;
+  icon?: string;
+  ariaLabel?: string;
+}) {
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={ariaLabel ?? label}
       onClick={onToggle}
-      className="group flex w-full min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-150 hover:bg-surface-2 @md:w-auto @md:shrink-0 @md:gap-2 @md:px-2"
+      className="group inline-flex min-w-0 items-center gap-1.5 rounded-lg py-1 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
     >
-      <span
-        aria-hidden="true"
-        className={`flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150 ${
-          checked
-            ? 'border-accent/60 bg-accent-soft text-accent-ink'
-            : 'border-line-strong bg-surface group-hover:border-ink-3'
-        }`}
-      >
-        {checked ? (
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m5 12 5 5L20 7" />
-          </svg>
-        ) : null}
-      </span>
-      <span className={`text-[13.5px] leading-snug ${checked ? 'text-ink-2' : 'text-ink'}`}>{label}</span>
+      {icon ? <span className="text-[14px] leading-none select-none" aria-hidden="true">{icon}</span> : null}
+      {label ? (
+        <span className={`text-[12px] font-medium leading-none sm:text-[13px] ${checked ? 'text-ink-2' : 'text-ink'}`}>
+          {label}
+        </span>
+      ) : null}
+      <CheckinBox checked={checked} />
     </button>
   );
 }
 
-/** A hairline separator between groups — only drawn in the one-row layout. */
-function RowDivider() {
-  return <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-line @md:block" />;
-}
-
 /**
- * The four check-ins plus the "n of 4 completed" count, for one day.
+ * The four check-ins plus the "n/4" count, for one day.
  * `date` is passed straight through to the existing toggle action — omitted
  * on Today (which means "today"), explicit on Review.
  */
@@ -95,46 +105,71 @@ export function WellbeingChecklist({ date, headingId }: { date?: ISODate; headin
   const completed = wellbeingCompletedCount(day);
 
   return (
-    <div className="@container">
-      <div className="flex flex-col @md:flex-row @md:flex-wrap @md:items-center @md:gap-x-3 @md:gap-y-1">
+    <div>
+      {/* Top row: Section title & count */}
+      <div className="flex items-center justify-between">
         <h2
           id={headingId}
-          className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3 @md:shrink-0 @md:px-0"
+          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3"
         >
           Daily well-being
         </h2>
+        <span
+          className="text-[11px] font-medium tabular-nums text-ink-3"
+          aria-label={`${completed} of ${ALL_CHECKINS.length} completed`}
+        >
+          <span>{completed}/{ALL_CHECKINS.length}</span>
+          <span className="sr-only"> {completed} of {ALL_CHECKINS.length} completed</span>
+        </span>
+      </div>
 
-        <RowDivider />
+      {/* Main check-ins row: single row on mobile and desktop */}
+      <div className="mt-3 flex items-center justify-between gap-1 sm:justify-start sm:gap-3.5">
+        {/* Jogging group */}
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={day?.jogging ?? false}
+          aria-label="Jogging"
+          onClick={() => void actions.toggleWellbeing(JOGGING.habit, date)}
+          className="group inline-flex shrink-0 items-center gap-1.5 rounded-lg py-0.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+        >
+          <span className="text-[14px] leading-none select-none" aria-hidden="true">🏃</span>
+          <span className={`text-[12px] font-medium leading-none sm:text-[12.5px] ${day?.jogging ? 'text-ink-2' : 'text-ink'}`}>
+            Jogging
+          </span>
+          <CheckinBox checked={day?.jogging ?? false} />
+        </button>
 
-        <div className="mt-2.5 @md:mt-0 @md:shrink-0">
-          <Checkin
-            label={JOGGING.label}
-            checked={day?.jogging ?? false}
-            onToggle={() => void actions.toggleWellbeing(JOGGING.habit, date)}
-          />
-        </div>
+        {/* Vertical divider */}
+        <div aria-hidden="true" className="h-4 w-px shrink-0 bg-line mx-0.5 sm:mx-1" />
 
-        <RowDivider />
+        {/* Nitnem group */}
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
+          <span className="text-[11.5px] font-medium text-ink-3 sm:text-[12px]">
+            Nitnem
+          </span>
 
-        <div className="mt-2.5 @md:mt-0 @md:flex @md:min-w-0 @md:items-center @md:gap-1.5">
-          <p className="px-1.5 text-[12.5px] font-medium text-ink-2 @md:shrink-0 @md:px-0">
-            Nitnem<span className="hidden @md:inline">:</span>
-          </p>
-          <div className="mt-0.5 space-y-0.5 pl-7 @md:mt-0 @md:flex @md:flex-wrap @md:items-center @md:gap-x-1 @md:space-y-0 @md:pl-0">
-            {NITNEM.map((item) => (
-              <Checkin
-                key={item.habit}
-                label={item.label}
-                checked={day?.[item.habit] ?? false}
-                onToggle={() => void actions.toggleWellbeing(item.habit, date)}
-              />
-            ))}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {NITNEM.map((item) => {
+              const checked = day?.[item.habit] ?? false;
+              return (
+                <button
+                  key={item.habit}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={item.ariaLabel ?? `Nitnem ${item.label}`}
+                  onClick={() => void actions.toggleWellbeing(item.habit, date)}
+                  className="group inline-flex shrink-0 items-center gap-1 rounded-lg py-0.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                >
+                  <span className="text-[14px] leading-none select-none" aria-hidden="true">{item.icon}</span>
+                  <CheckinBox checked={checked} />
+                </button>
+              );
+            })}
           </div>
         </div>
-
-        <p className="mt-3.5 border-t border-line pt-3 text-[11px] tabular-nums text-ink-3 @md:mt-0 @md:ml-auto @md:shrink-0 @md:border-0 @md:pt-0 @md:pl-3">
-          {completed} of {ALL_CHECKINS.length} completed
-        </p>
       </div>
     </div>
   );
@@ -144,7 +179,7 @@ export function WellbeingCard() {
   return (
     <section
       aria-labelledby="wellbeing-heading"
-      className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card"
+      className="rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:px-5 sm:py-4"
     >
       <WellbeingChecklist headingId="wellbeing-heading" />
     </section>

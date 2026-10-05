@@ -77,7 +77,7 @@ export function TodayScreen() {
   const dayName = weekdayName(today);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10 2xl:max-w-6xl">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 2xl:max-w-6xl">
       {/* Header */}
       <header className="mb-8">
         <div className="flex flex-wrap items-end justify-between gap-4">

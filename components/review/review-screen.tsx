@@ -16,7 +16,7 @@ export function ReviewScreen() {
   const [day, setDay] = useState<ISODate>(todayISO());
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Review"
         subtitle="Facts about what happened — daily, weekly and monthly. No scores, no judgment."

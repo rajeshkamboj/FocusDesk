@@ -30,7 +30,20 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="animate-rise-in flex flex-col items-center justify-center rounded-2xl border border-dashed border-line px-6 py-12 text-center">
+    /*
+     * Natural content height, deliberately not a centred hero.
+     *
+     * `justify-center` is gone: with no height to distribute it did nothing
+     * here, but it invited exactly the fix this card must not have — stretching
+     * the empty state down the viewport. The card ends where its content ends
+     * and the page simply stays short.
+     *
+     * The mobile padding is `py-8` rather than `py-12` so the block of empty
+     * space under it (page padding + the shell's bottom-nav clearance) reads
+     * as breathing room instead of a gap. `sm:` restores the original
+     * desktop proportions.
+     */
+    <div className="animate-rise-in flex flex-col items-center rounded-2xl border border-dashed border-line px-5 py-8 text-center sm:px-6 sm:py-12">
       {icon ? <div className="mb-3 text-ink-3">{icon}</div> : null}
       <p className="text-[15px] font-medium text-ink">{title}</p>
       {hint ? <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-ink-3">{hint}</p> : null}

@@ -11,6 +11,11 @@ The app ships with **zero predefined content**: you create every project, goal, 
 Today · Inbox · Tasks · Projects · Goals · Calendar · Review (daily / weekly / monthly planning) · Ideas · Settings
 Plus: Focus Mode (🔥 Start Priority), a quiet task timer (start/pause/finish — stores actual time next to the estimate), global quick capture (**Ctrl + Shift + Space**), postponement tracking, task history, light/dark/system theme and JSON export/import.
 
+### Focused time
+The Calendar shows **focused time** per day (with an optional per-task breakdown) and a two-line monthly summary. It is exactly *the amount of time recorded by FocusDesk task timers* — not a claim about every minute you worked, which is why it is never called "work hours".
+
+It is attributed from **timer sessions**: one record per continuous run of the timer, between a Start/Resume and the next Pause/Finish. A task's `actualDurationSeconds` stays what it always was — its lifetime total — so a task worked 45 min on Monday and 30 min on Tuesday reports 45 m and 30 m on the right days instead of 1 h 15 m on both. A run that crosses midnight is stored as the single run it was and split across the two local calendar days when read, so nothing is double counted. Paused time is never part of a run, and closing the app stops a run at the same durable checkpoint the task itself recovers to.
+
 ## Local setup
 ```bash
 npm install
@@ -39,7 +44,7 @@ npm run build && npm start
 
 ## Supabase setup
 1. Create a project, open the SQL editor and run `supabase/schema.sql`.
-2. Apply the idempotent migrations in `supabase/migrations/` in order for both new and existing databases. In particular, `003_task_timer.sql` adds task-timer columns, `004_daily_wellbeing.sql` creates the user-scoped `wellbeing_days` table, and `005_task_subtasks.sql` creates the user-scoped `subtasks` table with RLS.
+2. Apply the idempotent migrations in `supabase/migrations/` in order for both new and existing databases. In particular, `003_task_timer.sql` adds task-timer columns, `004_daily_wellbeing.sql` creates the user-scoped `wellbeing_days` table, `005_task_subtasks.sql` creates the user-scoped `subtasks` table with RLS, and `006_timer_sessions.sql` creates the user-scoped `timer_sessions` table that makes daily focused time possible (the migration explains why the pre-existing columns could not answer it). Time recorded before that migration has no day information anywhere, so it is deliberately not backfilled — daily focused time starts accumulating from the first run recorded afterwards.
 3. Copy the project URL and anon key into the env vars.
 4. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
 
@@ -64,6 +69,25 @@ Open the deployed site in Chrome or Edge and click **Install** in the address ba
 ```bash
 npm i --no-save jsdom tsx && npx tsx scripts/verify-workflow.tsx
 ```
+
+`scripts/verify-focused-time.tsx` checks daily focused time end to end — midnight crossing, pause/resume, close/reopen, several runs per task, several tasks per day, and what the Calendar renders. Days are **local** days, so run it in more than one timezone:
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-focused-time.tsx
+TZ=Asia/Kolkata     npx tsx scripts/verify-focused-time.tsx
+TZ=America/New_York npx tsx scripts/verify-focused-time.tsx
+```
+
+`scripts/verify-priority-input.tsx` checks the Today's Priority field: the mobile sizing contract (border-box, 100% width, ~48px touch height, 14–16px padding, responsive font), the single-border/single-focus rule, and that focus → type → submit still works. It also reads the compiled stylesheet, so run a build first:
+```bash
+npm run build && npx tsx scripts/verify-priority-input.tsx
+```
+
+`scripts/verify-mobile-layout.tsx` is a headless layout audit. It reads the compiled Tailwind stylesheet out of `.next/`, resolves every class on every rendered element for a given viewport width (honouring the `sm:`/`md:`/`lg:` media blocks and stylesheet source order), and runs a CSS intrinsic-sizing pass — `min` and `max-content` per element, combined with the real flex/grid rules — over every screen in both its empty and populated state. It fails if any page forces the document wider than 320 / 360 / 390 / 430px, and prints the chain of elements that explains the excess. It also asserts the things that must stay true: no global `overflow-x: hidden`, the Tasks filter strip scrolls inside itself rather than scrolling the page, the empty state is not vertically centred, and the desktop widths and paddings are unchanged. Run a build first:
+```bash
+npm run build && npx tsx scripts/verify-mobile-layout.tsx
+WIDTHS=300,320 npx tsx scripts/verify-mobile-layout.tsx   # probe other widths
+```
+Text is measured from a per-character advance table, not a real font, so text-derived numbers are estimates — it is precise about declared widths, padding, gaps and the flex/grid rules, which is where layout overflow actually comes from.
 
 `scripts/verify-review-stats.ts` checks the Review date semantics in isolation — completed work is dated by `completedAt` (when the work actually happened), planned work by `scheduledDate` (when it was meant to happen). No DOM needed, and it is worth running in more than one timezone since completion is matched on the **local** calendar day:
 ```bash

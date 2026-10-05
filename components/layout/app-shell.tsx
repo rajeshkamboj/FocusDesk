@@ -42,7 +42,15 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh">
       <Sidebar />
       <MobileNav />
-      <main className="pb-24 lg:pb-0 lg:pl-[248px]">
+      {/*
+        Bottom clearance derived from the bar it has to clear, not guessed.
+        MobileNav is `h-16` (4rem) plus `pb-[env(safe-area-inset-bottom)]`, so
+        4rem + the inset is the exact overlap and the extra 1rem is the gap.
+        The old flat `pb-24` was both too much on an ordinary phone (96px of
+        dead space under every short page) and too little on a device with a
+        home indicator, where the bar grows past 96px and clipped the last row.
+      */}
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-[248px]">
         {!ready ? (
           <div className="flex min-h-dvh items-center justify-center">
             <div className="h-6 w-6 animate-pulse rounded-full border-2 border-line-strong border-t-accent" />

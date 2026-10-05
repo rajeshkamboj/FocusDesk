@@ -124,7 +124,7 @@ export function TasksScreen() {
   const activeGoals = data.goals.filter((g) => g.status !== 'archived');
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Tasks"
         subtitle="Everything you have committed to — planned, in progress, waiting or done."
@@ -136,31 +136,59 @@ export function TasksScreen() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-2.5">
+      {/*
+        Filters, in two stacked bands rather than one wrapping flex row.
+
+        The old row put the seven-item segmented control and the three
+        search/scope controls in the same `flex flex-wrap`. On a desktop the
+        two groups always wrapped onto separate lines anyway, so the layout
+        below looks the same there — but on a phone the row was the single
+        worst source of horizontal page scroll: the segmented control is
+        ~630px of min-content that a flex item will not shrink past, and the
+        `w-44`/`w-40` controls were desktop widths with no mobile fallback.
+
+        Now the segmented control scrolls inside itself (see Tabs), and the
+        three controls go fluid: full-width search, then the two scope
+        selects side by side, so a 320px screen still shows them on two tidy
+        lines instead of three right-aligned stubs.
+      */}
+      <div className="mb-5 space-y-2.5">
         <Tabs items={FILTERS} active={filter} onChange={(id) => setFilter(id as FilterId)} />
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tasks…"
-            className="h-10 w-44 sm:w-52"
-          />
-          <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-10 w-40">
-            <option value="">All projects</option>
-            {activeProjects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          <Select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} className="h-10 w-40">
-            <option value="">All goals</option>
-            {activeGoals.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </Select>
+
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          {/* Width lives on the wrapper, never on the control: the control
+              itself stays `w-full` so it simply fills whatever box it is
+              given — fluid below `sm`, the original fixed width above it. */}
+          <div className="min-w-0 sm:w-52">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search tasks…"
+              className="h-10"
+            />
+          </div>
+          <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:flex sm:items-center">
+            <div className="min-w-0 sm:w-40">
+              <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-10">
+                <option value="">All projects</option>
+                {activeProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="min-w-0 sm:w-40">
+              <Select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} className="h-10">
+                <option value="">All goals</option>
+                {activeGoals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -194,7 +222,7 @@ export function TasksScreen() {
         </div>
       )}
 
-      <p className="mt-10 text-center text-[11px] text-ink-3">
+      <p className="mt-8 text-center text-[11px] text-ink-3 sm:mt-10">
         Week {isoWeekKey(today).split('-W')[1]} · {filtered.length} task{filtered.length === 1 ? '' : 's'} in view ·{' '}
         {data.tasks.filter((t) => t.scheduledDate === tomorrow && t.status !== 'completed').length} planned for tomorrow
       </p>

@@ -48,7 +48,7 @@ export function ProjectsScreen() {
   }, [data.projects, filter]);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Projects"
         subtitle="Group related work toward an outcome. Projects are yours to define — nothing is predefined."

@@ -21,7 +21,7 @@
  *                      completed (actualDurationSeconds finalized)
  */
 
-import type { Task } from './types';
+import type { ID, ISODateTime, Task, TimerSessionInput } from './types';
 
 /** The task's timer is currently accumulating time. */
 export function isTimerRunning(task: Task): boolean {
@@ -138,4 +138,67 @@ export function settleTimingPatch(task: Task, nowMs: number = Date.now()): Parti
     return { startedAt: undefined, pausedAt: undefined };
   }
   return {};
+}
+
+/* ------------------------------------------------------------------ */
+/* Timer sessions — day attribution, built on the same timestamps      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The run of the timer a task is currently writing into.
+ *
+ * This is the only piece of session state kept in memory. It is a bookmark,
+ * not a second timer: the authoritative numbers still come from the task's
+ * own `startedAt` / `actualDurationSeconds`, and `baseSeconds` is simply what
+ * the task's total already was when this run began. Credited session time is
+ * therefore always `task.actualDurationSeconds − baseSeconds`, which can
+ * never exceed the task total and can never be counted twice.
+ *
+ * It is deliberately not persisted: a page that dies mid-run is recovered by
+ * `interruptedTimerPatch`, which stops the task at its last durable
+ * checkpoint — and the session row was written by that same checkpoint, so
+ * both land on exactly the same second.
+ */
+export interface OpenTimerSession {
+  taskId: ID;
+  /** When this run of the timer began. */
+  startedAt: ISODateTime;
+  /** `actualDurationSeconds` the task already held when the run began. */
+  baseSeconds: number;
+  /** Row id, once the run has credited at least one whole second. */
+  id?: ID;
+  /** Duration last written, so unchanged checkpoints write nothing. */
+  writtenSeconds?: number;
+}
+
+/** Open a session bookmark for a run that just started at `startedAt`. */
+export function openTimerSession(task: Task, startedAt: ISODateTime): OpenTimerSession {
+  return { taskId: task.id, startedAt, baseSeconds: Math.max(0, Math.floor(task.actualDurationSeconds ?? 0)) };
+}
+
+/**
+ * Whole seconds this run has credited, given the task's current total.
+ * Clamped at zero so a rollback or an out-of-order write can never produce a
+ * negative session.
+ */
+export function sessionCreditedSeconds(open: OpenTimerSession, taskTotalSeconds: number): number {
+  return Math.max(0, Math.floor(taskTotalSeconds) - open.baseSeconds);
+}
+
+/**
+ * The row for an open run at its current credited duration.
+ *
+ * `endedAt` is anchored to `startedAt + duration`, not to the wall clock:
+ * a run is continuous by construction (a pause ends it), so the credited
+ * interval is exactly `[startedAt, startedAt + duration]`. Anchoring keeps
+ * the stored span and the stored duration identical, which is what makes
+ * splitting a midnight-crossing run across two days exact.
+ */
+export function timerSessionInput(open: OpenTimerSession, durationSeconds: number): TimerSessionInput {
+  const startedMs = Date.parse(open.startedAt);
+  const duration = Math.max(0, Math.floor(durationSeconds));
+  const endedAt = Number.isNaN(startedMs)
+    ? open.startedAt
+    : new Date(startedMs + duration * 1000).toISOString();
+  return { taskId: open.taskId, startedAt: open.startedAt, endedAt, durationSeconds: duration };
 }

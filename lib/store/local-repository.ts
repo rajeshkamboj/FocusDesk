@@ -22,6 +22,8 @@ import type {
   Task,
   TaskHistoryEntry,
   TaskInput,
+  TimerSession,
+  TimerSessionInput,
   WeeklyPriority,
   WellbeingDay,
   WellbeingDayInput,
@@ -128,6 +130,7 @@ export class LocalRepository implements AppRepository {
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
   wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
+  timerSessions: EntityRepository<TimerSession, TimerSessionInput>;
 
   constructor(storage: StorageLike | null = browserStorage()) {
     this.storage = storage ?? memoryStorage();
@@ -293,6 +296,27 @@ export class LocalRepository implements AppRepository {
         nitnemNight: input.nitnemNight ?? false,
       }),
     );
+
+    this.timerSessions = new Collection<TimerSession, TimerSessionInput>(
+      () => this.data,
+      'timerSessions',
+      persist,
+      (input) => ({
+        id: createId(),
+        taskId: input.taskId,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        durationSeconds: Math.max(0, Math.floor(input.durationSeconds)),
+      }),
+      (session, patch) => ({
+        ...session,
+        ...patch,
+        durationSeconds:
+          patch.durationSeconds !== undefined
+            ? Math.max(0, Math.floor(patch.durationSeconds))
+            : session.durationSeconds,
+      }),
+    );
   }
 
   private read(): AppData {
@@ -373,6 +397,7 @@ export class LocalRepository implements AppRepository {
       monthlyPriorities: data.monthlyPriorities ?? [],
       taskHistory: data.taskHistory ?? [],
       wellbeingDays: data.wellbeingDays ?? [],
+      timerSessions: data.timerSessions ?? [],
       settings: {
         general: { ...base.settings.general, ...data.settings?.general },
         notifications: { ...base.settings.notifications, ...data.settings?.notifications },

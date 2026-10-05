@@ -130,6 +130,39 @@ button {
 }
 
 /* ------------------------------------------------------------------ */
+/* Contained horizontal scrolling                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A strip that scrolls sideways *inside itself* — never the document.
+ *
+ * Some controls are legitimately wider than a 320px phone (the seven-item
+ * Tasks filter), and the honest fix is to let that one control scroll rather
+ * than shrink its text or push the page sideways. Three things make that true:
+ *
+ *   overflow-x: auto          the strip owns the scroll, so the <body> never
+ *                             gains a horizontal scrollbar;
+ *   overscroll-behavior-x     a swipe that runs out of strip stops there
+ *     : contain;              instead of chaining to the page;
+ *   scrollbar-width: none     the affordance is the half-visible next item,
+ *                             not a grey bar under a rounded pill. The strip
+ *                             stays keyboard reachable (focusing a button
+ *                             scrolls it into view) and swipeable on touch.
+ *
+ * Pair it with `min-w-0` on the strip whenever it sits inside a flex parent —
+ * without that, a flex item refuses to shrink below its content.
+ */
+.scroll-strip {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.scroll-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
 /* Motion                                                              */
 /* ------------------------------------------------------------------ */
 

@@ -87,7 +87,7 @@ export function WeeklyReview() {
               value={primaryDraft}
               onChange={(e) => setPrimaryDraft(e.target.value)}
               placeholder="What is the one thing that matters most this week?"
-              className="h-11 flex-1 rounded-xl border border-line bg-surface px-4 text-[15px] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-4 text-[15px] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
             />
             <Button type="submit" variant="primary" disabled={!primaryDraft.trim()}>
               Set Priority
@@ -125,7 +125,7 @@ export function WeeklyReview() {
             value={otherDraft}
             onChange={(e) => setOtherDraft(e.target.value)}
             placeholder="Another priority for this week…"
-            className="h-10 flex-1 rounded-xl border border-line bg-surface px-3.5 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
           <Button type="submit" variant="secondary" disabled={!otherDraft.trim()}>
             <IconPlus width={15} height={15} />
@@ -183,14 +183,14 @@ export function WeeklyReview() {
                 <p className="text-[13px] font-medium text-ink">Projects worked on</p>
                 <div className="mt-2 space-y-2">
                   {stats.projectsWorkedOn.map(({ project, completed, focusedSeconds }) => (
-                    <div key={project.id} className="flex items-center gap-3">
-                      <span className="w-40 truncate text-[13px] text-ink-2">{project.name}</span>
+                    <div key={project.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="w-full truncate text-[13px] text-ink-2 sm:w-40">{project.name}</span>
                       <ProgressBar
                         done={completed}
                         total={Math.max(completed, data.tasks.filter((t) => t.projectId === project.id).length)}
-                        className="max-w-40"
+                        className="min-w-0 flex-1 sm:max-w-40"
                       />
-                      <span className="text-[11px] tabular-nums text-ink-3">
+                      <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
                         {completed} done
                         {focusedSeconds > 0 ? ` · ${formatFocusedTime(focusedSeconds)}` : ''}
                       </span>

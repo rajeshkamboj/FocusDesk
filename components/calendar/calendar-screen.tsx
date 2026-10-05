@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
+import { useNow } from '@/components/tasks/use-now';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconFlag, IconFlame, IconPlus } from '@/components/ui/icons';
@@ -12,13 +13,20 @@ import {
   addDays,
   addMonths,
   calendarGridStart,
+  formatFocusedTime,
   formatLongDate,
   monthKey,
   monthName,
   parseISODate,
   todayISO,
 } from '@/lib/dates';
-import { monthlyWellbeingTotals, wellbeingCompletedCount } from '@/lib/selectors';
+import {
+  focusedTimeInMonth,
+  focusedTimeOnDate,
+  monthlyWellbeingTotals,
+  wellbeingCompletedCount,
+} from '@/lib/selectors';
+import { isTimerRunning } from '@/lib/timer';
 import type { ISODate, Task, WellbeingDay, WellbeingHabit } from '@/lib/types';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -90,6 +98,27 @@ export function CalendarScreen() {
     return map;
   }, [data.tasks, data.dailyPriorities]);
 
+  /**
+   * Focused time — how long FocusDesk's task timers actually ran. It is
+   * attributed from the recorded runs (not from any task's lifetime total),
+   * so a task worked on two days reports each day separately, and a run that
+   * crossed midnight is divided between the two days it touched.
+   *
+   * A running timer contributes its uncheckpointed remainder too, so the
+   * number stays truthful live; the clock below only ticks while something is
+   * actually running.
+   */
+  const timerRunning = useMemo(() => data.tasks.some((t) => !t.archived && isTimerRunning(t)), [data.tasks]);
+  const now = useNow(timerRunning);
+  const focusedDay = useMemo(
+    () => focusedTimeOnDate(data, selected, now),
+    [data, selected, now],
+  );
+  const focusedMonth = useMemo(
+    () => focusedTimeInMonth(data, anchorMonth, now),
+    [data, anchorMonth, now],
+  );
+
   const selectedDayTasks = data.tasks.filter((t) => t.scheduledDate === selected && !t.archived);
   const selectedDeadlines = data.tasks.filter(
     (t) => t.dueDate === selected && t.status !== 'completed' && t.status !== 'cancelled' && !t.archived,
@@ -97,7 +126,7 @@ export function CalendarScreen() {
   const selectedPriority = data.dailyPriorities.find((p) => p.date === selected);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-5xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Calendar"
         subtitle="Scheduled tasks, deadlines and priorities — a calm overview of your days."
@@ -118,7 +147,7 @@ export function CalendarScreen() {
         >
           <IconChevronLeft width={17} height={17} />
         </button>
-        <p className="min-w-36 text-center text-[15px] font-semibold text-ink">
+        <p className="min-w-0 truncate text-center text-[15px] font-semibold text-ink sm:min-w-36">
           {monthName(anchor)} {anchor.slice(0, 4)}
         </p>
         <button
@@ -215,6 +244,27 @@ export function CalendarScreen() {
         </div>
       </div>
 
+      {/* Monthly focused time — two plain facts for the displayed month,
+          from the same recorded runs as the day summary below. No score, no
+          target, no trend: just how long the timers ran. */}
+      <section aria-labelledby="calendar-focused-month-heading" className="mt-5">
+        <h2 id="calendar-focused-month-heading" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+          {monthName(anchor)} {anchor.slice(0, 4)}
+        </h2>
+        <div data-focused-month className="mt-1.5 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-[13px]">
+          <span className="inline-flex items-baseline gap-1.5">
+            <span className="text-ink-2">Focused time</span>
+            <span className="font-medium tabular-nums text-ink">
+              {focusedMonth.seconds > 0 ? formatFocusedTime(focusedMonth.seconds) : '—'}
+            </span>
+          </span>
+          <span className="inline-flex items-baseline gap-1.5">
+            <span className="text-ink-2">Days worked</span>
+            <span className="font-medium tabular-nums text-ink">{focusedMonth.daysWorked}</span>
+          </span>
+        </div>
+      </section>
+
       {/* Monthly well-being summary — four calm totals for the displayed
           month, from the same wellbeing_days records as the day dots. */}
       <section aria-labelledby="calendar-wellbeing-summary-heading" className="mt-5">
@@ -266,6 +316,31 @@ export function CalendarScreen() {
           </div>
         ) : null}
 
+        {/* Focused time for the selected day — the headline, then which
+            tasks it came from. Hidden entirely on a day with no recorded
+            runs, so the Calendar stays the Calendar. */}
+        {focusedDay.seconds > 0 ? (
+          <div data-focused-day className="mb-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Focused time</span>
+              <span className="text-[19px] font-semibold tabular-nums leading-tight text-ink">
+                {formatFocusedTime(focusedDay.seconds)}
+              </span>
+            </div>
+            {focusedDay.byTask.length > 0 ? (
+              <ul className="mt-2 space-y-1">
+                {focusedDay.byTask.map((entry) => (
+                  <li key={entry.task.id} className="flex items-baseline justify-between gap-4 text-[12.5px]">
+                    <span className="truncate text-ink-2">{entry.task.title}</span>
+                    <span className="shrink-0 tabular-nums text-ink-3">{formatFocusedTime(entry.seconds)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="mt-2 text-[11px] text-ink-3">Time recorded by FocusDesk task timers.</p>
+          </div>
+        ) : null}
+
         {/* Well-being — the selected day's four check-ins, exactly as recorded
             on Today/Review. Every day counts as a real day, even 0 of 4. */}
         <div data-wellbeing-day className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
@@ -297,7 +372,7 @@ export function CalendarScreen() {
           </div>
         ) : null}
 
-        {!selectedPriority && selectedDayTasks.length === 0 && selectedDeadlines.length === 0 ? (
+        {!selectedPriority && selectedDayTasks.length === 0 && selectedDeadlines.length === 0 && focusedDay.seconds === 0 ? (
           <p className="rounded-2xl border border-dashed border-line px-6 py-8 text-center text-[13px] text-ink-3">
             Nothing planned for this day. A clear day is allowed.
           </p>

@@ -65,7 +65,7 @@ export function SettingsScreen() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Settings"
         subtitle="Make the system yours. Every setting below is real — nothing is a placeholder."
@@ -299,8 +299,11 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 px-5 py-4">
-      <div>
+    <div className="flex items-center justify-between gap-5 px-5 py-4 sm:gap-6">
+      {/* `min-w-0` so the label block is the part that yields: without it the
+          row's min-content is the label plus the full control, which left a
+          settings row only a few pixels short of a 320px screen. */}
+      <div className="min-w-0">
         <p className="text-[13.5px] font-medium text-ink">{label}</p>
         {hint ? <p className="mt-0.5 max-w-md text-[11.5px] leading-relaxed text-ink-3">{hint}</p> : null}
       </div>

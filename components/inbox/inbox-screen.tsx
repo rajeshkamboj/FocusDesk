@@ -29,27 +29,39 @@ export function InboxScreen() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8 sm:pt-10">
+    <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Inbox"
         subtitle="Capture without deciding. Convert anything into a task, project, goal or idea when you are ready."
       />
 
-      {/* Quick capture */}
+      {/*
+        Quick capture — stacked on a phone, side by side from `sm` up.
+
+        Side by side at 320px could not work: an input carries an intrinsic
+        min-content width of roughly 170px, a flex item will not shrink below
+        that, and the Capture button needs another ~110px, so the pair always
+        overflowed the viewport. Stacking gives both of them the full width
+        instead of squeezing either.
+      */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
         }}
-        className="mb-3 flex gap-2.5"
+        className="mb-3 flex flex-col gap-2.5 sm:flex-row"
       >
+        {/* `sm:flex-1`, never a bare `flex-1`: in the stacked column the main
+            axis is vertical, so `flex-1` would resolve the basis against the
+            height and collapse this field's 48px touch target — the same trap
+            the Today priority input documents. */}
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="+ Quick Capture — what's on your mind?"
-          className="h-12 flex-1 rounded-xl border border-line bg-surface px-4 text-[15px] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="box-border h-12 w-full min-w-0 rounded-xl border border-line bg-surface px-4 text-[15px] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:flex-1"
         />
-        <Button type="submit" variant="primary" size="lg" disabled={!draft.trim()}>
+        <Button type="submit" variant="primary" size="lg" disabled={!draft.trim()} className="w-full sm:w-auto">
           <IconPlus width={16} height={16} />
           Capture
         </Button>

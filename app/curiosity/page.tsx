@@ -1,5 +1,10 @@
+import type { Metadata } from 'next';
 import { CuriosityScreen } from '@/components/curiosity/curiosity-screen';
 import { getDailyBriefing } from '@/lib/curiosity/server';
+
+export const metadata: Metadata = {
+  title: 'Curious',
+};
 
 export const dynamic = 'force-dynamic';
 

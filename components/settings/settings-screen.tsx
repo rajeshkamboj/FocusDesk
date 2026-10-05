@@ -99,6 +99,30 @@ export function SettingsScreen() {
           <SectionTitle>General</SectionTitle>
           <div className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
             <SettingRow
+              label="Your name"
+              hint="Used for your greeting in FocusDesk."
+            >
+              <Input
+                type="text"
+                placeholder="Rajesh"
+                value={general.displayName ?? ''}
+                onChange={(e) => {
+                  void actions.updateSettings({
+                    general: { ...general, displayName: e.target.value },
+                  });
+                }}
+                onBlur={(e) => {
+                  const trimmed = e.target.value.trim();
+                  if (trimmed !== e.target.value) {
+                    void actions.updateSettings({
+                      general: { ...general, displayName: trimmed },
+                    });
+                  }
+                }}
+                className="w-36 sm:w-48 shrink-0"
+              />
+            </SettingRow>
+            <SettingRow
               label="Start on Today"
               hint="Open the app on the Today screen. When off, you return to the last section you visited."
             >

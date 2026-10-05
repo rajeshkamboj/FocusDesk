@@ -11,7 +11,10 @@ function firstNameFromEmail(email?: string): string | undefined {
   return firstPart.charAt(0).toUpperCase() + firstPart.slice(1).toLowerCase();
 }
 
-export function getUserDisplayName(user: User | null): string {
+export function getUserDisplayName(user: User | null, configuredName?: string): string {
+  const custom = nonEmptyString(configuredName);
+  if (custom) return custom;
+
   const metadata = user?.user_metadata;
   return (
     nonEmptyString(metadata?.display_name) ??

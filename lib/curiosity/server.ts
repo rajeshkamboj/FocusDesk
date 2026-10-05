@@ -32,33 +32,37 @@ function tag(item: string, name: string) {
 }
 
 async function fetchNews(): Promise<CuriosityNewsItem[]> {
-  const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
-    try {
-      const response = await fetch(url, { headers: { accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
-      if (!response.ok) return [];
-      const xml = await response.text();
-      return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, 5).map((match): CuriosityNewsItem | null => {
-        const item = match[0];
-        const link = tag(item, 'link') || (item.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
-        const title = tag(item, 'title');
-        const publishedAt = tag(item, 'pubDate') || tag(item, 'published') || tag(item, 'updated');
-        const summary = tag(item, 'description') || tag(item, 'summary');
-        return title && isHttpUrl(link) ? { title, source, publishedAt, summary: summary.slice(0, 280), url: link } : null;
-      }).filter((item): item is CuriosityNewsItem => Boolean(item));
-    } catch {
-      return [];
-    }
-  }));
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-  const seen = new Set<string>();
-  return batches.flat().filter((item) => {
-    const published = Date.parse(item.publishedAt);
-    if (!Number.isFinite(published) || published < cutoff || published > Date.now() || !NEWS_SIGNAL.test(item.title)) return false;
-    const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, 10);
+  try {
+    const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
+      try {
+        const response = await fetch(url, { headers: { accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
+        if (!response.ok) return [];
+        const xml = await response.text();
+        return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, 5).map((match): CuriosityNewsItem | null => {
+          const item = match[0];
+          const link = tag(item, 'link') || (item.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
+          const title = tag(item, 'title');
+          const publishedAt = tag(item, 'pubDate') || tag(item, 'published') || tag(item, 'updated');
+          const summary = tag(item, 'description') || tag(item, 'summary');
+          return title && isHttpUrl(link) ? { title, source, publishedAt, summary: summary.slice(0, 280), url: link } : null;
+        }).filter((item): item is CuriosityNewsItem => Boolean(item));
+      } catch {
+        return [];
+      }
+    }));
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    const seen = new Set<string>();
+    return batches.flat().filter((item) => {
+      const published = Date.parse(item.publishedAt);
+      if (!Number.isFinite(published) || published < cutoff || published > Date.now() || !NEWS_SIGNAL.test(item.title)) return false;
+      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, 10);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchDeveloperRadar(): Promise<DeveloperDiscovery[]> {
@@ -77,4 +81,4 @@ async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   return { date, aiWorld, developerRadar, ...dailyEditorial(date) };
 }
 
-export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v3', date], { revalidate: 86_400, tags: [`curiosity:v3:${date}`] })();
+export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v4', date], { revalidate: 86_400, tags: [`curiosity:v4:${date}`] })();

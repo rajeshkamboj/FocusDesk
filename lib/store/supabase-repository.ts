@@ -15,6 +15,9 @@ import type {
   GoalInput,
   InboxItem,
   Idea,
+  Milestone,
+  MilestoneCategory,
+  MilestoneInput,
   MonthlyPriority,
   Project,
   ProjectInput,
@@ -185,6 +188,27 @@ const ideaMap = {
     description: str(r.description),
     createdAt: String(r.created_at ?? new Date().toISOString()),
     archived: bool(r.archived),
+  }),
+};
+
+const milestoneMap = {
+  toRow: (m: Milestone): Row => ({
+    id: m.id,
+    title: m.title,
+    category: m.category,
+    description: m.description ?? null,
+    // Stored as text, not `date`: the value is deliberately partial
+    // ('2025', '2025-08', '2025-08-14') and a date column would invent a day.
+    date: m.date,
+    created_at: m.createdAt,
+  }),
+  fromRow: (r: Row): Milestone => ({
+    id: String(r.id),
+    title: String(r.title ?? ''),
+    category: (str(r.category) as MilestoneCategory) ?? 'other',
+    description: str(r.description),
+    date: String(r.date ?? ''),
+    createdAt: String(r.created_at ?? new Date().toISOString()),
   }),
 };
 
@@ -439,6 +463,7 @@ export class SupabaseRepository implements AppRepository {
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
   ideas: EntityRepository<Idea, IdeaInput>;
+  milestones: EntityRepository<Milestone, MilestoneInput>;
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
@@ -515,6 +540,15 @@ export class SupabaseRepository implements AppRepository {
       description: input.description?.trim() || undefined,
       createdAt: new Date().toISOString(),
       archived: false,
+    }));
+
+    this.milestones = new RestCollection(this.http, 'milestones', milestoneMap, (input) => ({
+      id: uuid(),
+      title: input.title.trim(),
+      category: input.category ?? 'other',
+      description: input.description?.trim() || undefined,
+      date: input.date,
+      createdAt: new Date().toISOString(),
     }));
 
     this.dailyPriorities = new RestCollection(this.http, 'daily_priorities', dailyPriorityMap, (input) => ({
@@ -611,7 +645,7 @@ export class SupabaseRepository implements AppRepository {
   };
 
   async exportData(): Promise<AppData> {
-    const [tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
+    const [tasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
       await Promise.all([
         this.tasks.list(),
         this.subtasks.list(),
@@ -619,6 +653,7 @@ export class SupabaseRepository implements AppRepository {
         this.goals.list(),
         this.inbox.list(),
         this.ideas.list(),
+        this.milestones.list(),
         this.dailyPriorities.list(),
         this.weeklyPriorities.list(),
         this.monthlyPriorities.list(),
@@ -627,7 +662,7 @@ export class SupabaseRepository implements AppRepository {
         this.timerSessions.list(),
         this.settings.get(),
       ]);
-    return { tasks, subtasks, projects, goals, inbox, ideas, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings };
+    return { tasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings };
   }
 
   async importData(data: AppData): Promise<void> {
@@ -639,6 +674,7 @@ export class SupabaseRepository implements AppRepository {
       goals: data.goals ?? [],
       inbox: data.inbox ?? [],
       ideas: data.ideas ?? [],
+      milestones: data.milestones ?? [],
       dailyPriorities: data.dailyPriorities ?? [],
       weeklyPriorities: data.weeklyPriorities ?? [],
       monthlyPriorities: data.monthlyPriorities ?? [],
@@ -660,6 +696,7 @@ export class SupabaseRepository implements AppRepository {
       this.http.clear('goals'),
       this.http.clear('inbox_items'),
       this.http.clear('ideas'),
+      this.http.clear('milestones'),
       this.http.clear('daily_priorities'),
       this.http.clear('weekly_priorities'),
       this.http.clear('monthly_priorities'),
@@ -675,6 +712,7 @@ export class SupabaseRepository implements AppRepository {
       bulk('goals', payload.goals.map(goalMap.toRow)),
       bulk('inbox_items', payload.inbox.map(inboxMap.toRow)),
       bulk('ideas', payload.ideas.map(ideaMap.toRow)),
+      bulk('milestones', payload.milestones.map(milestoneMap.toRow)),
       bulk('daily_priorities', payload.dailyPriorities.map(dailyPriorityMap.toRow)),
       bulk('weekly_priorities', payload.weeklyPriorities.map(weeklyPriorityMap.toRow)),
       bulk('monthly_priorities', payload.monthlyPriorities.map(monthlyPriorityMap.toRow)),

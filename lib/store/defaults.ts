@@ -31,6 +31,7 @@ export function emptyData(): AppData {
     goals: [],
     inbox: [],
     ideas: [],
+    milestones: [],
     dailyPriorities: [],
     weeklyPriorities: [],
     monthlyPriorities: [],

@@ -13,6 +13,8 @@ import type {
   GoalInput,
   InboxItem,
   Idea,
+  Milestone,
+  MilestoneInput,
   MonthlyPriority,
   Project,
   ProjectInput,
@@ -74,6 +76,7 @@ export interface AppRepository {
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
   ideas: EntityRepository<Idea, IdeaInput>;
+  milestones: EntityRepository<Milestone, MilestoneInput>;
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;

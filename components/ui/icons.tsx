@@ -83,6 +83,18 @@ export function IconReview(props: IconProps) {
   );
 }
 
+export function IconMilestones(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 21V4" />
+      <path d="M5 4h10l-2 3 2 3H5" />
+      <circle cx="5" cy="21" r="0.6" fill="currentColor" stroke="none" />
+      <path d="M19 10v11" />
+      <path d="M19 10h-4" />
+    </svg>
+  );
+}
+
 export function IconIdeas(props: IconProps) {
   return (
     <svg {...base(props)}>

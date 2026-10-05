@@ -64,6 +64,9 @@ create table if not exists ideas (
   archived boolean not null default false
 );
 
+-- Milestones (learning timeline) are created by
+-- supabase/migrations/007_milestones.sql.
+
 create table if not exists daily_priorities (
   id text primary key,
   date date not null,

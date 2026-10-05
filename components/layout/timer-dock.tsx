@@ -112,7 +112,7 @@ export function TimerDock() {
   return (
     <>
       {showDock ? (
-        <div className="pointer-events-none fixed right-3 top-3 z-50 sm:right-4 sm:top-4 print:hidden">
+        <div className="pointer-events-none fixed right-3 top-3 z-50 sm:right-4 sm:top-4 xl:right-6 xl:bottom-6 xl:top-auto print:hidden">
           {collapsed ? (
             <button
               onClick={() => setCollapsedPref(false)}

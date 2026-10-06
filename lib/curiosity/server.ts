@@ -3,7 +3,7 @@ import { dailyEditorial } from './content';
 import type { CuriosityBriefing, CuriosityNewsItem, DeveloperDiscovery, HistoryEvent } from './types';
 
 const SOURCE_TIMEOUT_MS = 6_000;
-const NEWS_SIGNAL = /model|api|release|launch|research|open source|developer|agent|benchmark|safety|inference|tool|platform|framework/i;
+const MAX_AI_WORLD_ARTICLES = 10;
 const NEWS_FEEDS = [
   ['OpenAI', 'https://openai.com/news/rss.xml'],
   ['Anthropic', 'https://www.anthropic.com/news/rss.xml'],
@@ -31,6 +31,30 @@ function tag(item: string, name: string) {
   return match ? text(match[1]) : '';
 }
 
+/**
+ * Keep the newest stories that the selected first-party AI publishers provide.
+ *
+ * These sources publish less often than a general newswire, so a rolling time
+ * window can turn a useful briefing into an empty card. Source feeds already
+ * establish authority; ordering all valid stories by their published date gives
+ * readers the latest developments without hiding an important update from last
+ * week.
+ */
+export function selectAiWorldArticles(items: CuriosityNewsItem[], now = Date.now()): CuriosityNewsItem[] {
+  const seen = new Set<string>();
+  return items
+    .filter((item) => {
+      const published = Date.parse(item.publishedAt);
+      if (!Number.isFinite(published) || published > now) return false;
+      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+    .slice(0, MAX_AI_WORLD_ARTICLES);
+}
+
 async function fetchNews(): Promise<CuriosityNewsItem[]> {
   try {
     const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
@@ -38,7 +62,9 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
         const response = await fetch(url, { headers: { accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
         if (!response.ok) return [];
         const xml = await response.text();
-        return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, 5).map((match): CuriosityNewsItem | null => {
+        // A single publisher can account for all ten newest stories, so retain
+        // enough entries from each authoritative feed before the global limit.
+        return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, MAX_AI_WORLD_ARTICLES).map((match): CuriosityNewsItem | null => {
           const item = match[0];
           const link = tag(item, 'link') || (item.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
           const title = tag(item, 'title');
@@ -50,16 +76,7 @@ async function fetchNews(): Promise<CuriosityNewsItem[]> {
         return [];
       }
     }));
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    const seen = new Set<string>();
-    return batches.flat().filter((item) => {
-      const published = Date.parse(item.publishedAt);
-      if (!Number.isFinite(published) || published < cutoff || published > Date.now() || !NEWS_SIGNAL.test(item.title)) return false;
-      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, 10);
+    return selectAiWorldArticles(batches.flat());
   } catch {
     return [];
   }
@@ -109,4 +126,6 @@ async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   return { date, aiWorld, developerRadar, ...editorial, history };
 }
 
-export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v6', date], { revalidate: 86_400, tags: [`curiosity:v6:${date}`] })();
+// Refresh during the day so the briefing can pick up newly published stories,
+// while still avoiding a feed request for every page view.
+export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v7', date], { revalidate: 3_600, tags: [`curiosity:v7:${date}`] })();

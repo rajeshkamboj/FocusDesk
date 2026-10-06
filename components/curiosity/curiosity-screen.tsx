@@ -359,7 +359,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
             ) : (
               <EmptyState
                 title="No AI updates available right now"
-                hint="Sources could not be reached or had no meaningful recent developments."
+                hint="Authoritative AI sources could not be reached. Please check back later."
               />
             )}
           </SectionCard>

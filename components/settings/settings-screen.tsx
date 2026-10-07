@@ -1,6 +1,7 @@
 'use client';
 
 import { DisplayNameSetting } from './display-name-setting';
+import { ProjectPlanImportModal } from './project-plan-import';
 import { useRef, useState } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
@@ -12,11 +13,13 @@ import {
   IconDownload,
   IconMonitor,
   IconMoon,
+  IconProjects,
   IconSun,
   IconUpload,
 } from '@/components/ui/icons';
 import { PageHeader, SectionTitle } from '@/components/layout/page-header';
 import { applyTheme } from '@/lib/theme';
+import { PROJECT_PLAN_FORMAT, isProjectPlanPayload } from '@/lib/project-plan';
 import {
   notificationPermission,
   notificationsSupported,
@@ -28,6 +31,7 @@ export function SettingsScreen() {
   const { user, signOut } = useAuth();
   const { data, actions, repoKind, projectMilestonesEnabled, ready, notify } = useData();
   const [permission, setPermission] = useState(notificationPermission());
+  const [planImportOpen, setPlanImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { general, notifications, appearance } = data.settings;
 
@@ -55,6 +59,13 @@ export function SettingsScreen() {
         // Current exports and pre-Phase-3 ones (learning timeline under
         // `milestones`) are both accepted; the repository normalizes them.
         const parsed = JSON.parse(String(reader.result)) as AppDataImport;
+        // A project plan is additive; this import replaces everything. Sending
+        // one here would wipe the database, so it is refused and pointed at
+        // the importer that understands it.
+        if (isProjectPlanPayload(parsed)) {
+          notify('That is a project plan — use Import Project Plan below');
+          return;
+        }
         if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.tasks)) {
           notify('That file does not look like a Pace export');
           return;
@@ -258,6 +269,10 @@ export function SettingsScreen() {
                 <IconUpload width={15} height={15} />
                 Import (JSON)
               </Button>
+              <Button variant="secondary" onClick={() => setPlanImportOpen(true)}>
+                <IconProjects width={15} height={15} />
+                Import Project Plan
+              </Button>
               <Button variant="secondary" onClick={() => void actions.backupNow()}>
                 Backup on this device
               </Button>
@@ -296,10 +311,20 @@ export function SettingsScreen() {
                 durable copy. When Supabase credentials are added, the same data flows into PostgreSQL without changing
                 how anything works here.
               </p>
+              <p>
+                Import Project Plan is different: it takes a{' '}
+                <span className="font-medium text-ink-2">{PROJECT_PLAN_FORMAT}</span> JSON plan (the kind ChatGPT can
+                write) and <span className="font-medium text-ink-2">adds</span> its goal, projects, project milestones
+                and tasks after showing you exactly what will be created. It never changes or deletes anything that
+                already exists. See <span className="font-medium text-ink-2">docs/focusdesk-project-plan-v1.md</span>{' '}
+                for the format and the prompt to give ChatGPT.
+              </p>
             </div>
           </div>
         </section>
       </div>
+
+      {planImportOpen ? <ProjectPlanImportModal open onClose={() => setPlanImportOpen(false)} /> : null}
     </div>
   );
 }

@@ -57,6 +57,8 @@ import {
   planProjectMilestoneOrder,
   projectMilestonesFor,
 } from '../project-milestones';
+import { ProjectPlanError, buildProjectPlanRecords } from '../project-plan';
+import type { ProjectPlanImportResult, ResolvedProjectPlan } from '../project-plan';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -531,6 +533,17 @@ class SupabaseHttpClient {
     if (error) throw new Error(`Supabase clear of ${table} failed: ${error.message}`);
   }
 
+  /**
+   * Delete exactly these rows of the signed-in user — never a whole table.
+   * Used to undo a project-plan import that failed halfway, so a refused plan
+   * leaves the database as it was.
+   */
+  async deleteMany(table: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const { error } = await this.client.from(table).delete().eq('user_id', this.userId).in('id', ids);
+    if (error) throw new Error(`Supabase delete from ${table} failed: ${error.message}`);
+  }
+
   async upsert(table: string, body: Row): Promise<void> {
     const { error } = await this.client.from(table).upsert(this.owned(body));
     if (error) throw new Error(`Supabase upsert into ${table} failed: ${error.message}`);
@@ -963,6 +976,105 @@ export class SupabaseRepository implements AppRepository {
     ]);
     await this.settings.save(payload.settings);
   }
+
+  /**
+   * Add a validated project plan (Goal → Project → ProjectMilestone → Task).
+   *
+   * Only ever INSERTs, always as `this.userId`, so Row Level Security applies
+   * exactly as it does to a record created through the UI: a plan cannot name
+   * an owner, and it cannot reach another user's rows or an existing record of
+   * this user (its temporary ids are replaced by freshly generated ones).
+   *
+   * ATOMICITY. PostgREST has no cross-table transaction, so this is the honest
+   * next best thing:
+   *
+   *  1. every record is built and re-checked *before* the first request;
+   *  2. inserts go parents-first — goals → projects → project milestones →
+   *     tasks — in whole batches, one request each, so a foreign key always
+   *     has its target and a failed request inserted nothing at all;
+   *  3. if any request fails, the rows this import did create are deleted in
+   *     reverse order and the failure is reported.
+   *
+   * The result is that a refused or failed plan leaves the database as it was,
+   * and the caller is told the truth either way — including the rare case
+   * where the undo itself could not finish, which is named explicitly rather
+   * than swallowed.
+   */
+  async importProjectPlan(plan: ResolvedProjectPlan): Promise<ProjectPlanImportResult> {
+    const { goals, projects, projectMilestones, tasks } = buildProjectPlanRecords(plan, {
+      newId: uuid,
+      now: () => new Date().toISOString(),
+    });
+
+    const milestoneSchema = await this.supportsProjectMilestones();
+    if (!milestoneSchema && (projectMilestones.length > 0 || tasks.some((t) => t.projectMilestoneId))) {
+      throw new ProjectPlanError(`Import refused — nothing was created. This plan contains project milestones. ${NOT_MIGRATED_MESSAGE}`);
+    }
+
+    /** Tables this import has written to, with the ids that really landed. */
+    const written: { table: string; ids: string[] }[] = [];
+    const insert = async (table: string, rows: Row[], ids: string[]) => {
+      for (let start = 0; start < rows.length; start += PLAN_INSERT_BATCH) {
+        const end = start + PLAN_INSERT_BATCH;
+        await this.http.post(table, rows.slice(start, end));
+        // Recorded only once the request succeeded: a rejected batch inserted
+        // nothing, so `written` is exactly what a rollback has to remove.
+        const entry = written.find((w) => w.table === table) ?? { table, ids: [] };
+        if (!written.includes(entry)) written.push(entry);
+        entry.ids.push(...ids.slice(start, end));
+      }
+    };
+
+    try {
+      await insert('goals', goals.map(goalMap.toRow), goals.map((g) => g.id));
+      await insert('projects', projects.map(projectMap.toRow), projects.map((p) => p.id));
+      if (milestoneSchema) {
+        await insert(
+          PROJECT_MILESTONES_TABLE,
+          projectMilestones.map(projectMilestoneMap.toRow),
+          projectMilestones.map((m) => m.id),
+        );
+      }
+      // Same guard as every other task write: the column is left out entirely
+      // when migration 008 is not there yet.
+      const taskRows = await Promise.all(tasks.map((t) => this.prepareTaskRow(taskMap.toRow(t))));
+      await insert('tasks', taskRows, tasks.map((t) => t.id));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const left = await this.undoProjectPlanImport(written);
+      throw new ProjectPlanError(
+        left.length === 0
+          ? `Import failed — nothing was kept. ${reason}`
+          : `Import failed, and ${left.length} of its records could not be removed again (${left.join(', ')}). ${reason}`,
+      );
+    }
+
+    return { goals, projects, projectMilestones, tasks };
+  }
+
+  /**
+   * Remove what a failed plan import did create, children first. Returns the
+   * tables whose rows could not be deleted, so the caller can say so plainly
+   * instead of claiming a clean rollback.
+   */
+  private async undoProjectPlanImport(written: { table: string; ids: string[] }[]): Promise<string[]> {
+    const failed: string[] = [];
+    for (const entry of [...written].reverse()) {
+      for (let start = 0; start < entry.ids.length; start += PLAN_INSERT_BATCH) {
+        try {
+          await this.http.deleteMany(entry.table, entry.ids.slice(start, start + PLAN_INSERT_BATCH));
+        } catch (error) {
+          console.error(`Could not undo the project-plan insert into ${entry.table}`, error);
+          failed.push(entry.table);
+          break;
+        }
+      }
+    }
+    return [...new Set(failed)];
+  }
 }
+
+/** Rows per request when writing a project plan: big enough to be few requests, small enough to stay well inside any PostgREST body limit. */
+const PLAN_INSERT_BATCH = 200;
 
 export const supabaseDefaults = defaultSettings;

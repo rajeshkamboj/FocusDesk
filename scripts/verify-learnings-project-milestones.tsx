@@ -762,7 +762,12 @@ async function main() {
      'No component queries Supabase tables or pace.db.v1 directly — data goes through the repository (auth-provider only signs in/out)');
   ok(appSources.filter((p) => read(p).includes('normalizeAppData(')).sort().join() === ['lib/store/local-repository.ts', 'lib/store/normalize.ts', 'lib/store/supabase-repository.ts'].join(),
      'One migration path: normalizeAppData is defined once and used only by the two repositories');
-  ok(appSources.filter((p) => /['"]milestones['"]/.test(read(p))).join() === 'lib/store/supabase-repository.ts',
+  // The *table* name, not any occurrence of the word: `lib/project-plan.ts`
+  // legitimately spells 'milestones' as a field of the project-plan JSON
+  // format (projects[].milestones), which has nothing to do with the table.
+  const spellsTableName = (src: string) =>
+    /(?:TABLE\s*=|\.from\(|\bclear\(|\bpost\(|\bget\(|\bupsert\(|\bdelete\(|\bpatchWhere\()\s*['"]milestones['"]/.test(src);
+  ok(appSources.filter((p) => spellsTableName(read(p))).join() === 'lib/store/supabase-repository.ts',
      'The legacy table name `milestones` is spelled in exactly one place (LEARNINGS_TABLE)');
   ok(!/\bMilestone\b(?!s)/.test(read('lib/types.ts').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')),
      'No ambiguous `Milestone` type remains — Learning and ProjectMilestone are distinct');

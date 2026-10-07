@@ -41,6 +41,7 @@ import {
   nextProjectMilestonePosition,
   resolveTaskMilestone,
 } from '@/lib/project-milestones';
+import type { ProjectPlanImportResult, ResolvedProjectPlan } from '@/lib/project-plan';
 import type {
   AppData,
   AppDataImport,
@@ -197,6 +198,19 @@ export interface DataActions {
   importData(data: AppDataImport): Promise<void>;
   backupNow(): Promise<void>;
   restoreBackup(): Promise<void>;
+
+  /* Project plan import (ChatGPT JSON — see lib/project-plan.ts) */
+  /**
+   * Create the records of an already validated plan:
+   * Goal → Project → ProjectMilestone → Task.
+   *
+   * Additive by construction — nothing that already exists (Learnings, goals,
+   * projects, tasks, project milestones) is read, changed or deleted. Validate
+   * first with `reviewProjectPlanText` and let the user confirm the preview;
+   * this only writes. Throws a `ProjectPlanError` when the write could not be
+   * completed, in which case nothing was kept.
+   */
+  importProjectPlan(plan: ResolvedProjectPlan): Promise<ProjectPlanImportResult>;
 }
 
 export interface DataContextValue {
@@ -1665,6 +1679,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // An inconsistent backup is refused before anything changes — say why.
           notify(error instanceof ProjectMilestoneError ? error.message : 'Backup could not be restored');
         }
+      },
+
+      importProjectPlan: async (plan) => {
+        // Settle any in-flight task write first: the snapshot the created
+        // records are merged into must not be overtaken by a timer checkpoint.
+        await settleTaskWrites(dataRef.current.tasks);
+        const created = await repo().importProjectPlan(plan);
+        applyDataChange((d) => ({
+          ...d,
+          goals: [...d.goals, ...created.goals],
+          projects: [...d.projects, ...created.projects],
+          projectMilestones: [...d.projectMilestones, ...created.projectMilestones],
+          tasks: [...d.tasks, ...created.tasks],
+        }));
+        return created;
       },
     }),
     [addTaskState, applyDataChange, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, refreshProjectMilestones, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, settleTaskWrites, startTimerForTask],

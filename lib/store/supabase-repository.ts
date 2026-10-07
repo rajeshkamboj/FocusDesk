@@ -5,22 +5,37 @@
  * same contract as `LocalRepository`. It activates automatically when
  * `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set.
  *
- * The expected schema lives in `supabase/schema.sql`.
+ * The expected schema lives in `supabase/schema.sql` plus the migrations in
+ * `supabase/migrations/`.
+ *
+ * SCHEMA THAT MAY NOT EXIST YET
+ * -----------------------------
+ * Project Milestones need migration 008 (`project_milestones` table and
+ * `tasks.project_milestone_id`). Until it has been applied this repository
+ * must behave exactly as before, so it asks the database once — a read-only,
+ * user-scoped `select … limit 1` per object — and while the answer is "not
+ * there" it never selects, inserts or updates the new table or column:
+ * `projectMilestones.list()` is empty, task writes leave the column out, and
+ * milestone writes are refused with a clear message. See
+ * `supportsProjectMilestones()`.
  */
 
 import type {
   AppData,
+  AppDataImport,
   DailyPriority,
   Goal,
   GoalInput,
   InboxItem,
   Idea,
-  Milestone,
-  MilestoneCategory,
-  MilestoneInput,
+  Learning,
+  LearningCategory,
+  LearningInput,
   MonthlyPriority,
   Project,
   ProjectInput,
+  ProjectMilestone,
+  ProjectMilestoneInput,
   Settings,
   Subtask,
   SubtaskInput,
@@ -35,6 +50,13 @@ import type {
 } from '../types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emptyData, defaultSettings } from './defaults';
+import { normalizeAppData } from './normalize';
+import {
+  ProjectMilestoneError,
+  assertProjectMilestonesConsistent,
+  planProjectMilestoneOrder,
+  projectMilestonesFor,
+} from '../project-milestones';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -42,6 +64,7 @@ import type {
   InboxItemInput,
   IdeaInput,
   MonthlyPriorityInput,
+  ProjectMilestoneRepository,
   WeeklyPriorityInput,
 } from './repository';
 
@@ -71,6 +94,9 @@ const taskMap = {
     status: t.status,
     priority: t.priority,
     project_id: t.projectId ?? null,
+    // Migration 008. Stripped from every write while the column does not
+    // exist yet (see SupabaseRepository.prepareTaskRow).
+    project_milestone_id: t.projectMilestoneId ?? null,
     goal_id: t.goalId ?? null,
     parent_task_id: t.parentTaskId ?? null,
     created_at: t.createdAt,
@@ -96,6 +122,7 @@ const taskMap = {
     status: (r.status as Task['status']) ?? 'created',
     priority: (r.priority as Task['priority']) ?? 'medium',
     projectId: str(r.project_id),
+    projectMilestoneId: str(r.project_milestone_id),
     goalId: str(r.goal_id),
     parentTaskId: str(r.parent_task_id),
     createdAt: String(r.created_at ?? new Date().toISOString()),
@@ -191,8 +218,21 @@ const ideaMap = {
   }),
 };
 
-const milestoneMap = {
-  toRow: (m: Milestone): Row => ({
+/**
+ * Learnings keep living in the `milestones` table.
+ *
+ * Phase 3 renamed the feature, not the data: the live table, its 56 rows,
+ * their ids and their partial dates stay exactly as they are, and a later,
+ * separately planned migration may rename the table. Until then this
+ * constant is the only place the app spells the old name.
+ */
+export const LEARNINGS_TABLE = 'milestones';
+
+/** Migration 008. Never read or written until `supportsProjectMilestones()`. */
+export const PROJECT_MILESTONES_TABLE = 'project_milestones';
+
+const learningMap = {
+  toRow: (m: Learning): Row => ({
     id: m.id,
     title: m.title,
     category: m.category,
@@ -202,12 +242,33 @@ const milestoneMap = {
     date: m.date,
     created_at: m.createdAt,
   }),
-  fromRow: (r: Row): Milestone => ({
+  fromRow: (r: Row): Learning => ({
     id: String(r.id),
     title: String(r.title ?? ''),
-    category: (str(r.category) as MilestoneCategory) ?? 'other',
+    category: (str(r.category) as LearningCategory) ?? 'other',
     description: str(r.description),
     date: String(r.date ?? ''),
+    createdAt: String(r.created_at ?? new Date().toISOString()),
+  }),
+};
+
+const projectMilestoneMap = {
+  toRow: (m: ProjectMilestone): Row => ({
+    id: m.id,
+    project_id: m.projectId,
+    name: m.name,
+    description: m.description ?? null,
+    target_date: m.targetDate ?? null,
+    position: m.position,
+    created_at: m.createdAt,
+  }),
+  fromRow: (r: Row): ProjectMilestone => ({
+    id: String(r.id),
+    projectId: String(r.project_id ?? ''),
+    name: String(r.name ?? ''),
+    description: str(r.description),
+    targetDate: str(r.target_date),
+    position: num(r.position) ?? 0,
     createdAt: String(r.created_at ?? new Date().toISOString()),
   }),
 };
@@ -362,6 +423,8 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
     private readonly map: { toRow: (item: T) => Row; fromRow: (row: Row) => T },
     private readonly make: (input: C) => T,
     private readonly listOrder?: { column: string; ascending: boolean },
+    /** Last chance to adjust a row before it is written (e.g. drop a column that does not exist yet). */
+    private readonly prepareRow: (row: Row) => Row | Promise<Row> = (row) => row,
   ) {}
 
   async list(): Promise<T[]> {
@@ -371,7 +434,7 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
 
   async create(input: C): Promise<T> {
     const item = this.make(input);
-    await this.http.post(this.table, this.map.toRow(item));
+    await this.http.post(this.table, await this.prepareRow(this.map.toRow(item)));
     return item;
   }
 
@@ -380,7 +443,7 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
     if (rows.length === 0) throw new Error(`Record not found: ${id}`);
     const current = this.map.fromRow(rows[0]);
     const next = { ...current, ...patch };
-    await this.http.patch(this.table, id, this.map.toRow(next));
+    await this.http.patch(this.table, id, await this.prepareRow(this.map.toRow(next)));
     return next;
   }
 
@@ -388,6 +451,13 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
     await this.http.delete(this.table, id);
   }
 }
+
+/**
+ * PostgREST/PostgreSQL error codes meaning "that table or column does not
+ * exist (yet)": PGRST205 / 42P01 — unknown table; 42703 — unknown column in a
+ * query; PGRST204 — unknown column in a write body.
+ */
+const MISSING_SCHEMA_CODES = new Set(['PGRST205', '42P01', '42703', 'PGRST204']);
 
 class SupabaseHttpClient {
   constructor(
@@ -397,6 +467,26 @@ class SupabaseHttpClient {
 
   private owned(row: Row): Row {
     return { ...row, user_id: this.userId };
+  }
+
+  /**
+   * Read-only, user-scoped existence check: true when `columns` of `table`
+   * can be selected, false when PostgREST reports the table/column missing.
+   * Anything else (network, permissions…) throws and is not cached.
+   */
+  async hasColumns(table: string, columns: string): Promise<boolean> {
+    const { error } = await this.client.from(table).select(columns).eq('user_id', this.userId).limit(1);
+    if (!error) return true;
+    if (MISSING_SCHEMA_CODES.has(String(error.code ?? ''))) return false;
+    throw new Error(`Supabase read from ${table} failed: ${error.message}`);
+  }
+
+  /** Partial update of every own row matching `filters` (only the given columns change). */
+  async patchWhere(table: string, filters: Record<string, string>, body: Row): Promise<void> {
+    let query = this.client.from(table).update(body).eq('user_id', this.userId);
+    for (const [column, value] of Object.entries(filters)) query = query.eq(column, value);
+    const { error } = await query;
+    if (error) throw new Error(`Supabase update of ${table} failed: ${error.message}`);
   }
 
   async get(
@@ -452,6 +542,100 @@ function uuid(): string {
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const NOT_MIGRATED_MESSAGE =
+  'Project milestones are not available yet: the database migration supabase/migrations/008_project_milestones.sql has not been applied.';
+
+/**
+ * `project_milestones`, gated on migration 008. Until the schema exists,
+ * reads are empty and writes are refused before any request is made.
+ */
+class SupabaseProjectMilestones implements ProjectMilestoneRepository {
+  private readonly rows: RestCollection<ProjectMilestone, ProjectMilestoneInput>;
+
+  constructor(
+    private readonly http: SupabaseHttpClient,
+    private readonly available: () => Promise<boolean>,
+  ) {
+    this.rows = new RestCollection(
+      http,
+      PROJECT_MILESTONES_TABLE,
+      projectMilestoneMap,
+      (input) => ({
+        id: uuid(),
+        projectId: input.projectId,
+        name: input.name.trim(),
+        description: input.description?.trim() || undefined,
+        targetDate: input.targetDate || undefined,
+        position: input.position ?? 0,
+        createdAt: new Date().toISOString(),
+      }),
+      { column: 'position', ascending: true },
+    );
+  }
+
+  private async requireSchema(): Promise<void> {
+    if (!(await this.available())) throw new ProjectMilestoneError(NOT_MIGRATED_MESSAGE);
+  }
+
+  async list(): Promise<ProjectMilestone[]> {
+    if (!(await this.available())) return [];
+    return this.rows.list();
+  }
+
+  async create(input: ProjectMilestoneInput): Promise<ProjectMilestone> {
+    await this.requireSchema();
+    return this.rows.create(input);
+  }
+
+  /** Only name, description, target date and position can change — never id or project. */
+  async update(id: string, patch: Partial<ProjectMilestone>): Promise<ProjectMilestone> {
+    await this.requireSchema();
+    if (patch.projectId !== undefined) {
+      const current = (await this.http.get(PROJECT_MILESTONES_TABLE, { id }))[0];
+      if (current && patch.projectId !== current.project_id) {
+        throw new ProjectMilestoneError('A milestone cannot move to another project.');
+      }
+    }
+    const allowed: Partial<ProjectMilestone> = {};
+    if (patch.name !== undefined) allowed.name = patch.name.trim();
+    if ('description' in patch) allowed.description = patch.description;
+    if ('targetDate' in patch) allowed.targetDate = patch.targetDate;
+    if (patch.position !== undefined) allowed.position = patch.position;
+    return this.rows.update(id, allowed);
+  }
+
+  /**
+   * Clears the link on the milestone's tasks first (the tasks are kept),
+   * then deletes it. The ON DELETE SET NULL foreign key does the same in the
+   * database; doing it explicitly keeps both backends' behaviour identical.
+   */
+  async delete(id: string): Promise<void> {
+    await this.requireSchema();
+    await this.http.patchWhere('tasks', { project_milestone_id: id }, { project_milestone_id: null });
+    await this.http.delete(PROJECT_MILESTONES_TABLE, id);
+  }
+
+  async listForProject(projectId: string): Promise<ProjectMilestone[]> {
+    if (!(await this.available())) return [];
+    const rows = await this.http.get(PROJECT_MILESTONES_TABLE, { project_id: projectId }, { column: 'position', ascending: true });
+    return projectMilestonesFor(rows.map(projectMilestoneMap.fromRow), projectId);
+  }
+
+  /** Only rows whose position actually changes are written. */
+  async reorder(projectId: string, orderedIds: string[]): Promise<ProjectMilestone[]> {
+    await this.requireSchema();
+    const current = await this.listForProject(projectId);
+    const plan = planProjectMilestoneOrder(current, projectId, orderedIds);
+    const byId = new Map(current.map((m) => [m.id, m]));
+    for (const { id, position } of plan) {
+      if (byId.get(id)?.position !== position) {
+        await this.http.patchWhere(PROJECT_MILESTONES_TABLE, { id, project_id: projectId }, { position });
+      }
+    }
+    return this.listForProject(projectId);
+  }
+}
+
 export class SupabaseRepository implements AppRepository {
   readonly kind = 'supabase' as const;
 
@@ -463,35 +647,47 @@ export class SupabaseRepository implements AppRepository {
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
   ideas: EntityRepository<Idea, IdeaInput>;
-  milestones: EntityRepository<Milestone, MilestoneInput>;
+  learnings: EntityRepository<Learning, LearningInput>;
+  projectMilestones: ProjectMilestoneRepository;
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
   wellbeingDays: EntityRepository<WellbeingDay, WellbeingDayInput>;
   timerSessions: EntityRepository<TimerSession, TimerSessionInput>;
 
+  /** Memoized answer of the migration-008 probe; reset when the probe fails. */
+  private projectMilestoneSchema: Promise<boolean> | null = null;
+
   constructor(client: SupabaseClient, userId: string) {
     this.http = new SupabaseHttpClient(client, userId);
 
-    this.tasks = new RestCollection(this.http, 'tasks', taskMap, (input) => ({
-      id: input.id ?? uuid(),
-      title: input.title.trim(),
-      description: input.description?.trim() || undefined,
-      status: input.status ?? 'created',
-      priority: input.priority ?? 'medium',
-      projectId: input.projectId || undefined,
-      goalId: input.goalId || undefined,
-      parentTaskId: input.parentTaskId || undefined,
-      createdAt: new Date().toISOString(),
-      scheduledDate: input.scheduledDate,
-      dueDate: input.dueDate,
-      estimatedDuration: input.estimatedDuration,
-      reminder: input.reminder,
-      notes: input.notes?.trim() || undefined,
-      tags: input.tags ?? [],
-      postponementCount: 0,
-      archived: false,
-    }));
+    this.tasks = new RestCollection(
+      this.http,
+      'tasks',
+      taskMap,
+      (input) => ({
+        id: input.id ?? uuid(),
+        title: input.title.trim(),
+        description: input.description?.trim() || undefined,
+        status: input.status ?? 'created',
+        priority: input.priority ?? 'medium',
+        projectId: input.projectId || undefined,
+        projectMilestoneId: input.projectMilestoneId || undefined,
+        goalId: input.goalId || undefined,
+        parentTaskId: input.parentTaskId || undefined,
+        createdAt: new Date().toISOString(),
+        scheduledDate: input.scheduledDate,
+        dueDate: input.dueDate,
+        estimatedDuration: input.estimatedDuration,
+        reminder: input.reminder,
+        notes: input.notes?.trim() || undefined,
+        tags: input.tags ?? [],
+        postponementCount: 0,
+        archived: false,
+      }),
+      undefined,
+      (row) => this.prepareTaskRow(row),
+    );
 
     this.subtasks = new RestCollection(
       this.http,
@@ -542,7 +738,7 @@ export class SupabaseRepository implements AppRepository {
       archived: false,
     }));
 
-    this.milestones = new RestCollection(this.http, 'milestones', milestoneMap, (input) => ({
+    this.learnings = new RestCollection(this.http, LEARNINGS_TABLE, learningMap, (input) => ({
       id: uuid(),
       title: input.title.trim(),
       category: input.category ?? 'other',
@@ -550,6 +746,8 @@ export class SupabaseRepository implements AppRepository {
       date: input.date,
       createdAt: new Date().toISOString(),
     }));
+
+    this.projectMilestones = new SupabaseProjectMilestones(this.http, () => this.supportsProjectMilestones());
 
     this.dailyPriorities = new RestCollection(this.http, 'daily_priorities', dailyPriorityMap, (input) => ({
       id: uuid(),
@@ -599,6 +797,48 @@ export class SupabaseRepository implements AppRepository {
     );
   }
 
+  /**
+   * Has migration 008 been applied? Asked once per repository with two
+   * read-only, user-scoped probes (the new table and the new tasks column);
+   * both must exist. A definite answer is remembered; an unexpected failure
+   * (network, permissions) is thrown and not remembered, so the next call
+   * asks again. Reload the app after applying the migration.
+   */
+  supportsProjectMilestones(): Promise<boolean> {
+    if (!this.projectMilestoneSchema) {
+      const probe = Promise.all([
+        this.http.hasColumns(PROJECT_MILESTONES_TABLE, 'id'),
+        this.http.hasColumns('tasks', 'project_milestone_id'),
+      ]).then(([table, column]) => table && column);
+      this.projectMilestoneSchema = probe;
+      probe.catch(() => {
+        if (this.projectMilestoneSchema === probe) this.projectMilestoneSchema = null;
+      });
+    }
+    return this.projectMilestoneSchema;
+  }
+
+  /**
+   * Before migration 008 the tasks table has no project_milestone_id column,
+   * and PostgREST rejects a body naming an unknown column — so it is left out
+   * of the row entirely. Leaving a column out of an UPDATE never changes it.
+   *
+   * If the probe itself fails (network, permissions on the new table), the
+   * column is left out too: task writes must never depend on the new
+   * feature. The UI keeps milestones hidden in that case, so nothing is lost.
+   * (Exports and imports stay strict and fail instead of guessing.)
+   */
+  private async prepareTaskRow(row: Row): Promise<Row> {
+    const available = await this.supportsProjectMilestones().catch((error: unknown) => {
+      console.error('Could not check for migration 008; writing the task without project_milestone_id', error);
+      return false;
+    });
+    if (available) return row;
+    const legacyRow = { ...row };
+    delete legacyRow.project_milestone_id;
+    return legacyRow;
+  }
+
   taskHistory = {
     list: async (taskId?: string): Promise<TaskHistoryEntry[]> => {
       const rows = await this.http.get(
@@ -645,7 +885,7 @@ export class SupabaseRepository implements AppRepository {
   };
 
   async exportData(): Promise<AppData> {
-    const [tasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
+    const [tasks, subtasks, projects, goals, inbox, ideas, learnings, projectMilestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
       await Promise.all([
         this.tasks.list(),
         this.subtasks.list(),
@@ -653,7 +893,8 @@ export class SupabaseRepository implements AppRepository {
         this.goals.list(),
         this.inbox.list(),
         this.ideas.list(),
-        this.milestones.list(),
+        this.learnings.list(),
+        this.projectMilestones.list(),
         this.dailyPriorities.list(),
         this.weeklyPriorities.list(),
         this.monthlyPriorities.list(),
@@ -662,41 +903,32 @@ export class SupabaseRepository implements AppRepository {
         this.timerSessions.list(),
         this.settings.get(),
       ]);
-    return { tasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings };
+    return { tasks, subtasks, projects, goals, inbox, ideas, learnings, projectMilestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings };
   }
 
-  async importData(data: AppData): Promise<void> {
-    const base = emptyData();
-    const payload: AppData = {
-      tasks: data.tasks ?? [],
-      subtasks: data.subtasks ?? [],
-      projects: data.projects ?? [],
-      goals: data.goals ?? [],
-      inbox: data.inbox ?? [],
-      ideas: data.ideas ?? [],
-      milestones: data.milestones ?? [],
-      dailyPriorities: data.dailyPriorities ?? [],
-      weeklyPriorities: data.weeklyPriorities ?? [],
-      monthlyPriorities: data.monthlyPriorities ?? [],
-      taskHistory: data.taskHistory ?? [],
-      wellbeingDays: data.wellbeingDays ?? [],
-      timerSessions: data.timerSessions ?? [],
-      settings: {
-        general: { ...base.settings.general, ...data.settings?.general },
-        notifications: { ...base.settings.notifications, ...data.settings?.notifications },
-        appearance: { ...base.settings.appearance, ...data.settings?.appearance },
-      },
-    };
+  async importData(data: AppDataImport): Promise<void> {
+    // Same normalization as local storage: a pre-Phase-3 export's `milestones`
+    // become learnings (rows of the `milestones` table) — never project milestones.
+    const payload = normalizeAppData(data);
+
+    // Every check happens before the first delete, so a refused import
+    // leaves the database exactly as it was.
+    assertProjectMilestonesConsistent(payload);
+    const milestoneSchema = await this.supportsProjectMilestones();
+    if (!milestoneSchema && (payload.projectMilestones.length > 0 || payload.tasks.some((t) => t.projectMilestoneId))) {
+      throw new ProjectMilestoneError(`Import refused — nothing was changed. This file contains project milestones. ${NOT_MIGRATED_MESSAGE}`);
+    }
 
     await this.http.clear('subtasks');
     await this.http.clear('timer_sessions');
+    if (milestoneSchema) await this.http.clear(PROJECT_MILESTONES_TABLE);
     await Promise.all([
       this.http.clear('tasks'),
       this.http.clear('projects'),
       this.http.clear('goals'),
       this.http.clear('inbox_items'),
       this.http.clear('ideas'),
-      this.http.clear('milestones'),
+      this.http.clear(LEARNINGS_TABLE),
       this.http.clear('daily_priorities'),
       this.http.clear('weekly_priorities'),
       this.http.clear('monthly_priorities'),
@@ -705,22 +937,26 @@ export class SupabaseRepository implements AppRepository {
     ]);
 
     const bulk = (table: string, rows: Row[]) => (rows.length > 0 ? this.http.post(table, rows) : Promise.resolve());
+    const taskRows = await Promise.all(payload.tasks.map((t) => this.prepareTaskRow(taskMap.toRow(t))));
 
+    // Inserted parents-first so every foreign key already has its target:
+    // goals → projects → project milestones → tasks → subtasks / timer sessions.
     await Promise.all([
-      bulk('tasks', payload.tasks.map(taskMap.toRow)),
-      bulk('projects', payload.projects.map(projectMap.toRow)),
       bulk('goals', payload.goals.map(goalMap.toRow)),
       bulk('inbox_items', payload.inbox.map(inboxMap.toRow)),
       bulk('ideas', payload.ideas.map(ideaMap.toRow)),
-      bulk('milestones', payload.milestones.map(milestoneMap.toRow)),
+      bulk(LEARNINGS_TABLE, payload.learnings.map(learningMap.toRow)),
       bulk('daily_priorities', payload.dailyPriorities.map(dailyPriorityMap.toRow)),
       bulk('weekly_priorities', payload.weeklyPriorities.map(weeklyPriorityMap.toRow)),
-      bulk('monthly_priorities', payload.monthlyPriorities.map(monthlyPriorityMap.toRow)),
       bulk('task_history', payload.taskHistory.map(historyMap.toRow)),
       bulk('wellbeing_days', payload.wellbeingDays.map(wellbeingDayMap.toRow)),
     ]);
-    // Subtasks and timer sessions reference parent task rows, so import them
-    // only after tasks.
+    await bulk('projects', payload.projects.map(projectMap.toRow));
+    await Promise.all([
+      milestoneSchema ? bulk(PROJECT_MILESTONES_TABLE, payload.projectMilestones.map(projectMilestoneMap.toRow)) : Promise.resolve(),
+      bulk('monthly_priorities', payload.monthlyPriorities.map(monthlyPriorityMap.toRow)),
+    ]);
+    await bulk('tasks', taskRows);
     await Promise.all([
       bulk('subtasks', payload.subtasks.map(subtaskMap.toRow)),
       bulk('timer_sessions', payload.timerSessions.map(timerSessionMap.toRow)),

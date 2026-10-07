@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import type { ISODate, Task, TaskInput, TaskPriority } from '@/lib/types';
 import { formatDuration, todayISO } from '@/lib/dates';
+import { projectMilestonesFor } from '@/lib/project-milestones';
 
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: 'high', label: 'Important' },
@@ -40,10 +41,11 @@ export function TaskFormModal({
   defaults?: Partial<TaskInput>;
   onSaved?: () => void;
 }) {
-  const { data, actions, ready } = useData();
+  const { data, actions, ready, notify, projectMilestonesEnabled } = useData();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [projectMilestoneId, setProjectMilestoneId] = useState('');
   const [goalId, setGoalId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -62,6 +64,7 @@ export function TaskFormModal({
     setTitle(task?.title ?? '');
     setDescription(task?.description ?? '');
     setProjectId(task?.projectId ?? defaults?.projectId ?? '');
+    setProjectMilestoneId(task?.projectMilestoneId ?? defaults?.projectMilestoneId ?? '');
     setGoalId(task?.goalId ?? defaults?.goalId ?? '');
     setScheduledDate(task?.scheduledDate ?? defaults?.scheduledDate ?? '');
     setDueDate(task?.dueDate ?? defaults?.dueDate ?? '');
@@ -75,6 +78,12 @@ export function TaskFormModal({
     setSaving(false);
   }
 
+  // Only the selected project's milestones are offered, so the form can never
+  // build an invalid project/milestone pair. A stored milestone that is no
+  // longer among them reads (and saves) as "No milestone".
+  const milestoneOptions = projectMilestonesFor(data.projectMilestones, projectId || undefined);
+  const selectedMilestoneId = milestoneOptions.some((m) => m.id === projectMilestoneId) ? projectMilestoneId : '';
+
   const submit = async () => {
     const clean = title.trim();
     if (!clean || saving) return;
@@ -83,6 +92,9 @@ export function TaskFormModal({
       title: clean,
       description: description.trim() || undefined,
       projectId: projectId || undefined,
+      // Sent only when the feature is available, so an unavailable backend
+      // never has an existing assignment cleared by an ordinary edit.
+      ...(projectMilestonesEnabled ? { projectMilestoneId: (projectId && selectedMilestoneId) || undefined } : {}),
       goalId: goalId || undefined,
       scheduledDate: (scheduledDate as ISODate) || undefined,
       dueDate: (dueDate as ISODate) || undefined,
@@ -95,11 +107,17 @@ export function TaskFormModal({
         .map((t) => t.trim())
         .filter(Boolean),
     };
-    if (task) {
-      await actions.updateTask(task.id, payload);
-    } else {
-      const isToday = payload.scheduledDate !== undefined && payload.scheduledDate === todayISO();
-      await actions.addTask({ ...payload, status: payload.scheduledDate ? (isToday ? 'today' : 'planned') : 'created' });
+    try {
+      if (task) {
+        await actions.updateTask(task.id, payload);
+      } else {
+        const isToday = payload.scheduledDate !== undefined && payload.scheduledDate === todayISO();
+        await actions.addTask({ ...payload, status: payload.scheduledDate ? (isToday ? 'today' : 'planned') : 'created' });
+      }
+    } catch (error) {
+      setSaving(false);
+      notify(error instanceof Error ? error.message : 'Could not save the task');
+      return;
     }
     onSaved?.();
     onClose();
@@ -151,7 +169,15 @@ export function TaskFormModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Project">
-            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <Select
+              value={projectId}
+              onChange={(e) => {
+                // A milestone belongs to exactly one project, so a different
+                // project always starts again from "No milestone".
+                if (e.target.value !== projectId) setProjectMilestoneId('');
+                setProjectId(e.target.value);
+              }}
+            >
               <option value="">No project</option>
               {activeProjects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -160,6 +186,26 @@ export function TaskFormModal({
               ))}
             </Select>
           </Field>
+          {projectMilestonesEnabled ? (
+            <Field
+              label="Milestone"
+              hint={!projectId ? 'Choose a project first' : milestoneOptions.length === 0 ? 'This project has no milestones' : undefined}
+            >
+              <Select
+                aria-label="Milestone"
+                value={selectedMilestoneId}
+                onChange={(e) => setProjectMilestoneId(e.target.value)}
+                disabled={!projectId}
+              >
+                <option value="">No milestone</option>
+                {milestoneOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label="Goal">
             <Select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
               <option value="">No goal</option>

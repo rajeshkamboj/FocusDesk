@@ -19,20 +19,31 @@
  * record differs when it is written back. Two tabs timing two different tasks
  * can checkpoint each other's neighbours indefinitely without either losing an
  * update.
+ *
+ * DATA SHAPE MIGRATIONS
+ * ---------------------
+ * There is no version number in `pace.db.v1`; every read goes through
+ * `normalizeAppData` (./normalize.ts), the single migration path. Pre-Phase-3
+ * data keeps the learning timeline under `milestones` — it is read as
+ * `learnings` without being written back, and the next ordinary write simply
+ * stores the current shape. Nothing is ever dropped on the way.
  */
 
 import type {
   AppData,
+  AppDataImport,
   DailyPriority,
   Goal,
   GoalInput,
   InboxItem,
   Idea,
-  Milestone,
-  MilestoneInput,
+  Learning,
+  LearningInput,
   MonthlyPriority,
   Project,
   ProjectInput,
+  ProjectMilestone,
+  ProjectMilestoneInput,
   Settings,
   Subtask,
   SubtaskInput,
@@ -46,6 +57,13 @@ import type {
   WellbeingDayInput,
 } from '../types';
 import { emptyData } from './defaults';
+import { normalizeAppData } from './normalize';
+import {
+  ProjectMilestoneError,
+  assertProjectMilestonesConsistent,
+  planProjectMilestoneOrder,
+  projectMilestonesFor,
+} from '../project-milestones';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -53,6 +71,7 @@ import type {
   InboxItemInput,
   IdeaInput,
   MonthlyPriorityInput,
+  ProjectMilestoneRepository,
   WeeklyPriorityInput,
 } from './repository';
 
@@ -108,8 +127,11 @@ class Collection<T extends { id: string; createdAt?: string }, C>
   }
 
   async create(input: C): Promise<T> {
+    // Sync first, so `make` (and any reference check inside it) sees the
+    // newest stored state rather than this tab's last snapshot.
+    const list = this.db()[this.key] as unknown as T[];
     const item = this.make(input);
-    (this.db()[this.key] as unknown as T[]).push(item);
+    list.push(item);
     this.persist();
     return item;
   }
@@ -128,6 +150,91 @@ class Collection<T extends { id: string; createdAt?: string }, C>
     const data = this.db();
     (data[this.key] as unknown as T[]) = (data[this.key] as unknown as T[]).filter((x) => x.id !== id);
     this.persist();
+  }
+}
+
+/**
+ * Project Milestones in local storage, with the referential behaviour the
+ * `project_milestones` foreign keys give PostgreSQL (migration 008):
+ *   - a milestone needs an existing project and never moves to another one;
+ *   - deleting a milestone clears `projectMilestoneId` on its tasks in the
+ *     same write (ON DELETE SET NULL) — the tasks themselves are kept.
+ * `peek` reads the already-synced state without re-reading storage, so a
+ * check can never swap the object a mutation is being applied to.
+ */
+class LocalProjectMilestones implements ProjectMilestoneRepository {
+  private readonly rows: Collection<ProjectMilestone, ProjectMilestoneInput>;
+
+  constructor(
+    private readonly db: () => AppData,
+    private readonly peek: () => AppData,
+    private readonly persist: () => void,
+  ) {
+    this.rows = new Collection<ProjectMilestone, ProjectMilestoneInput>(
+      db,
+      'projectMilestones',
+      persist,
+      (input) => {
+        if (!this.peek().projects.some((p) => p.id === input.projectId)) {
+          throw new ProjectMilestoneError('That project no longer exists.');
+        }
+        return {
+          id: createId(),
+          projectId: input.projectId,
+          name: input.name.trim(),
+          description: input.description?.trim() || undefined,
+          targetDate: input.targetDate || undefined,
+          position: input.position ?? 0,
+          createdAt: nowISO(),
+        };
+      },
+      // Only name, description, target date and position can change — never id or project.
+      (milestone, patch) => {
+        if (patch.projectId !== undefined && patch.projectId !== milestone.projectId) {
+          throw new ProjectMilestoneError('A milestone cannot move to another project.');
+        }
+        const next = { ...milestone };
+        if (patch.name !== undefined) next.name = patch.name.trim();
+        if ('description' in patch) next.description = patch.description;
+        if ('targetDate' in patch) next.targetDate = patch.targetDate;
+        if (patch.position !== undefined) next.position = patch.position;
+        return next;
+      },
+    );
+  }
+
+  list(): Promise<ProjectMilestone[]> {
+    return this.rows.list();
+  }
+
+  create(input: ProjectMilestoneInput): Promise<ProjectMilestone> {
+    return this.rows.create(input);
+  }
+
+  update(id: string, patch: Partial<ProjectMilestone>): Promise<ProjectMilestone> {
+    return this.rows.update(id, patch);
+  }
+
+  async delete(id: string): Promise<void> {
+    const data = this.db();
+    data.tasks = data.tasks.map((t) => (t.projectMilestoneId === id ? { ...t, projectMilestoneId: undefined } : t));
+    data.projectMilestones = data.projectMilestones.filter((m) => m.id !== id);
+    this.persist();
+  }
+
+  async listForProject(projectId: string): Promise<ProjectMilestone[]> {
+    return projectMilestonesFor(this.db().projectMilestones, projectId);
+  }
+
+  async reorder(projectId: string, orderedIds: string[]): Promise<ProjectMilestone[]> {
+    const data = this.db();
+    const plan = new Map(planProjectMilestoneOrder(data.projectMilestones, projectId, orderedIds).map((p) => [p.id, p.position]));
+    data.projectMilestones = data.projectMilestones.map((m) => {
+      const position = plan.get(m.id);
+      return position === undefined || position === m.position ? m : { ...m, position };
+    });
+    this.persist();
+    return projectMilestonesFor(data.projectMilestones, projectId);
   }
 }
 
@@ -152,7 +259,8 @@ export class LocalRepository implements AppRepository {
   goals: EntityRepository<Goal, GoalInput>;
   inbox: EntityRepository<InboxItem, InboxItemInput>;
   ideas: EntityRepository<Idea, IdeaInput>;
-  milestones: EntityRepository<Milestone, MilestoneInput>;
+  learnings: EntityRepository<Learning, LearningInput>;
+  projectMilestones: ProjectMilestoneRepository;
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;
@@ -168,18 +276,20 @@ export class LocalRepository implements AppRepository {
     // is applied to the newest persisted state rather than to the snapshot
     // this tab happened to load with. See `sync()`.
     const db = () => this.current();
+    const peek = () => this.data;
 
     this.tasks = new Collection<Task, TaskInput>(
       db,
       'tasks',
       persist,
-      (input) => ({
+      (input) => this.checkTaskMilestone({
         id: input.id ?? createId(),
         title: input.title.trim(),
         description: input.description?.trim() || undefined,
         status: input.status ?? 'created',
         priority: input.priority ?? 'medium',
         projectId: input.projectId || undefined,
+        projectMilestoneId: input.projectMilestoneId || undefined,
         goalId: input.goalId || undefined,
         parentTaskId: input.parentTaskId || undefined,
         createdAt: nowISO(),
@@ -192,12 +302,12 @@ export class LocalRepository implements AppRepository {
         postponementCount: 0,
         archived: false,
       }),
-      (task, patch) => ({
+      (task, patch) => this.checkTaskMilestone({
         ...task,
         ...patch,
         title: patch.title !== undefined ? patch.title.trim() : task.title,
         tags: patch.tags ?? task.tags,
-      }),
+      }, task),
     );
 
     this.subtasks = new Collection<Subtask, SubtaskInput>(
@@ -273,9 +383,9 @@ export class LocalRepository implements AppRepository {
       }),
     );
 
-    this.milestones = new Collection<Milestone, MilestoneInput>(
+    this.learnings = new Collection<Learning, LearningInput>(
       db,
-      'milestones',
+      'learnings',
       persist,
       (input) => ({
         id: createId(),
@@ -286,6 +396,8 @@ export class LocalRepository implements AppRepository {
         createdAt: nowISO(),
       }),
     );
+
+    this.projectMilestones = new LocalProjectMilestones(db, peek, persist);
 
     this.dailyPriorities = new Collection<DailyPriority, DailyPriorityInput>(
       db,
@@ -364,22 +476,32 @@ export class LocalRepository implements AppRepository {
     );
   }
 
+  supportsProjectMilestones(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+
+  /**
+   * What PostgreSQL's foreign key on tasks.project_milestone_id does for
+   * Supabase, plus the same-project rule: checked only when a write changes
+   * the milestone or the project, against the state just synced from storage
+   * — so a stale tab cannot attach a task to a milestone another tab deleted.
+   */
+  private checkTaskMilestone(next: Task, previous?: Task): Task {
+    if (!next.projectMilestoneId) return next;
+    if (previous && previous.projectMilestoneId === next.projectMilestoneId && previous.projectId === next.projectId) return next;
+    const milestone = this.data.projectMilestones.find((m) => m.id === next.projectMilestoneId);
+    if (!milestone) throw new ProjectMilestoneError('That milestone no longer exists.');
+    if (milestone.projectId !== next.projectId) throw new ProjectMilestoneError('That milestone belongs to a different project.');
+    return next;
+  }
+
+  /** Stored string → current shape. See ./normalize.ts (the only migration path). */
   private parse(raw: string | null): AppData {
-    const base = emptyData();
-    if (!raw) return base;
+    if (!raw) return emptyData();
     try {
-      const parsed = JSON.parse(raw) as Partial<AppData>;
-      return {
-        ...base,
-        ...parsed,
-        settings: {
-          general: { ...base.settings.general, ...parsed.settings?.general },
-          notifications: { ...base.settings.notifications, ...parsed.settings?.notifications },
-          appearance: { ...base.settings.appearance, ...parsed.settings?.appearance },
-        },
-      };
+      return normalizeAppData(JSON.parse(raw));
     } catch {
-      return base;
+      return emptyData();
     }
   }
 
@@ -479,28 +601,12 @@ export class LocalRepository implements AppRepository {
     return JSON.parse(JSON.stringify(this.current())) as AppData;
   }
 
-  async importData(data: AppData): Promise<void> {
-    const base = emptyData();
-    this.data = {
-      tasks: data.tasks ?? [],
-      subtasks: data.subtasks ?? [],
-      projects: data.projects ?? [],
-      goals: data.goals ?? [],
-      inbox: data.inbox ?? [],
-      ideas: data.ideas ?? [],
-      milestones: data.milestones ?? [],
-      dailyPriorities: data.dailyPriorities ?? [],
-      weeklyPriorities: data.weeklyPriorities ?? [],
-      monthlyPriorities: data.monthlyPriorities ?? [],
-      taskHistory: data.taskHistory ?? [],
-      wellbeingDays: data.wellbeingDays ?? [],
-      timerSessions: data.timerSessions ?? [],
-      settings: {
-        general: { ...base.settings.general, ...data.settings?.general },
-        notifications: { ...base.settings.notifications, ...data.settings?.notifications },
-        appearance: { ...base.settings.appearance, ...data.settings?.appearance },
-      },
-    };
+  async importData(data: AppDataImport): Promise<void> {
+    // A private deep copy: the stored state is exactly what gets written, and
+    // later in-place mutations never reach the caller's object.
+    const next = normalizeAppData(JSON.parse(JSON.stringify(data ?? {})));
+    assertProjectMilestonesConsistent(next);
+    this.data = next;
     this.write();
   }
 }

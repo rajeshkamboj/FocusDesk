@@ -36,18 +36,27 @@ import {
   timerSessionInput,
   type OpenTimerSession,
 } from '@/lib/timer';
+import {
+  ProjectMilestoneError,
+  nextProjectMilestonePosition,
+  resolveTaskMilestone,
+} from '@/lib/project-milestones';
 import type {
   AppData,
+  AppDataImport,
   DailyPriority,
   Goal,
   GoalInput,
   Idea,
-  Milestone,
-  MilestoneInput,
+  Learning,
+  LearningInput,
   InboxItem,
   MonthlyPriority,
   Project,
   ProjectInput,
+  ProjectMilestone,
+  ProjectMilestoneInput,
+  ProjectMilestonePatch,
   Settings,
   Subtask,
   SubtaskInput,
@@ -159,10 +168,19 @@ export interface DataActions {
   deleteIdea(id: string): Promise<void>;
   promoteIdea(id: string, kind: 'task' | 'project' | 'goal' | 'someday', extra?: Partial<TaskInput>): Promise<void>;
 
-  /* Milestones (learning timeline) */
-  addMilestone(input: MilestoneInput): Promise<Milestone>;
-  updateMilestone(id: string, patch: Partial<Milestone>): Promise<void>;
-  deleteMilestone(id: string): Promise<void>;
+  /* Learnings (learning timeline — formerly "Milestones") */
+  addLearning(input: LearningInput): Promise<Learning>;
+  updateLearning(id: string, patch: Partial<Learning>): Promise<void>;
+  deleteLearning(id: string): Promise<void>;
+
+  /* Project milestones (Goal → Project → ProjectMilestone → Task) */
+  /** Appended after the project's last milestone. Rejects a blank name or an unknown project. */
+  addProjectMilestone(input: ProjectMilestoneInput): Promise<ProjectMilestone>;
+  updateProjectMilestone(id: string, patch: ProjectMilestonePatch): Promise<void>;
+  /** Deletes the milestone only: its tasks stay in the project without a milestone. */
+  deleteProjectMilestone(id: string): Promise<void>;
+  /** `orderedIds` must be exactly the project's milestone ids, in the new order. */
+  reorderProjectMilestones(projectId: string, orderedIds: string[]): Promise<void>;
 
   /* Daily well-being */
   /**
@@ -175,7 +193,8 @@ export interface DataActions {
   /* Settings & data */
   updateSettings(patch: Partial<Settings>): Promise<void>;
   exportData(): Promise<AppData>;
-  importData(data: AppData): Promise<void>;
+  /** Accepts current and pre-Phase-3 exports. Rejects (throws) without changing anything when the file is inconsistent. */
+  importData(data: AppDataImport): Promise<void>;
   backupNow(): Promise<void>;
   restoreBackup(): Promise<void>;
 }
@@ -184,6 +203,12 @@ export interface DataContextValue {
   ready: boolean;
   data: AppData;
   repoKind: 'local' | 'supabase';
+  /**
+   * Whether Project Milestones can be used. Always true on local storage; on
+   * Supabase only once migration 008 has been applied. The UI hides every
+   * milestone control while this is false.
+   */
+  projectMilestonesEnabled: boolean;
   toasts: Toast[];
   notify: (message: string) => void;
   dismissToast: (id: number) => void;
@@ -200,11 +225,27 @@ export function useData(): DataContextValue {
 
 let toastCounter = 0;
 
+/**
+ * Project milestones plus whether the backend supports them. A failed probe
+ * must never stop the rest of the app from loading — the feature then just
+ * stays hidden until the next reload.
+ */
+async function loadProjectMilestones(repo: AppRepository): Promise<{ enabled: boolean; list: ProjectMilestone[] }> {
+  try {
+    if (!(await repo.supportsProjectMilestones())) return { enabled: false, list: [] };
+    return { enabled: true, list: await repo.projectMilestones.list() };
+  } catch (error) {
+    console.error('Could not load project milestones', error);
+    return { enabled: false, list: [] };
+  }
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [data, setData] = useState<AppData>(emptyData());
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [projectMilestonesEnabled, setProjectMilestonesEnabled] = useState(false);
   const repoKind = repositoryKind();
   const repoRef = useRef<AppRepository | null>(null);
   const dataRef = useRef(data);
@@ -267,7 +308,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [storedTasks, subtasks, projects, goals, inbox, ideas, milestones, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
+        const [storedTasks, subtasks, projects, goals, inbox, ideas, learnings, milestoneFeature, dailyPriorities, weeklyPriorities, monthlyPriorities, taskHistory, wellbeingDays, timerSessions, settings] =
           await Promise.all([
             repo.tasks.list(),
             repo.subtasks.list(),
@@ -275,7 +316,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             repo.goals.list(),
             repo.inbox.list(),
             repo.ideas.list(),
-            repo.milestones.list(),
+            repo.learnings.list(),
+            loadProjectMilestones(repo),
             repo.dailyPriorities.list(),
             repo.weeklyPriorities.list(),
             repo.monthlyPriorities.list(),
@@ -316,7 +358,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           goals,
           inbox,
           ideas,
-          milestones,
+          learnings,
+          projectMilestones: milestoneFeature.list,
           dailyPriorities,
           weeklyPriorities,
           monthlyPriorities,
@@ -333,6 +376,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         wellbeingRef.current = new Map(wellbeingDays.map((w) => [w.date, w]));
         dataRef.current = loaded;
         setData(loaded);
+        setProjectMilestonesEnabled(milestoneFeature.enabled);
         setReady(true);
 
         // Automatic carry-forward: unfinished past tasks move to today.
@@ -406,6 +450,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ? d.subtasks.map((item) => (item.id === subtask.id ? subtask : item))
         : [...d.subtasks, subtask],
     }));
+  }, []);
+
+  /**
+   * Apply one pure change to both the ref (read by the next action right
+   * away) and React state — used where back-to-back actions must see each
+   * other's result, e.g. two milestones added in a row get distinct positions.
+   */
+  const applyDataChange = useCallback((change: (d: AppData) => AppData) => {
+    dataRef.current = change(dataRef.current);
+    setData(change);
   }, []);
 
   const removeSubtaskState = useCallback((id: string) => {
@@ -488,6 +542,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
     return write;
   }, []);
+
+  /** Let queued writes of these tasks (e.g. timer checkpoints) land first. */
+  const settleTaskWrites = useCallback(async (tasks: Task[]) => {
+    await Promise.all(tasks.map((t) => taskWriteQueueRef.current.get(t.id)?.catch(() => undefined)));
+  }, []);
+
+  /** Re-read project milestones after a partially failed multi-step change. */
+  const refreshProjectMilestones = useCallback(async () => {
+    try {
+      const list = await repo().projectMilestones.list();
+      applyDataChange((d) => ({ ...d, projectMilestones: list }));
+    } catch {
+      /* keep the current state */
+    }
+  }, [applyDataChange]);
 
   const persistSubtaskUpdate = useCallback(
     (id: string, patch: Pick<Subtask, 'title' | 'completed'>): Promise<Subtask> => {
@@ -861,7 +930,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<DataActions>(
     () => ({
       addTask: async (input) => {
-        const task = await repo().tasks.create(input);
+        // Throws a ProjectMilestoneError for a milestone outside the task's project.
+        const task = await repo().tasks.create(resolveTaskMilestone(undefined, input, dataRef.current.projectMilestones));
         setData((d) => ({ ...d, tasks: [...d.tasks, task] }));
         await logHistory(task.id, 'created');
         if (task.scheduledDate) await logHistory(task.id, 'scheduled', `Scheduled for ${task.scheduledDate}`);
@@ -904,7 +974,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       updateTask: async (id, patch) => {
         const before = dataRef.current.tasks.find((t) => t.id === id);
-        const updated = await repo().tasks.update(id, patch);
+        // A milestone outside the resulting project is rejected; a project
+        // change clears a milestone that does not belong to the new project.
+        const safePatch = resolveTaskMilestone(before, patch, dataRef.current.projectMilestones);
+        const updated = await repo().tasks.update(id, safePatch);
         patchTaskState(updated);
         if (!before) return;
         if (patch.scheduledDate !== undefined && patch.scheduledDate !== before.scheduledDate) {
@@ -1091,7 +1164,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       setTaskProject: async (id, projectId) => {
-        const updated = await repo().tasks.update(id, { projectId });
+        const before = dataRef.current.tasks.find((t) => t.id === id);
+        const patch = resolveTaskMilestone<Partial<Task>>(before, { projectId }, dataRef.current.projectMilestones);
+        const updated = await repo().tasks.update(id, patch);
         patchTaskState(updated);
         await logHistory(id, 'project_changed');
       },
@@ -1099,12 +1174,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       breakDownTask: async (id, titles, scheduledDate) => {
         const parent = dataRef.current.tasks.find((t) => t.id === id);
         if (!parent) return [];
+        // The pieces stay where the parent is: same project, same milestone
+        // (if that milestone still exists in that project).
+        const projectMilestoneId = dataRef.current.projectMilestones.some(
+          (m) => m.id === parent.projectMilestoneId && m.projectId === parent.projectId,
+        )
+          ? parent.projectMilestoneId
+          : undefined;
         const created: Task[] = [];
         for (const title of titles) {
           const t = await repo().tasks.create({
             title,
             priority: parent.priority,
             projectId: parent.projectId,
+            projectMilestoneId,
             goalId: parent.goalId,
             parentTaskId: parent.id,
             scheduledDate: scheduledDate ?? parent.scheduledDate,
@@ -1380,11 +1463,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       deleteProject: async (id) => {
-        await repo().projects.delete(id);
-        setData((d) => ({
+        // Unchanged for tasks: they are kept and simply lose the project link.
+        // The project's milestones cannot outlive it, so they are deleted
+        // first — each delete also clears that milestone from its tasks.
+        const milestoneIds = new Set(dataRef.current.projectMilestones.filter((m) => m.projectId === id).map((m) => m.id));
+        const inMilestone = (t: Task) => t.projectMilestoneId !== undefined && milestoneIds.has(t.projectMilestoneId);
+        try {
+          await settleTaskWrites(dataRef.current.tasks.filter(inMilestone));
+          for (const milestoneId of milestoneIds) await repo().projectMilestones.delete(milestoneId);
+          await repo().projects.delete(id);
+        } catch (error) {
+          console.error('Project deletion failed', error);
+          notify('Could not delete the project — please try again');
+          await refreshProjectMilestones();
+          return;
+        }
+        applyDataChange((d) => ({
           ...d,
           projects: d.projects.filter((p) => p.id !== id),
-          tasks: d.tasks.map((t) => (t.projectId === id ? { ...t, projectId: undefined } : t)),
+          projectMilestones: d.projectMilestones.filter((m) => m.projectId !== id),
+          tasks: d.tasks.map((t) =>
+            t.projectId === id || inMilestone(t)
+              ? { ...t, projectId: t.projectId === id ? undefined : t.projectId, projectMilestoneId: inMilestone(t) ? undefined : t.projectMilestoneId }
+              : t,
+          ),
         }));
       },
 
@@ -1459,20 +1561,67 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notify('Promoted');
       },
 
-      addMilestone: async (input) => {
-        const created = await repo().milestones.create(input);
-        setData((d) => ({ ...d, milestones: [created, ...d.milestones] }));
+      addLearning: async (input) => {
+        const created = await repo().learnings.create(input);
+        setData((d) => ({ ...d, learnings: [created, ...d.learnings] }));
         return created;
       },
 
-      updateMilestone: async (id, patch) => {
-        const updated = await repo().milestones.update(id, patch);
-        setData((d) => ({ ...d, milestones: d.milestones.map((m) => (m.id === updated.id ? updated : m)) }));
+      updateLearning: async (id, patch) => {
+        const updated = await repo().learnings.update(id, patch);
+        setData((d) => ({ ...d, learnings: d.learnings.map((l) => (l.id === updated.id ? updated : l)) }));
       },
 
-      deleteMilestone: async (id) => {
-        await repo().milestones.delete(id);
-        setData((d) => ({ ...d, milestones: d.milestones.filter((m) => m.id !== id) }));
+      deleteLearning: async (id) => {
+        await repo().learnings.delete(id);
+        setData((d) => ({ ...d, learnings: d.learnings.filter((l) => l.id !== id) }));
+      },
+
+      addProjectMilestone: async (input) => {
+        const name = input.name.trim();
+        if (!name) throw new ProjectMilestoneError('Give the milestone a name.');
+        if (!dataRef.current.projects.some((p) => p.id === input.projectId)) {
+          throw new ProjectMilestoneError('That project no longer exists.');
+        }
+        const created = await repo().projectMilestones.create({
+          projectId: input.projectId,
+          name,
+          description: input.description?.trim() || undefined,
+          targetDate: input.targetDate || undefined,
+          position: nextProjectMilestonePosition(dataRef.current.projectMilestones, input.projectId),
+        });
+        applyDataChange((d) => ({ ...d, projectMilestones: [...d.projectMilestones, created] }));
+        return created;
+      },
+
+      updateProjectMilestone: async (id, patch) => {
+        const allowed: ProjectMilestonePatch = {};
+        if (patch.name !== undefined) {
+          const name = patch.name.trim();
+          if (!name) throw new ProjectMilestoneError('Give the milestone a name.');
+          allowed.name = name;
+        }
+        if ('description' in patch) allowed.description = patch.description?.trim() || undefined;
+        if ('targetDate' in patch) allowed.targetDate = patch.targetDate || undefined;
+        const updated = await repo().projectMilestones.update(id, allowed);
+        applyDataChange((d) => ({ ...d, projectMilestones: d.projectMilestones.map((m) => (m.id === updated.id ? updated : m)) }));
+      },
+
+      deleteProjectMilestone: async (id) => {
+        // Tasks are never deleted here — they stay in the project with no milestone.
+        await settleTaskWrites(dataRef.current.tasks.filter((t) => t.projectMilestoneId === id));
+        await repo().projectMilestones.delete(id);
+        applyDataChange((d) => ({
+          ...d,
+          projectMilestones: d.projectMilestones.filter((m) => m.id !== id),
+          tasks: d.tasks.map((t) => (t.projectMilestoneId === id ? { ...t, projectMilestoneId: undefined } : t)),
+        }));
+      },
+
+      reorderProjectMilestones: async (projectId, orderedIds) => {
+        const ordered = await repo().projectMilestones.reorder(projectId, orderedIds);
+        const byId = new Map(ordered.map((m) => [m.id, m]));
+        applyDataChange((d) => ({ ...d, projectMilestones: d.projectMilestones.map((m) => byId.get(m.id) ?? m) }));
       },
 
       updateSettings: async (patch) => {
@@ -1510,19 +1659,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
             notify('No backup found on this device');
             return;
           }
-          await actions.importData(JSON.parse(raw) as AppData);
+          await actions.importData(JSON.parse(raw) as AppDataImport);
           notify('Backup restored');
-        } catch {
-          notify('Backup could not be restored');
+        } catch (error) {
+          // An inconsistent backup is refused before anything changes — say why.
+          notify(error instanceof ProjectMilestoneError ? error.message : 'Backup could not be restored');
         }
       },
     }),
-    [addTaskState, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, startTimerForTask],
+    [addTaskState, applyDataChange, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, refreshProjectMilestones, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, settleTaskWrites, startTimerForTask],
   );
 
   const value = useMemo<DataContextValue>(
-    () => ({ ready, data, repoKind, toasts, notify, dismissToast, actions }),
-    [ready, data, repoKind, toasts, notify, dismissToast, actions],
+    () => ({ ready, data, repoKind, projectMilestonesEnabled, toasts, notify, dismissToast, actions }),
+    [ready, data, repoKind, projectMilestonesEnabled, toasts, notify, dismissToast, actions],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

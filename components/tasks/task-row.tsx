@@ -65,6 +65,10 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   const hasDescription = Boolean(task.description?.trim());
 
   const project = task.projectId ? data.projects.find((p) => p.id === task.projectId) : undefined;
+  // Shown only for a valid assignment (the milestone exists and is in this project).
+  const milestone = project && task.projectMilestoneId
+    ? data.projectMilestones.find((m) => m.id === task.projectMilestoneId && m.projectId === project.id)
+    : undefined;
   const done = task.status === 'completed';
   const cancelled = task.status === 'cancelled';
   const overdue = task.dueDate !== undefined && task.dueDate < todayISO() && !done && !cancelled;
@@ -155,7 +159,12 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
         focusedLabel !== '' ||
         task.tags.length > 0) && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3">
-          {project ? <span className="font-medium text-ink-2">{project.name}</span> : null}
+          {project ? (
+            <span className="font-medium text-ink-2">
+              {project.name}
+              {milestone ? <span className="font-normal text-ink-3"> · {milestone.name}</span> : null}
+            </span>
+          ) : null}
           {showDate && task.scheduledDate && !done ? <span>{relativeDay(task.scheduledDate)}</span> : null}
           {showDate && !task.scheduledDate && task.status !== 'someday' && !done ? <span>Unscheduled</span> : null}
           {workingLabel !== null ? (

@@ -14,9 +14,11 @@ import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { formatFocusedTime, formatShortDate, todayISO } from '@/lib/dates';
+import { projectMilestonesFor } from '@/lib/project-milestones';
 import { compareDatedEntities, projectFocusedSeconds, projectProgress } from '@/lib/selectors';
 import type { EntityDateSort } from '@/lib/selectors';
-import type { Project, ProjectStatus } from '@/lib/types';
+import type { Project, ProjectMilestone, ProjectStatus } from '@/lib/types';
+import { ProjectMilestoneFormModal, ProjectMilestoneSections } from './project-milestones';
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
   active: 'Active',
@@ -35,13 +37,16 @@ const STATUS_TONE: Record<ProjectStatus, 'accent' | 'warning' | 'neutral' | 'mut
 type Filter = 'all' | ProjectStatus;
 
 export function ProjectsScreen() {
-  const { data, actions } = useData();
+  const { data, actions, notify, projectMilestonesEnabled } = useData();
   const [filter, setFilter] = useState<Filter>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Project | undefined>(undefined);
   const [deleting, setDeleting] = useState<Project | undefined>(undefined);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [addTaskFor, setAddTaskFor] = useState<string | null>(null);
+  const [addTaskFor, setAddTaskFor] = useState<{ projectId: string; projectMilestoneId?: string } | null>(null);
+  // Only `projectId` → new milestone in that project; with `milestone` → edit it.
+  const [milestoneForm, setMilestoneForm] = useState<{ projectId: string; milestone?: ProjectMilestone } | null>(null);
+  const [deletingMilestone, setDeletingMilestone] = useState<ProjectMilestone | undefined>(undefined);
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
 
   const projects = useMemo(() => {
@@ -104,6 +109,7 @@ export function ProjectsScreen() {
             const goal = project.goalId ? data.goals.find((g) => g.id === project.goalId) : undefined;
             const tasks = data.tasks.filter((t) => t.projectId === project.id && t.status !== 'cancelled');
             const openTasks = tasks.filter((t) => t.status !== 'completed');
+            const milestones = projectMilestonesEnabled ? projectMilestonesFor(data.projectMilestones, project.id) : [];
             const isExpanded = expanded === project.id;
             const deadlineSoon = project.deadline !== undefined && project.deadline >= todayISO();
 
@@ -192,15 +198,33 @@ export function ProjectsScreen() {
 
                 {isExpanded ? (
                   <div className="border-t border-line px-5 py-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mb-3"
-                      onClick={() => setAddTaskFor(project.id)}
-                    >
-                      <IconPlus width={14} height={14} /> Add task to project
-                    </Button>
-                    {tasks.length > 0 ? (
+                    <div className="mb-3 flex flex-wrap items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAddTaskFor({ projectId: project.id })}
+                      >
+                        <IconPlus width={14} height={14} /> Add task to project
+                      </Button>
+                      {projectMilestonesEnabled ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setMilestoneForm({ projectId: project.id })}
+                        >
+                          <IconPlus width={14} height={14} /> Add milestone
+                        </Button>
+                      ) : null}
+                    </div>
+                    {milestones.length > 0 ? (
+                      <ProjectMilestoneSections
+                        milestones={milestones}
+                        tasks={tasks}
+                        onAddTask={(m) => setAddTaskFor({ projectId: project.id, projectMilestoneId: m.id })}
+                        onEdit={(m) => setMilestoneForm({ projectId: project.id, milestone: m })}
+                        onDelete={(m) => setDeletingMilestone(m)}
+                      />
+                    ) : tasks.length > 0 ? (
                       <TaskList tasks={tasks} />
                     ) : (
                       <p className="text-[13px] text-ink-3">No tasks in this project yet.</p>
@@ -220,12 +244,43 @@ export function ProjectsScreen() {
       <TaskFormModal
         open={addTaskFor !== null}
         onClose={() => setAddTaskFor(null)}
-        defaults={addTaskFor ? { projectId: addTaskFor } : undefined}
+        defaults={addTaskFor ?? undefined}
+      />
+      {/* Keyed + conditionally mounted so each open starts clean. */}
+      {milestoneForm ? (
+        <ProjectMilestoneFormModal
+          key={milestoneForm.milestone?.id ?? `new-${milestoneForm.projectId}`}
+          open
+          projectId={milestoneForm.projectId}
+          milestone={milestoneForm.milestone}
+          onClose={() => setMilestoneForm(null)}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={deletingMilestone !== undefined}
+        title="Delete milestone?"
+        message={`“${deletingMilestone?.name ?? ''}” will be removed. Its tasks are kept — they stay in the project without a milestone.`}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setDeletingMilestone(undefined)}
+        onConfirm={() => {
+          if (deletingMilestone) {
+            void actions.deleteProjectMilestone(deletingMilestone.id).catch((error: unknown) => {
+              console.error('Milestone deletion failed', error);
+              notify('Could not delete the milestone — please try again');
+            });
+          }
+          setDeletingMilestone(undefined);
+        }}
       />
       <ConfirmDialog
         open={deleting !== undefined}
         title="Delete project?"
-        message={`“${deleting?.name ?? ''}” will be removed. Its tasks are kept — they simply lose the project link.`}
+        message={
+          deleting && data.projectMilestones.some((m) => m.projectId === deleting.id)
+            ? `“${deleting.name}” and its milestones will be removed. Its tasks are kept — they simply lose the project link.`
+            : `“${deleting?.name ?? ''}” will be removed. Its tasks are kept — they simply lose the project link.`
+        }
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleting(undefined)}

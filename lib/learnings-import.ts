@@ -1,5 +1,5 @@
 /**
- * Bulk import for the Milestones timeline.
+ * Bulk import for the Learnings timeline.
  *
  * Accepts pasted lines in either shape:
  *   2026-10 | Tauri | framework | Desktop-app experiments
@@ -10,20 +10,20 @@
  * until the user has seen the count.
  */
 
-import { MILESTONE_CATEGORIES, isValidMilestoneDate } from './milestones';
-import type { MilestoneCategory, MilestoneInput } from './types';
+import { LEARNING_CATEGORIES, isValidLearningDate } from './learnings';
+import type { LearningCategory, LearningInput } from './types';
 
-export interface ParsedMilestoneRow {
+export interface ParsedLearningRow {
   line: number;
   raw: string;
-  value?: MilestoneInput;
+  value?: LearningInput;
   error?: string;
 }
 
 export interface ParseResult {
-  rows: ParsedMilestoneRow[];
-  valid: MilestoneInput[];
-  errors: ParsedMilestoneRow[];
+  rows: ParsedLearningRow[];
+  valid: LearningInput[];
+  errors: ParsedLearningRow[];
 }
 
 const MONTHS = [
@@ -58,7 +58,7 @@ function splitFields(line: string): string[] {
  * Accepts '2025', '2025-08', '2025-08-14', 'Aug 2025', 'August 2025',
  * '14 Aug 2025' and '14-Aug-2025'. Returns a partial ISO date, or undefined.
  */
-export function parseMilestoneDate(input: string): string | undefined {
+export function parseLearningDate(input: string): string | undefined {
   const raw = input.trim().replace(/\s+/g, ' ');
   if (!raw) return undefined;
 
@@ -66,12 +66,12 @@ export function parseMilestoneDate(input: string): string | undefined {
   if (/^\d{4}[-/]\d{1,2}$/.test(raw)) {
     const [y, m] = raw.split(/[-/]/);
     const iso = `${y}-${m.padStart(2, '0')}`;
-    return isValidMilestoneDate(iso) ? iso : undefined;
+    return isValidLearningDate(iso) ? iso : undefined;
   }
   if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(raw)) {
     const [y, m, d] = raw.split(/[-/]/);
     const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    return isValidMilestoneDate(iso) ? iso : undefined;
+    return isValidLearningDate(iso) ? iso : undefined;
   }
 
   const named = raw.replace(/[-,]/g, ' ').replace(/\s+/g, ' ').split(' ');
@@ -85,23 +85,23 @@ export function parseMilestoneDate(input: string): string | undefined {
     if (!year) return undefined;
     const mm = String(month).padStart(2, '0');
     const iso = day ? `${year}-${mm}-${day.padStart(2, '0')}` : `${year}-${mm}`;
-    return isValidMilestoneDate(iso) ? iso : undefined;
+    return isValidLearningDate(iso) ? iso : undefined;
   }
 
   return undefined;
 }
 
-function parseCategory(input: string | undefined): MilestoneCategory {
+function parseCategory(input: string | undefined): LearningCategory {
   if (!input) return 'other';
   const key = input.trim().toLowerCase().replace(/[\s_]+/g, '-');
-  const byId = MILESTONE_CATEGORIES.find((c) => c.id === key);
+  const byId = LEARNING_CATEGORIES.find((c) => c.id === key);
   if (byId) return byId.id;
-  const byLabel = MILESTONE_CATEGORIES.find((c) => c.label.toLowerCase() === input.trim().toLowerCase());
+  const byLabel = LEARNING_CATEGORIES.find((c) => c.label.toLowerCase() === input.trim().toLowerCase());
   return byLabel?.id ?? 'other';
 }
 
-export function parseMilestones(text: string): ParseResult {
-  const rows: ParsedMilestoneRow[] = [];
+export function parseLearnings(text: string): ParseResult {
+  const rows: ParsedLearningRow[] = [];
 
   text.split(/\r?\n/).forEach((raw, index) => {
     const line = raw.trim();
@@ -118,7 +118,7 @@ export function parseMilestones(text: string): ParseResult {
       return;
     }
 
-    const date = parseMilestoneDate(dateField ?? '');
+    const date = parseLearningDate(dateField ?? '');
     if (!date) {
       rows.push({ line: index + 1, raw: line, error: `Could not read the date “${dateField ?? ''}”` });
       return;

@@ -13,6 +13,11 @@
  * below reproduces that documented state (user_id NOT NULL DEFAULT auth.uid(),
  * RLS, four own-row policies) before 008 is applied.
  *
+ * The integrity rules are deliberately probed as the table OWNER as well as
+ * under RLS. Foreign key checks run with the owner's rights and bypass RLS,
+ * so a cross-user write that RLS would hide is the only way to prove the
+ * constraint — and not the policy — is what refuses it.
+ *
  * Run: npm i --no-save @electric-sql/pglite tsx && npx tsx scripts/verify-project-milestones-sql.ts
  */
 import { readFileSync } from 'node:fs';
@@ -70,7 +75,69 @@ async function main() {
       return true;
     }
   };
+  /** Rejected by what? A refusal is only proof if the message names the expected constraint. */
+  const refusedBy = async (run: () => Promise<unknown>, constraintName: string) => {
+    try {
+      await run();
+      return 'not rejected';
+    } catch (error) {
+      const message = String((error as Error).message);
+      return message.includes(`"${constraintName}"`) ? constraintName : `unexpected: ${message.split('\n')[0]}`;
+    }
+  };
   const one = async <T>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows[0];
+
+  /** Constraint metadata with the column names resolved, both sides of a foreign key. */
+  const constraint = async (table: string, name: string) => {
+    const result = await db.query<{
+      conname: string; contype: string; confdeltype: string | null; confmatchtype: string | null;
+      convalidated: boolean; columns: string; refcolumns: string | null; reftable: string | null;
+    }>(`
+      select c.conname, c.contype, c.confdeltype, c.confmatchtype, c.convalidated,
+             (select string_agg(a.attname, ',' order by k.ord)
+                from unnest(c.conkey) with ordinality as k(attnum, ord)
+                join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as columns,
+             (select string_agg(a.attname, ',' order by k.ord)
+                from unnest(c.confkey) with ordinality as k(attnum, ord)
+                join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum) as refcolumns,
+             (select rel.relname::text from pg_class rel where rel.oid = c.confrelid) as reftable
+      from pg_constraint c
+      where c.conrelid = $1::regclass and c.conname = $2`, [table, name]);
+    return result.rows[0];
+  };
+  const constraintCount = async (table: string, filter: string) =>
+    (await db.query<{ n: number }>(
+      `select count(*)::int as n from pg_constraint where conrelid = $1::regclass and ${filter}`, [table])).rows[0].n;
+
+  /* -------------------------------------------------------------- */
+  /* Preconditions: the migration must refuse an unready database    */
+  /* -------------------------------------------------------------- */
+  const migrationSql = sqlFile('migrations', '008_project_milestones.sql');
+  {
+    const scratch = new PGlite();
+    await scratch.exec(`
+      create schema auth;
+      create table auth.users (id uuid primary key);
+      create function auth.uid() returns uuid language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+      $$;
+      create table projects (id text primary key, name text not null);
+      create table tasks (id text primary key, project_id text references projects (id) on delete set null);
+    `);
+    const refused = await (async () => {
+      try { await scratch.exec(migrationSql); return null; } catch (error) { return String((error as Error).message); }
+    })();
+    ok(refused !== null && /projects\.user_id is missing/.test(refused),
+       'Without projects.user_id the migration stops with a clear message instead of half-applying');
+    ok((await scratch.query(`select count(*)::int as n from pg_constraint where conname = 'projects_id_user_id_key'`)).rows[0].n === 0
+       && (await scratch.query(`select count(*)::int as n from information_schema.tables where table_name = 'project_milestones'`)).rows[0].n === 0
+       && (await scratch.query(`select count(*)::int as n from information_schema.columns where table_name = 'tasks' and column_name = 'project_milestone_id'`)).rows[0].n === 0,
+       'A refused run creates nothing: no constraint, no table, no column');
+    ok(/current_setting\('server_version_num'\)::integer/.test(migrationSql) && /<\s*150000/.test(migrationSql)
+       && /PostgreSQL 15 or newer/.test(migrationSql),
+       'The migration guards the PostgreSQL 15 minimum that ON DELETE SET NULL (column list) needs (the branch itself cannot be exercised on this server)');
+    await scratch.close();
+  }
 
   /* -------------------------------------------------------------- */
   /* The database as it exists today (before 008)                    */
@@ -125,10 +192,14 @@ async function main() {
   /* -------------------------------------------------------------- */
   /* Apply 008 — twice                                              */
   /* -------------------------------------------------------------- */
-  const migration = sqlFile('migrations', '008_project_milestones.sql');
+  const migration = migrationSql;
   ok(/NOT APPLIED TO PRODUCTION/.test(migration), 'The migration is labelled as prepared, not applied to production');
-  ok(!/\b(drop|truncate|rename)\b[^;]*\bmilestones\b/i.test(migration.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')),
-     'The executable SQL never drops, truncates or renames the milestones (Learnings) table');
+  // Executable statements only — the commented rollback/optional blocks are checked separately below.
+  const executable = migration.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  ok(!/\b(drop|truncate)\s+table\s+(if\s+exists\s+)?(public\.)?milestones\b/i.test(executable)
+     && !/\balter\s+table\s+(if\s+exists\s+)?(public\.)?milestones\b/i.test(executable)
+     && !/\brename\s+to\b/i.test(executable),
+     'The executable SQL never drops, alters, truncates or renames the milestones (Learnings) table — or anything else');
   await db.exec(migration);
   ok(!(await rejects(() => db.exec(migration))), 'Applying 008 a second time succeeds (idempotent)');
   await db.exec(grants); // what Supabase's default privileges give a new table
@@ -152,15 +223,40 @@ async function main() {
     `select data_type, is_nullable from information_schema.columns where table_name = 'tasks' and column_name = 'project_milestone_id'`);
   ok(taskCol?.data_type === 'text' && taskCol?.is_nullable === 'YES', 'tasks.project_milestone_id is TEXT NULL');
 
-  const fks = (await db.query<{ conname: string; src: string; target: string; confdeltype: string }>(`
-    select conname, conrelid::regclass::text as src, confrelid::regclass::text as target, confdeltype
-    from pg_constraint where contype = 'f' and (conrelid = 'project_milestones'::regclass
-      or (conrelid = 'tasks'::regclass and confrelid = 'project_milestones'::regclass))`)).rows;
-  ok(fks.some((f) => f.src === 'project_milestones' && f.target === 'projects' && f.confdeltype === 'c'),
-     'project_milestones.project_id → projects(id) ON DELETE CASCADE');
-  ok(fks.some((f) => f.src === 'tasks' && f.target === 'project_milestones' && f.confdeltype === 'n'),
-     'tasks.project_milestone_id → project_milestones(id) ON DELETE SET NULL');
-  ok(fks.filter((f) => f.src === 'tasks').length === 1, 'Re-running did not add a duplicate foreign key');
+  // The five constraints that make the invariants the database's job, not the app's.
+  const ownerUnique = await constraint('projects', 'projects_id_user_id_key');
+  ok(ownerUnique?.contype === 'u' && ownerUnique.columns === 'id,user_id' && ownerUnique.convalidated,
+     'projects (id, user_id) UNIQUE exists and is validated — the target of the ownership foreign key');
+  ok(await constraintCount('projects', `contype = 'u'`) === 1,
+     'It is the only extra unique constraint on projects (the primary key is untouched)');
+
+  const ownershipFk = await constraint('project_milestones', 'project_milestones_project_user_fkey');
+  ok(ownershipFk?.contype === 'f' && ownershipFk.reftable === 'projects'
+     && ownershipFk.columns === 'project_id,user_id' && ownershipFk.refcolumns === 'id,user_id'
+     && ownershipFk.confdeltype === 'c' && ownershipFk.convalidated,
+     'project_milestones (project_id, user_id) → projects (id, user_id) ON DELETE CASCADE — the project must exist AND belong to the same user');
+  ok(await constraintCount('project_milestones', `contype = 'f' and confrelid = 'projects'::regclass`) === 1,
+     'It replaced the single-column project_id foreign key rather than sitting next to it');
+
+  const milestoneKey = await constraint('project_milestones', 'project_milestones_id_project_key');
+  ok(milestoneKey?.contype === 'u' && milestoneKey.columns === 'id,project_id',
+     'project_milestones (id, project_id) UNIQUE exists — the target of the task foreign key');
+
+  const linkFk = await constraint('tasks', 'tasks_project_milestone_fkey');
+  ok(linkFk?.contype === 'f' && linkFk.reftable === 'project_milestones'
+     && linkFk.columns === 'project_milestone_id' && linkFk.refcolumns === 'id'
+     && linkFk.confdeltype === 'n' && linkFk.convalidated,
+     'tasks (project_milestone_id) → project_milestones (id) ON DELETE SET NULL — clears the link whatever project_id says');
+
+  const sameProjectFk = await constraint('tasks', 'tasks_project_milestone_same_project_fkey');
+  ok(sameProjectFk?.contype === 'f' && sameProjectFk.reftable === 'project_milestones'
+     && sameProjectFk.columns === 'project_milestone_id,project_id' && sameProjectFk.refcolumns === 'id,project_id'
+     && sameProjectFk.confdeltype === 'n' && sameProjectFk.confmatchtype === 's' && sameProjectFk.convalidated,
+     'tasks (project_milestone_id, project_id) → project_milestones (id, project_id) ON DELETE SET NULL, MATCH SIMPLE');
+  ok(await constraintCount('tasks', `contype = 'f' and confrelid = 'project_milestones'::regclass`) === 2,
+     'Those are the only two keys from tasks to project_milestones, and re-running added no duplicates');
+  ok(await constraintCount('tasks', `contype = 'f' and confrelid = 'projects'::regclass and conname = 'tasks_project_id_fkey'`) === 1,
+     'The pre-existing tasks.project_id → projects(id) ON DELETE SET NULL is untouched');
 
   const rls = await one<{ relrowsecurity: boolean }>(`select relrowsecurity from pg_class where relname = 'project_milestones'`);
   const policies = (await db.query<{ policyname: string; cmd: string; qual: string | null; with_check: string | null }>(
@@ -173,8 +269,16 @@ async function main() {
      'Every policy expression is auth.uid() = user_id');
   ok(policies.find((p) => p.cmd === 'UPDATE')?.with_check !== null, 'The update policy has both USING and WITH CHECK');
   const indexes = (await db.query<{ indexname: string }>(`select indexname from pg_indexes where tablename in ('project_milestones', 'tasks') and indexname like '%milestone%' and indexname not like '%_pkey' order by 1`)).rows;
-  ok(indexes.map((i) => i.indexname).join(',') === 'project_milestones_user_project_position_idx,tasks_project_milestone_idx',
+  ok(indexes.map((i) => i.indexname).join(',') ===
+     'project_milestones_id_project_key,project_milestones_user_project_position_idx,tasks_project_milestone_idx',
      `Indexes created once each (${indexes.map((i) => i.indexname).join(', ')})`);
+  const projectIndexes = (await db.query<{ indexname: string; indexdef: string }>(
+    `select indexname, indexdef from pg_indexes where tablename = 'projects' order by 1`)).rows;
+  ok(projectIndexes.map((i) => i.indexname).join(',') === 'projects_id_user_id_key,projects_pkey',
+     `projects gained exactly one index (${projectIndexes.map((i) => i.indexname).join(', ')})`);
+  ok(/create unique index/i.test(projectIndexes.find((i) => i.indexname === 'projects_id_user_id_key')?.indexdef ?? '')
+     && /\(id, user_id\)/.test(projectIndexes.find((i) => i.indexname === 'projects_id_user_id_key')?.indexdef ?? ''),
+     'That index is UNIQUE on (id, user_id) and nothing else changed on projects');
 
   /* -------------------------------------------------------------- */
   /* Nothing that existed was changed                                */
@@ -215,12 +319,60 @@ async function main() {
      && (await one<{ user_id: string }>(`select user_id from project_milestones where id = 'm1'`)).user_id === USER_A,
      'A milestone cannot be handed to another user, even by its owner (UPDATE … WITH CHECK)');
 
+  // A project owned by the other user, created as the owner so RLS is out of
+  // the way: only the foreign key can stop these writes.
+  await db.exec(`insert into projects (id, user_id, name) values ('pb1', '${USER_B}', 'B’s project')`);
+  await db.exec(`insert into project_milestones (id, user_id, project_id, name) values ('mb1', '${USER_B}', 'pb1', 'B milestone')`);
+
   await as(USER_A, async () => {
     ok(await rejects(() => db.exec(`insert into project_milestones (id, project_id, name) values ('bad1', 'p1', '   ')`)), 'A blank milestone name is rejected');
     ok(await rejects(() => db.exec(`insert into project_milestones (id, project_id, name, position) values ('bad2', 'p1', 'X', -1)`)), 'A negative position is rejected');
     ok(await rejects(() => db.exec(`insert into project_milestones (id, project_id, name) values ('bad3', 'no-such-project', 'X')`)), 'A milestone needs an existing project');
     ok(await rejects(() => db.exec(`insert into tasks (id, title, project_id, project_milestone_id) values ('bad4', 'X', 'p1', 'no-such-milestone')`)), 'A task cannot reference a missing milestone');
+    ok(await rejects(() => db.exec(`insert into tasks (id, title, project_id, project_milestone_id) values ('bad5', 'X', 'p1', 'mb1')`)),
+       'A task in p1 cannot point at another project’s milestone');
   });
+
+  // Ownership, with RLS bypassed: the foreign key alone has to refuse these.
+  ok(await refusedBy(() => db.exec(
+       `insert into project_milestones (id, user_id, project_id, name) values ('spoof1', '${USER_B}', 'p1', 'Spoof')`),
+       'project_milestones_project_user_fkey') === 'project_milestones_project_user_fkey',
+     'Even with RLS bypassed, a milestone cannot claim user A’s project for user B (foreign key, not policy)');
+  ok(await refusedBy(() => db.exec(
+       `insert into project_milestones (id, user_id, project_id, name) values ('spoof2', '${USER_A}', 'pb1', 'Spoof')`),
+       'project_milestones_project_user_fkey') === 'project_milestones_project_user_fkey',
+     'Even with RLS bypassed, user A cannot hang a milestone on user B’s project');
+  ok(await refusedBy(() => db.exec(
+       `update project_milestones set project_id = 'pb1' where id = 'm2'`),
+       'project_milestones_project_user_fkey') === 'project_milestones_project_user_fkey',
+     'A milestone cannot be moved to another user’s project');
+  ok(await refusedBy(() => db.exec(
+       `insert into tasks (id, user_id, title, project_id, project_milestone_id) values ('spoof3', '${USER_A}', 'Spoof', 'p1', 'mb1')`),
+       'tasks_project_milestone_same_project_fkey') === 'tasks_project_milestone_same_project_fkey',
+     'Even with RLS bypassed, a task cannot carry a milestone from a different project');
+
+  // Same-project rule, enforced by the database rather than only by the app.
+  ok(await refusedBy(() => db.exec(
+       `insert into tasks (id, title, project_id, project_milestone_id) values ('t4', 'Mismatch', 'p-old', 'm2')`),
+       'tasks_project_milestone_same_project_fkey') === 'tasks_project_milestone_same_project_fkey',
+     'A task in one project cannot reference a milestone of another project');
+  // Moving a task between projects must clear its milestone in the same
+  // statement — MATCH SIMPLE only checks rows where both columns are set.
+  ok(await refusedBy(() => db.exec(`update tasks set project_id = 'p-old' where id = 't1'`),
+       'tasks_project_milestone_same_project_fkey') === 'tasks_project_milestone_same_project_fkey',
+     'Moving a task to another project while keeping its milestone is refused');
+  await db.exec(`update tasks set project_id = 'p-old', project_milestone_id = null where id = 't1'`);
+  ok((await one<{ project_id: string | null; project_milestone_id: string | null }>(`select project_id, project_milestone_id from tasks where id = 't1'`)).project_id === 'p-old',
+     'Moving the project and clearing the milestone in one statement is accepted');
+  await db.exec(`update tasks set project_id = 'p1', project_milestone_id = 'm1' where id = 't1'`);
+
+  // Nullable behaviour is preserved on both sides.
+  ok(!(await rejects(() => db.exec(`insert into tasks (id, title, project_id, project_milestone_id) values ('t-plain', 'In a project, no milestone', 'p1', null)`))),
+     'A task can be in a project with no milestone');
+  ok(!(await rejects(() => db.exec(`insert into tasks (id, title) values ('t-free', 'No project, no milestone')`))),
+     'A task can have neither a project nor a milestone');
+  ok(!(await rejects(() => db.exec(`update tasks set project_milestone_id = null where id = 't-plain'`))),
+     'The link can be cleared on its own');
 
   // Deleting a milestone keeps its tasks and clears their link.
   await as(USER_A, () => db.exec(`delete from project_milestones where id = 'm1'`));
@@ -239,10 +391,39 @@ async function main() {
      && t3 !== undefined && t3.project_id === null && t3.project_milestone_id === null,
      'Deleting a project removes its milestones; its tasks are kept with project and milestone cleared');
 
-  // Documented limitation: the same-project rule is app-enforced, not DB-enforced.
-  const crossProjectAccepted = !(await as(USER_A, () => rejects(() => db.exec(
-    `insert into tasks (id, title, project_id, project_milestone_id) values ('t4', 'Mismatch', 'p-old', 'm2')`))));
-  ok(crossProjectAccepted, 'As documented, the database alone does not enforce "milestone belongs to the task\u2019s project" (the app does)');
+  // Regression: with only the composite key, the cascade nulls tasks.project_id
+  // first, MATCH SIMPLE then stops checking that row, and the milestone delete
+  // finds nothing to clear — leaving a link to a milestone that no longer
+  // exists. The single-column key is what prevents this.
+  const dangling = (await db.query<{ id: string }>(`
+    select t.id from tasks t
+      left join project_milestones m on m.id = t.project_milestone_id
+      where t.project_milestone_id is not null and m.id is null order by t.id`)).rows;
+  ok(dangling.length === 0,
+     `No task is left pointing at a milestone that no longer exists${dangling.length ? ` (found: ${dangling.map((d) => d.id).join(', ')})` : ''}`);
+  const orphanedMilestones = (await db.query<{ id: string }>(`
+    select m.id from project_milestones m
+      left join projects p on p.id = m.project_id
+      where p.id is null or p.user_id <> m.user_id`)).rows;
+  ok(orphanedMilestones.length === 0,
+     'No milestone survives its project, and none belongs to a different user than its project');
+
+  // The one combination MATCH SIMPLE still allows, and which the app refuses
+  // ("Choose a project before choosing a milestone"). Pinned here so a future
+  // change to either side is a deliberate one.
+  const projectLessAccepted = !(await as(USER_A, () => rejects(() => db.exec(
+    `insert into tasks (id, title, project_id, project_milestone_id) values ('t4', 'Milestone, no project', null, 'm2')`))));
+  ok(projectLessAccepted, 'MATCH SIMPLE still allows a milestone on a project-less task — the app refuses it, and the migration says so');
+  // The migration's own prose, unwrapped, so the wording is what is checked
+  // and not where a line happens to break.
+  const prose = migration.split('\n').map((l) => l.replace(/^\s*--\s?/, '')).join(' ').replace(/\s+/g, ' ');
+  ok(/WHAT THE DATABASE STILL ALLOWS/.test(prose)
+     && /a task with a milestone \*and no project\*/.test(prose)
+     && /MATCH FULL on the tasks foreign key forbids/.test(prose)
+     && /CHECK \(project_milestone_id IS NULL OR project_id IS NOT NULL\) breaks project deletion/.test(prose)
+     && /deferred CONSTRAINT TRIGGER fails the same way/.test(prose)
+     && /Choose a project before choosing a milestone/.test(prose),
+     'The migration documents that residual case, the app rule that covers it, and each rejected alternative');
 
   /* -------------------------------------------------------------- */
   /* The optional / rollback snippets in the file are valid SQL      */
@@ -257,24 +438,133 @@ async function main() {
     }
     return out.join('\n');
   };
-  const optional = commented(/OPTIONAL, NOT ENABLED/, /^-- With MATCH SIMPLE/);
+
+  // Re-running converges, even on a table an earlier draft left without them:
+  // create table if not exists would skip it, so the DO blocks must add them.
   await db.exec('begin');
   try {
-    await db.exec(`delete from tasks where id = 't4'`);
-    await db.exec(optional);
-    ok(await rejects(() => db.exec(`savepoint s; insert into tasks (id, user_id, title, project_id, project_milestone_id) values ('t5', '${USER_A}', 'Mismatch', 'p-old', 'm2')`)),
-       'The documented optional composite FK (not enabled) is valid and would reject a cross-project milestone');
-    await db.exec('rollback to savepoint s');
+    await db.exec(`
+      alter table tasks drop constraint tasks_project_milestone_fkey;
+      alter table tasks drop constraint tasks_project_milestone_same_project_fkey;
+      alter table project_milestones drop constraint project_milestones_id_project_key;
+      alter table project_milestones drop constraint project_milestones_project_user_fkey;
+    `);
+    await db.exec(migration);
+    ok((await constraint('project_milestones', 'project_milestones_project_user_fkey'))?.columns === 'project_id,user_id'
+       && (await constraint('project_milestones', 'project_milestones_id_project_key'))?.columns === 'id,project_id'
+       && (await constraint('tasks', 'tasks_project_milestone_fkey'))?.columns === 'project_milestone_id'
+       && (await constraint('tasks', 'tasks_project_milestone_same_project_fkey'))?.columns === 'project_milestone_id,project_id',
+       'Re-running on a table missing the constraints adds them back (self-healing, still idempotent)');
   } finally {
     await db.exec('rollback');
   }
+
+  // The optional generated-column block: valid SQL, closes the last case, and
+  // — unlike a CHECK or a deferred trigger — it does not break project deletion.
+  const optional = commented(/OPTIONAL, NOT ENABLED/, /^-- Together with foreign key B/);
+  ok(optional.includes('generated always as') && optional.includes('tasks_project_milestone_needs_project_fkey'),
+     'The optional block was extracted from the migration (not restated in this script)');
+  await db.exec('begin');
+  try {
+    // t4 is exactly the row this constraint exists to forbid, so the ALTER
+    // has to refuse to apply until it is gone.
+    ok(await refusedBy(() => db.exec(`savepoint sp0; ${optional}`), 'tasks_project_milestone_needs_project_fkey')
+         !== 'not rejected',
+       'The optional block validates existing rows: it refuses to apply while an offending task exists');
+    await db.exec('rollback to savepoint sp0');
+    await db.exec(`delete from tasks where id = 't4'`);
+    await db.exec(optional);
+    ok(await refusedBy(() => db.exec(
+         `savepoint s1; insert into tasks (id, user_id, title, project_milestone_id) values ('t5', '${USER_A}', 'Milestone, no project', 'm2')`),
+         'tasks_project_milestone_needs_project_fkey') === 'tasks_project_milestone_needs_project_fkey',
+       'With it enabled, a milestone on a project-less task is refused too');
+    await db.exec('rollback to savepoint s1');
+    ok(!(await rejects(() => db.exec(
+         `savepoint s2; insert into tasks (id, user_id, title, project_id, project_milestone_id) values ('t6', '${USER_A}', 'Fine', 'p1', 'm2'); rollback to savepoint s2`))),
+       'With it enabled, an ordinary task with a matching milestone still inserts');
+    ok(!(await rejects(() => db.exec(`savepoint s3; delete from projects where id = 'p1'; rollback to savepoint s3`))),
+       'With it enabled, deleting a project still works (a CHECK constraint would abort here)');
+  } finally {
+    await db.exec('rollback');
+  }
+  /* -------------------------------------------------------------- */
+  /* The alternatives the migration rejects really do fail           */
+  /* -------------------------------------------------------------- */
+  // The file claims each stronger option breaks something. Those are empirical
+  // claims, so they are measured here rather than asserted in prose.
+  {
+    const alt = new PGlite();
+    const altError = async (sql: string) => {
+      try { await alt.exec(sql); return null; } catch (error) { return String((error as Error).message); }
+    };
+    await alt.exec(`
+      create table projects (id text primary key, user_id uuid not null);
+      create table project_milestones (id text primary key, user_id uuid not null, project_id text not null);
+      create table tasks (
+        id text primary key,
+        project_id text references projects (id) on delete set null,
+        project_milestone_id text
+      );
+      insert into projects values ('p1', '${USER_A}'), ('p2', '${USER_A}');
+      insert into project_milestones values ('m1', '${USER_A}', 'p1'), ('m2', '${USER_A}', 'p2');
+      alter table projects add constraint projects_id_user_id_key unique (id, user_id);
+      alter table project_milestones add constraint project_milestones_id_project_key unique (id, project_id);
+      alter table tasks add constraint tasks_project_milestone_fkey
+        foreign key (project_milestone_id) references project_milestones (id) on delete set null;
+      alter table tasks add constraint tasks_project_milestone_same_project_fkey
+        foreign key (project_milestone_id, project_id) references project_milestones (id, project_id)
+        on delete set null (project_milestone_id);
+      -- the two ordinary shapes the app produces every day:
+      insert into tasks (id, project_id) values ('in-a-project-no-milestone', 'p1');
+      insert into tasks (id, project_id, project_milestone_id) values ('linked', 'p2', 'm2');
+    `);
+
+    const matchFull = await altError(`
+      alter table tasks add constraint tasks_match_full
+        foreign key (project_milestone_id, project_id) references project_milestones (id, project_id)
+        match full on delete set null (project_milestone_id)`);
+    ok(matchFull !== null && /violates foreign key constraint "tasks_match_full"/.test(matchFull),
+       'MATCH FULL is not an option: it rejects the ordinary "in a project, no milestone" task');
+
+    await alt.exec(`alter table tasks
+      add constraint tasks_project_milestone_needs_project
+      check (project_milestone_id is null or project_id is not null)`);
+    const checkDelete = await altError(`delete from projects where id = 'p2'`);
+    ok(checkDelete !== null && /violates check constraint "tasks_project_milestone_needs_project"/.test(checkDelete),
+       'A CHECK constraint is not an option: it aborts project deletion on the in-between row');
+    await alt.exec(`alter table tasks drop constraint tasks_project_milestone_needs_project`);
+
+    await alt.exec(`
+      create function tasks_project_milestone_guard() returns trigger language plpgsql as $$
+      begin
+        if new.project_milestone_id is not null and new.project_id is null then
+          raise exception 'a task milestone needs a project';
+        end if;
+        return new;
+      end $$;
+      create constraint trigger tasks_project_milestone_guard
+        after insert or update on tasks deferrable initially deferred
+        for each row execute function tasks_project_milestone_guard();
+    `);
+    const guardRejects = await altError(`insert into tasks (id, project_milestone_id) values ('bad', 'm1')`);
+    const guardDelete = await altError(`delete from projects where id = 'p2'`);
+    ok(guardRejects !== null && /a task milestone needs a project/.test(guardRejects),
+       'A deferred constraint trigger would catch the bad row…');
+    ok(guardDelete !== null && /a task milestone needs a project/.test(guardDelete),
+       '…but it is not an option either: it fires on the row as queued, so project deletion still aborts');
+    await alt.close();
+  }
+
   const rollback = commented(/^-- ROLLBACK/, /^-- The app falls back/);
   await db.exec('begin');
   try {
     await db.exec(rollback);
     ok((await one<{ n: number }>(`select count(*)::int as n from information_schema.tables where table_name = 'project_milestones'`)).n === 0
+       && (await one<{ n: number }>(`select count(*)::int as n from information_schema.columns where table_name = 'tasks' and column_name = 'project_milestone_id'`)).n === 0
+       && (await constraintCount('projects', `conname = 'projects_id_user_id_key'`)) === 0
+       && (await constraintCount('projects', `contype = 'p'`)) === 1
        && (await learningsFingerprint()).full === learningsBefore.full,
-       'The documented rollback is valid, removes only 008\u2019s objects and leaves the learnings untouched');
+       'The documented rollback is valid, removes exactly 008\u2019s objects, keeps the projects primary key and leaves the learnings untouched');
   } finally {
     await db.exec('rollback');
   }

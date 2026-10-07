@@ -4,8 +4,8 @@
  * The dock is a presentation layer over the existing authoritative timer
  * state: it must list exactly the tasks whose persisted timer is running or
  * paused, mirror every start/pause/resume/finish/cancel transition made
- * through the normal DataProvider actions, preserve the single-running-timer
- * rule on Resume, and keep its collapsed preference in localStorage.
+ * through the normal DataProvider actions, list any number of concurrently
+ * running timers, and keep its collapsed preference in localStorage.
  *
  * The real component is rendered in jsdom against the real DataProvider, so
  * the dock is asserted the way the user meets it. Navigation is observed
@@ -108,7 +108,7 @@ async function main() {
   ok(dockText().includes('00:26'), 'Paused: the dock shows the frozen accumulated time (00:26)');
 
   /* ------------------------------------------------------------------ */
-  /* Multiple timers: one running + any number paused                    */
+  /* Multiple timers: any number running, any number paused              */
   /* ------------------------------------------------------------------ */
   await run(() => c().actions.startTask(idB));
   ok(dockText().includes('Build FocusDesk') && dockText().includes('PatientScure'),
@@ -116,17 +116,17 @@ async function main() {
   const text = dockText();
   ok(text.indexOf('PatientScure') < text.indexOf('Build FocusDesk'), 'Ordering: the running task is listed first');
 
-  /* Resume must preserve the single-running-timer rule, not bypass it. */
+  /* Resume adds a timer; it never stops or replaces the one already running. */
   await click(`button[aria-label="Resume timer for Build FocusDesk"]`);
-  ok(isTimerPaused(get(idA)) && isTimerRunning(get(idB)),
-     'Dock Resume while another timer runs: blocked — the paused task stays paused');
-  ok(c().toasts.some((t) => t.message.includes('PatientScure')),
-     'The block is explained with the existing toast naming the running task');
+  ok(isTimerRunning(get(idA)) && isTimerRunning(get(idB)),
+     'Dock Resume while another timer runs: both run side by side');
+  ok(c().toasts.every((t) => !t.message.includes('before resuming another timer')),
+     'No blocking toast is raised — concurrent timers are normal');
 
-  await run(() => c().actions.pauseTask(idB));
-  await click(`button[aria-label="Resume timer for Build FocusDesk"]`);
+  /* Pausing one leaves the other running. */
+  await click(`button[aria-label="Pause timer for PatientScure"]`);
   ok(isTimerRunning(get(idA)) && isTimerPaused(get(idB)),
-     'Dock Resume with no running timer: the paused task resumes normally');
+     'Dock Pause affects only its own task; the other keeps running');
 
   /* ------------------------------------------------------------------ */
   /* Leaving the timer states removes the row                            */

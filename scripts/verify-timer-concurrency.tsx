@@ -1,15 +1,21 @@
 /**
- * Headless check of the single-timer rule (spec §33 timer + Priority focus).
+ * Headless check of CONCURRENT task timers.
  *
- * One question decides whether a task may start its timer: is another task
- * *actively running* a session? A paused session is `in_progress` too, but it
- * holds no clock — it must not block. Priority timers and normal tasks answer
- * that question identically, because both ask `blockingTimerTask`.
+ * FocusDesk tracks real work, and real work overlaps: Task A in VS Code,
+ * Task B in Arena.ai and Task C (a book) genuinely run at the same time. So
+ * any number of task timers may run simultaneously, and starting one must
+ * never stop, pause, replace or switch another — through any entry point:
+ * a task row's Start, a task row's Resume, the row's "Start (in progress)"
+ * menu item, the Timer Dock, Focus Mode, or Today's Priority.
  *
- * The real components are rendered in jsdom, so the "Another task is in
- * progress" dialog is asserted the way the user meets it. The app is mounted
- * once and kept mounted, because remounting is a page reload — and a reload
- * deliberately pauses any still-running session.
+ * There is deliberately no concurrency guard left in the codebase, so this
+ * script also asserts the *absence* of the old "Another task is in progress"
+ * dialog on every path that used to raise it.
+ *
+ * The real components are rendered in jsdom, so each path is exercised the
+ * way the user meets it. The app is mounted once and kept mounted, because
+ * remounting is a page reload — and a reload deliberately pauses every
+ * still-running session (unchanged recovery behaviour, asserted at the end).
  * Run: npx tsx scripts/verify-timer-concurrency.tsx  (requires jsdom)
  */
 import { JSDOM } from 'jsdom';
@@ -22,26 +28,38 @@ async function main() {
   const React = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { act } = React;
+  const { AppRouterContext } = await import('next/dist/shared/lib/app-router-context.shared-runtime');
   const { AuthProvider } = await import('../components/auth/auth-provider');
   const { DataProvider, useData } = await import('../components/data/data-provider');
-  const { UIProvider } = await import('../components/ui/ui-provider');
+  const { UIProvider, useUI } = await import('../components/ui/ui-provider');
   const { PriorityCard } = await import('../components/today/priority-card');
   const { TaskRow } = await import('../components/tasks/task-row');
+  const { TimerDock } = await import('../components/layout/timer-dock');
+  const { FocusMode } = await import('../components/layout/focus-mode');
   const { todayISO } = await import('../lib/dates');
   const { dailyPriorityTimerTaskId } = await import('../lib/selectors');
-  const { blockingTimerTask, isTimerPaused, isTimerRunning } = await import('../lib/timer');
+  const { elapsedActiveSeconds, isTimerPaused, isTimerRunning, runningTimerTasks } = await import('../lib/timer');
   type Task = import('../lib/types').Task;
 
   let ctx: ReturnType<typeof useData> | null = null;
-  const Probe = () => { ctx = useData(); return null; };
+  let ui: ReturnType<typeof useUI> | null = null;
+  const Probe = () => { ctx = useData(); ui = useUI(); return null; };
   const c = () => ctx!;
+  const u = () => ui!;
   const get = (id: string) => c().data.tasks.find((t) => t.id === id)!;
 
-  /** Today's priority card plus one row per task under test, live from app data. */
+  const router = {
+    push: () => {}, replace: () => {}, prefetch: () => Promise.resolve(),
+    back: () => {}, forward: () => {}, refresh: () => {},
+  } as unknown as import('next/dist/shared/lib/app-router-context.shared-runtime').AppRouterInstance;
+
+  /** Priority card, the Timer Dock, Focus Mode and one row per task under test. */
   const Harness = ({ taskIds }: { taskIds: string[] }) => {
     const { data } = useData();
-    return React.createElement('div', null,
+    return React.createElement(AppRouterContext.Provider, { value: router },
       React.createElement('div', { id: 'priority-slot' }, React.createElement(PriorityCard)),
+      React.createElement('div', { id: 'dock-slot' }, React.createElement(TimerDock)),
+      React.createElement('div', { id: 'focus-slot' }, React.createElement(FocusMode)),
       ...taskIds.map((id) => {
         const task = data.tasks.find((t) => t.id === id);
         return React.createElement('div', { id: `row-${id}`, key: id },
@@ -74,162 +92,219 @@ async function main() {
     root = null;
     await act(async () => { dom.window.dispatchEvent(new dom.window.Event('pagehide')); });
     await act(async () => { r.unmount(); });
-    ctx = null;
+    ctx = null; ui = null;
   };
 
   const run = (fn: () => Promise<unknown>) => act(async () => { await fn(); });
+  const wait = (ms: number) => act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); });
   const rowText = (id: string) => document.querySelector(`#row-${id}`)?.textContent ?? '';
   const priorityText = () => document.querySelector('#priority-slot')?.textContent ?? '';
-  const clickStart = async (id: string) => {
-    const el = document.querySelector(`#row-${id} button[aria-label="Start task"]`);
-    if (!el) throw new Error(`no Start button rendered for task ${id}`);
+  const dockText = () => document.querySelector('#dock-slot')?.textContent ?? '';
+  const focusText = () => document.querySelector('#focus-slot')?.textContent ?? '';
+
+  const clickEl = async (el: Element | null, what: string) => {
+    if (!el) throw new Error(`no element to click: ${what}`);
     await act(async () => {
       el.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
   };
-  const blocked = (id: string) => rowText(id).includes('Another task is in progress');
-  /** Close the warning the way the user does — it stays open until dismissed. */
-  const dismissBlock = async (id: string) => {
-    const buttons = Array.from(document.querySelectorAll(`#row-${id} [role="dialog"] button`));
-    const gotIt = buttons.find((b) => (b.textContent ?? '').includes('Got it'));
-    if (!gotIt) throw new Error(`no dismiss button in the blocking dialog of task ${id}`);
-    await act(async () => {
-      gotIt.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+  const clickIn = (scope: string, selector: string, what: string) =>
+    clickEl(document.querySelector(`${scope} ${selector}`), what);
+  /** Click a button by its visible text inside `scope`. */
+  const clickText = async (scope: string, text: string) => {
+    const buttons = Array.from(document.querySelectorAll(`${scope} button`));
+    const match = buttons.find((b) => (b.textContent ?? '').includes(text));
+    await clickEl(match ?? null, `button containing “${text}” in ${scope}`);
   };
+
+  /** The old guard's dialog must never appear again, anywhere. */
+  const anyBlockDialog = () => (document.body.textContent ?? '').includes('Another task is in progress');
+  const runningIds = () => runningTimerTasks(c().data.tasks).map((t) => t.id).sort();
+  const sorted = (ids: string[]) => [...ids].sort();
 
   const ok = (cond: boolean, msg: string) => { if (!cond) { console.error('FAIL:', msg); process.exit(1); } console.log('✓', msg); };
 
   /* ------------------------------------------------------------------ */
-  /* The four workflow states, at the level of the persisted timer fields */
+  /* Unit level: the helper reports EVERY running task, never just one   */
   /* ------------------------------------------------------------------ */
   const base = {
-    id: 'x', title: 'x', priority: 'medium' as const, createdAt: new Date().toISOString(),
+    title: 'x', priority: 'medium' as const, createdAt: new Date().toISOString(),
     tags: [], postponementCount: 0, archived: false,
   };
-  const notStarted = { ...base, status: 'created' as const };
-  const running = { ...base, status: 'in_progress' as const, startedAt: new Date().toISOString() };
-  const paused = { ...base, status: 'in_progress' as const, pausedAt: new Date().toISOString(), actualDurationSeconds: 26 };
-  const completed = { ...base, status: 'completed' as const, completedAt: new Date().toISOString() };
-  ok(blockingTimerTask([notStarted]) === undefined && blockingTimerTask([completed]) === undefined
-     && blockingTimerTask([paused]) === undefined && blockingTimerTask([running])?.id === 'x',
-     'Only a RUNNING timer blocks: not-started, paused and completed never do');
-  ok(blockingTimerTask([paused, running], 'other')?.id === 'x' && blockingTimerTask([running], 'x') === undefined,
-     'The guard ignores the task being started and finds the other running session');
+  const notStarted: Task = { ...base, id: 'n', status: 'created' };
+  const runA: Task = { ...base, id: 'a', status: 'in_progress', startedAt: new Date().toISOString() };
+  const runB: Task = { ...base, id: 'b', status: 'in_progress', startedAt: new Date().toISOString() };
+  const pausedT: Task = { ...base, id: 'p', status: 'in_progress', pausedAt: new Date().toISOString(), actualDurationSeconds: 26 };
+  const completed: Task = { ...base, id: 'c', status: 'completed', completedAt: new Date().toISOString() };
+  const archivedRunning: Task = { ...base, id: 'z', status: 'in_progress', startedAt: new Date().toISOString(), archived: true };
+
+  ok(runningTimerTasks([notStarted, pausedT, completed]).length === 0,
+     'Unit: not-started, paused and completed tasks are not running');
+  ok(runningTimerTasks([runA, runB, pausedT, completed]).map((t) => t.id).join() === 'a,b',
+     'Unit: every running task is reported — two at once, not one');
+  ok(runningTimerTasks([archivedRunning]).length === 0, 'Unit: archived tasks stay out of the running set');
 
   /* ------------------------------------------------------------------ */
-  /* Live app: one priority + six normal tasks, one mount throughout      */
-  /*                                                                      */
-  /* Each "click Start" needs a task that has never been timed: a paused    */
-  /* row offers Resume, a running row offers Pause. Tasks are all created   */
-  /* up front because mounting the app is a page reload, and a reload       */
-  /* deliberately pauses any still-running session.                        */
+  /* Live app: one priority + several normal tasks, one mount throughout  */
   /* ------------------------------------------------------------------ */
   await mountApp([]);
   const today = todayISO();
   let priority!: { id: string };
   await run(async () => { priority = await c().actions.setDailyPriority('Ship the release'); });
   const ids: string[] = [];
-  for (const title of ['Normal A', 'Normal B', 'Normal C', 'Normal D', 'Normal E', 'Normal F']) {
+  for (const title of ['Task A', 'Task B', 'Task C', 'Task D', 'Task E']) {
     await run(async () => { ids.push((await c().actions.addTask({ title, scheduledDate: today, status: 'today' })).id); });
   }
-  const [taskA, taskB, taskC, taskD, taskE, taskF] = ids;
+  const [taskA, taskB, taskC, taskD, taskE] = ids;
   const priorityTaskId = dailyPriorityTimerTaskId(priority.id);
   await mountApp(ids);
 
-  /* A. Running normal task blocks another normal task ------------------ */
-  await run(() => c().actions.startTask(taskA));
-  ok(isTimerRunning(get(taskA)) && rowText(taskA).includes('Working'), 'A: Normal A is running (startedAt set)');
-  ok(blockingTimerTask(c().data.tasks, taskB)?.id === taskA, 'A: the running task is the one reported as blocking');
-  await clickStart(taskB);
-  ok(blocked(taskB) && rowText(taskB).includes('\u201cNormal A\u201d is currently in progress'),
-     'A: starting another task while one runs shows the "Another task is in progress" dialog naming it');
-  ok(!isTimerRunning(get(taskB)), 'A: the blocked task did not start a second timer');
-  await dismissBlock(taskB);
-  ok(!blocked(taskB), 'A: the warning is dismissed and does not linger');
+  /* ------------------------------------------------------------------ */
+  /* 1. A → B → C : three timers started without pausing the previous     */
+  /* ------------------------------------------------------------------ */
+  await clickIn(`#row-${taskA}`, 'button[aria-label="Start task"]', 'Start A');
+  ok(isTimerRunning(get(taskA)) && !anyBlockDialog(), '1: Task A started');
 
-  /* B. Paused normal task does NOT block ------------------------------- */
-  await run(() => c().actions.pauseTask(taskA));
-  ok(isTimerPaused(get(taskA)) && get(taskA).startedAt === undefined, 'B: Normal A is paused (startedAt cleared, pausedAt set)');
-  await clickStart(taskB);
-  ok(!blocked(taskB), 'B: a paused task does NOT trigger the "Another task is in progress" dialog');
-  ok(isTimerRunning(get(taskB)), 'B: Normal B started its own timer while Normal A stays paused');
-  ok(isTimerPaused(get(taskA)) && !isTimerRunning(get(taskA)), 'B: the paused task was left alone');
+  await clickIn(`#row-${taskB}`, 'button[aria-label="Start task"]', 'Start B');
+  ok(!anyBlockDialog(), '1: starting B while A runs shows NO "Another task is in progress" dialog');
+  ok(isTimerRunning(get(taskB)), '1: Task B started');
+  ok(isTimerRunning(get(taskA)), '1: Task A is STILL running — B did not stop it');
 
-  /* C. Running Priority blocks a normal task --------------------------- */
+  await clickIn(`#row-${taskC}`, 'button[aria-label="Start task"]', 'Start C');
+  ok(!anyBlockDialog(), '1: starting C while A and B run shows no dialog');
+  ok(sorted(runningIds()).join() === sorted([taskA, taskB, taskC]).join(),
+     '1: A = running, B = running, C = running — three independent timers');
+  ok(rowText(taskA).includes('Working') && rowText(taskB).includes('Working') && rowText(taskC).includes('Working'),
+     '1: all three rows read "Working"');
+
+  /* Each timer accumulates on its own. */
+  await wait(1100);
+  ok(elapsedActiveSeconds(get(taskA)) >= 1 && elapsedActiveSeconds(get(taskB)) >= 1 && elapsedActiveSeconds(get(taskC)) >= 1,
+     '1: every running timer accumulates time independently');
+
+  /* ------------------------------------------------------------------ */
+  /* Timer Dock shows all of them at once                                 */
+  /* ------------------------------------------------------------------ */
+  ok(dockText().includes('Task A') && dockText().includes('Task B') && dockText().includes('Task C'),
+     'Dock: all three running timers are listed simultaneously');
+
+  /* ------------------------------------------------------------------ */
+  /* 2. Pausing B must not affect A or C                                  */
+  /* ------------------------------------------------------------------ */
+  const aBeforePause = elapsedActiveSeconds(get(taskA));
+  await clickIn(`#row-${taskB}`, 'button[aria-label="Pause timer"]', 'Pause B');
+  ok(isTimerPaused(get(taskB)), '2: B = paused');
+  ok(isTimerRunning(get(taskA)) && isTimerRunning(get(taskC)), '2: A = running, C = running — unaffected by pausing B');
+  ok(sorted(runningIds()).join() === sorted([taskA, taskC]).join(), '2: exactly A and C remain running');
+  const bFrozen = get(taskB).actualDurationSeconds ?? 0;
+  await wait(1100);
+  ok((get(taskB).actualDurationSeconds ?? 0) === bFrozen, '2: B\u2019s accumulated time is frozen while paused');
+  ok(elapsedActiveSeconds(get(taskA)) > aBeforePause, '2: A kept accumulating across B\u2019s pause');
+
+  /* Resuming B from its row must not touch A or C either. */
+  await clickIn(`#row-${taskB}`, 'button[aria-label="Resume timer"]', 'Resume B');
+  ok(!anyBlockDialog(), '2: resuming B while A and C run shows no dialog');
+  ok(sorted(runningIds()).join() === sorted([taskA, taskB, taskC]).join(),
+     '2: Resume brings B back alongside the still-running A and C');
+  ok((get(taskB).actualDurationSeconds ?? 0) >= bFrozen, '2: B resumed from its accumulated time, nothing lost');
+
+  /* ------------------------------------------------------------------ */
+  /* 3. Finishing C must not affect A or B                                */
+  /* ------------------------------------------------------------------ */
+  await clickIn(`#row-${taskC}`, 'button[aria-label="Finish task"]', 'Finish C');
+  ok(get(taskC).status === 'completed' && (get(taskC).actualDurationSeconds ?? 0) >= 1,
+     '3: C is completed with its own recorded duration');
+  ok(sorted(runningIds()).join() === sorted([taskA, taskB]).join(), '3: A and B are still running after C finished');
+
+  /* ------------------------------------------------------------------ */
+  /* 4. Daily Priority starts next to the running tasks — no modal        */
+  /* ------------------------------------------------------------------ */
+  ok(priorityText().includes('Start Priority'), '4: the Priority card offers Start Priority');
+  await clickText('#priority-slot', 'Start Priority');
+  ok(!anyBlockDialog(), '4: Start Priority while two tasks run shows NO dialog');
+  ok(isTimerRunning(get(priorityTaskId)), '4: the Daily Priority timer is running');
+  ok(isTimerRunning(get(taskA)) && isTimerRunning(get(taskB)),
+     '4: the already-running tasks are untouched by the Priority timer');
+  ok(sorted(runningIds()).join() === sorted([taskA, taskB, priorityTaskId]).join(),
+     '4: Existing tasks = running, Daily Priority task = running');
+  ok(c().toasts.every((t) => !t.message.includes('before starting another timer')),
+     '4: no "finish or pause" toast was raised');
+
+  /* The same through the service layer directly (the old guard lived here). */
+  await run(() => c().actions.pauseTask(priorityTaskId));
+  let resumedPriority: Task | null = null;
+  await run(async () => { resumedPriority = await c().actions.startDailyPriorityTimer(priority.id); });
+  ok(resumedPriority !== null && isTimerRunning(get(priorityTaskId)),
+     '4: startDailyPriorityTimer resolves to a running task while others run (never null)');
+  ok(isTimerRunning(get(taskA)) && isTimerRunning(get(taskB)), '4: and still leaves A and B running');
+
+  /* ------------------------------------------------------------------ */
+  /* 5. Focus Mode does not stop background timers                        */
+  /* ------------------------------------------------------------------ */
+  await act(async () => { u().startFocus({ type: 'task', id: taskD, title: 'Task D' }); });
+  ok(focusText().includes('Task D'), '5: Focus Mode opened on Task D');
+  await clickText('#focus-slot', 'Start');
+  ok(!anyBlockDialog(), '5: starting a Focus Mode timer shows no dialog');
+  ok(isTimerRunning(get(taskD)), '5: the Focus Mode task timer started');
+  ok(isTimerRunning(get(taskA)) && isTimerRunning(get(taskB)) && isTimerRunning(get(priorityTaskId)),
+     '5: every background timer remains running — Focus Mode stopped nothing');
+
+  await clickText('#focus-slot', 'Pause');
+  ok(isTimerPaused(get(taskD)), '5: Focus Mode pause affects only its own task');
+  ok(isTimerRunning(get(taskA)) && isTimerRunning(get(taskB)), '5: background timers still running after a Focus Mode pause');
+  await clickText('#focus-slot', 'Resume');
+  ok(isTimerRunning(get(taskD)) && isTimerRunning(get(taskA)) && isTimerRunning(get(taskB)),
+     '5: Focus Mode resume starts next to the active timers');
+  await act(async () => { u().stopFocus(); });
+
+  /* ------------------------------------------------------------------ */
+  /* 6. The row's "Start (in progress)" menu item follows the same rule   */
+  /* ------------------------------------------------------------------ */
+  await clickIn(`#row-${taskE}`, 'button[aria-label="Task actions"]', 'open Task E menu');
+  await clickText(`#row-${taskE}`, 'Start (in progress)');
+  ok(!anyBlockDialog() && isTimerRunning(get(taskE)), '6: the menu Start path also starts a concurrent timer');
+  ok(runningTimerTasks(c().data.tasks).length === 5,
+     '6: five timers (A, B, D, E, Priority) run at the same time');
+  ok(dockText().includes('Task A') && dockText().includes('Task B') && dockText().includes('Task D')
+     && dockText().includes('Task E') && dockText().includes('Ship the release'),
+     'Dock: all five concurrent timers are listed simultaneously');
+
+  /* ------------------------------------------------------------------ */
+  /* 7. The manual scenario, end to end: A keeps accumulating throughout  */
+  /* ------------------------------------------------------------------ */
+  const aMidpoint = elapsedActiveSeconds(get(taskA));
   await run(() => c().actions.pauseTask(taskB));
-  let priorityTask!: Task | null;
-  await run(async () => { priorityTask = await c().actions.startDailyPriorityTimer(priority.id); });
-  ok(priorityTask !== null && isTimerRunning(get(priorityTaskId)) && priorityText().includes('Working'),
-     'C: the Priority timer is running');
-  await clickStart(taskC);
-  ok(blocked(taskC) && rowText(taskC).includes('\u201cShip the release\u201d is currently in progress'),
-     'C: a RUNNING Priority blocks a normal task from starting');
-  ok(!isTimerRunning(get(taskC)), 'C: the normal task did not start');
-  await dismissBlock(taskC);
-
-  /* D. Paused Priority does NOT block a normal task -------------------- */
-  await run(() => c().actions.pauseTask(priorityTaskId));
-  ok(isTimerPaused(get(priorityTaskId)) && priorityText().includes('Resume Priority'),
-     'D: the Priority timer is paused and offers "Resume Priority"');
-  await clickStart(taskC);
-  ok(!blocked(taskC), 'D: a PAUSED Priority does NOT trigger the "Another task is in progress" dialog');
-  ok(isTimerRunning(get(taskC)), 'D: Normal C started while the Priority stays paused');
-
-  /* The same rule on the Priority side (the guard inside the data layer) */
-  let blockedPriority: Task | null = null;
-  await run(async () => { blockedPriority = await c().actions.startDailyPriorityTimer(priority.id); });
-  ok(blockedPriority === null && isTimerRunning(get(taskC)),
-     'Symmetric: a RUNNING normal task blocks Start Priority');
-  await run(() => c().actions.pauseTask(taskC));
-  let allowedPriority: Task | null = null;
-  await run(async () => { allowedPriority = await c().actions.startDailyPriorityTimer(priority.id); });
-  ok(allowedPriority !== null && isTimerRunning(get(priorityTaskId)),
-     'Symmetric: a PAUSED normal task does not block Start Priority');
-
-  /* E. Reload with a paused Priority ---------------------------------- */
-  await run(() => c().actions.pauseTask(priorityTaskId));
-  const frozenPriority = get(priorityTaskId).actualDurationSeconds ?? 0;
-  await mountApp(ids);
-  ok(isTimerPaused(get(priorityTaskId)) && get(priorityTaskId).startedAt === undefined
-     && get(priorityTaskId).actualDurationSeconds === frozenPriority,
-     'E: reload keeps the Priority paused with its accumulated time (never re-armed as running)');
-  ok(blockingTimerTask(c().data.tasks, taskD) === undefined, 'E: after reload the paused Priority blocks nothing');
-  await clickStart(taskD);
-  ok(!blocked(taskD) && isTimerRunning(get(taskD)), 'E: after reload, a normal task starts next to the paused Priority');
-
-  /* F. Reload with a paused normal task -------------------------------- */
-  await run(() => c().actions.pauseTask(taskD));
-  const frozenD = get(taskD).actualDurationSeconds ?? 0;
-  await mountApp(ids);
-  ok(isTimerPaused(get(taskD)) && get(taskD).actualDurationSeconds === frozenD,
-     'F: reload keeps the normal task paused with its accumulated time');
-  ok(blockingTimerTask(c().data.tasks, taskE) === undefined, 'F: after reload the paused task blocks nothing');
-  await clickStart(taskE);
-  ok(!blocked(taskE) && isTimerRunning(get(taskE)), 'F: after reload, another task starts next to the paused one');
-
-  /* The reported regression, verbatim ---------------------------------- */
   await run(() => c().actions.finishTask(taskE));
-  await run(() => c().actions.updateTask(priorityTaskId, { actualDurationSeconds: 26 }));
-  ok(priorityText().includes('Paused 00:26') && priorityText().includes('Resume Priority'),
-     'Regression setup: the Priority reads "Paused 00:26" with a "Resume Priority" button');
-  await clickStart(taskF);
-  ok(!blocked(taskF), 'Regression: Start on another task shows NO "Another task is in progress" dialog');
-  ok(isTimerRunning(get(taskF)), 'Regression: the other task starts its timer normally');
+  await wait(1100);
+  ok(isTimerRunning(get(taskA)), '7: A is still running after B was paused and E finished');
+  ok(elapsedActiveSeconds(get(taskA)) > aMidpoint,
+     '7: A continued accumulating time throughout the whole session');
+  ok(isTimerPaused(get(taskB)) && get(taskB).status === 'in_progress', '7: B stayed paused, not stopped');
+  ok(get(taskE).status === 'completed', '7: E stayed completed');
 
-  /* A running task is still the single active one, and closing/reopening
-     hands the session to the existing recovery (paused) — which then
-     blocks nothing, and never comes back as running. */
-  ok(blockingTimerTask(c().data.tasks, taskA)?.id === taskF, 'A running task remains the single active session');
+  /* ------------------------------------------------------------------ */
+  /* 8. Recovery is unchanged: a reload still pauses every running timer  */
+  /* ------------------------------------------------------------------ */
+  const aBeforeReload = get(taskA).actualDurationSeconds ?? 0;
   await mountApp(ids);
-  ok(isTimerPaused(get(taskF)) && get(taskF).startedAt === undefined,
-     'Reload: closing the app left the running session paused, never running again');
-  ok(blockingTimerTask(c().data.tasks, taskA) === undefined, 'Reload: a session recovered as paused blocks nothing');
+  ok(runningTimerTasks(c().data.tasks).length === 0,
+     '8: reload recovers every running session as paused (existing recovery, unchanged)');
+  ok(isTimerPaused(get(taskA)) && (get(taskA).actualDurationSeconds ?? 0) >= aBeforeReload,
+     '8: A is paused at its last durable checkpoint with its time intact');
+  ok(isTimerPaused(get(taskD)) && isTimerPaused(get(priorityTaskId)),
+     '8: the Focus Mode task and the Priority recovered as paused too');
+
+  /* And several can be restarted again side by side after the reload. */
+  await clickIn(`#row-${taskA}`, 'button[aria-label="Resume timer"]', 'Resume A');
+  await clickIn(`#row-${taskD}`, 'button[aria-label="Resume timer"]', 'Resume D');
+  ok(!anyBlockDialog() && isTimerRunning(get(taskA)) && isTimerRunning(get(taskD)),
+     '8: after a reload two timers resume side by side with no dialog');
+
+  ok(!anyBlockDialog(), 'The "Another task is in progress" dialog never appeared at any point');
 
   await unmountApp();
-  console.log('\nTimer concurrency verified.');
+  console.log('\nConcurrent task timers verified.');
   process.exit(0);
 }
 main();

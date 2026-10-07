@@ -6,7 +6,7 @@ import { useData } from '@/components/data/data-provider';
 import { IconClock, IconMinus, IconPause, IconPlay, IconPopOut } from '@/components/ui/icons';
 import { formatStopwatch } from '@/lib/dates';
 import { isDailyPriorityTimerTaskId } from '@/lib/selectors';
-import { blockingTimerTask, elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { useNow } from '@/components/tasks/use-now';
 import { TimerPipView, useTimerPip } from './timer-pip';
 import type { Task } from '@/lib/types';
@@ -20,9 +20,9 @@ import type { Task } from '@/lib/types';
  * via the shared `lib/timer` helpers, and re-renders are driven by the shared
  * `useNow` clock. The dock owns no timer state and no interval of its own.
  *
- * Pause/Resume reuse the normal DataProvider actions. Resume applies the same
- * single-running-timer rule as every Start path (`blockingTimerTask`): a
- * running session blocks, a paused one never does.
+ * Pause/Resume reuse the normal DataProvider actions and act on exactly one
+ * task: any number of timers may run at once, and pausing or resuming one
+ * never stops, pauses or replaces another.
  *
  * "Pop out" mirrors this same list into a native Document Picture-in-Picture
  * window (see `./timer-pip`) — a second view of the list computed here, not a
@@ -45,7 +45,7 @@ function initialCollapsed(): boolean {
 }
 
 export function TimerDock() {
-  const { ready, data, actions, notify } = useData();
+  const { ready, data, actions } = useData();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [busy, setBusy] = useState(false);
@@ -92,16 +92,9 @@ export function TimerDock() {
 
   const pause = (task: Task) => runTimerAction(() => actions.pauseTask(task.id));
 
-  const resume = (task: Task) => {
-    // Same single-timer rule as every Start path: only a RUNNING session
-    // blocks; paused sessions never do.
-    const other = blockingTimerTask(data.tasks, task.id);
-    if (other) {
-      notify(`Finish or pause “${other.title}” before resuming another timer`);
-      return;
-    }
-    runTimerAction(() => actions.resumeTask(task.id));
-  };
+  // Timers are independent: resuming this one leaves every other running
+  // timer untouched, exactly like every other Start/Resume path.
+  const resume = (task: Task) => runTimerAction(() => actions.resumeTask(task.id));
 
   // A daily priority's timer lives on an app-owned Task shown on Today;
   // ordinary tasks live on the Tasks screen.

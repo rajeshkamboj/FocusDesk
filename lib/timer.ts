@@ -34,20 +34,19 @@ export function isTimerPaused(task: Task): boolean {
 }
 
 /**
- * The task that currently owns the timer, if any — the one question every
- * "only one task at a time" guard must ask: is another task *actively running*
- * a session?
+ * Every task whose timer is currently running.
  *
- * Only a running session (`isTimerRunning`: `in_progress` with a live
- * `startedAt`) blocks starting another one. A paused session (`in_progress`
- * with `pausedAt` and no `startedAt`) is holding no clock and has already
- * released the timer, so it must not block; nor does a completed or
- * never-started task. The persisted timestamps — not the workflow status —
- * are the source of truth, and both guards (a task row's Start button and the
- * daily priority's) ask this same question so they cannot drift apart.
+ * Timers are independent: starting one never stops, pauses, replaces or
+ * switches another. Task A in VS Code, Task B in Arena.ai and Task C (a book)
+ * can genuinely run at the same time, so this returns a list rather than
+ * answering "which single task owns the timer". Archived tasks are excluded
+ * everywhere timers are surfaced, so they are excluded here too.
+ *
+ * There is deliberately no "blocking timer" query: no code path may refuse to
+ * start a timer because another one is running.
  */
-export function blockingTimerTask(tasks: Task[], excludeTaskId?: string): Task | undefined {
-  return tasks.find((t) => t.id !== excludeTaskId && !t.archived && isTimerRunning(t));
+export function runningTimerTasks(tasks: Task[]): Task[] {
+  return tasks.filter((t) => !t.archived && isTimerRunning(t));
 }
 
 /**

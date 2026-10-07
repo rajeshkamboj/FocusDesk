@@ -24,7 +24,7 @@ import {
   IconTrash,
 } from '@/components/ui/icons';
 import { addDays, formatCompletionTimestamp, formatDuration, formatFocusedTime, formatStopwatch, relativeDay, todayISO } from '@/lib/dates';
-import { blockingTimerTask, elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { subtasksForTask } from '@/lib/selectors';
 import type { Task } from '@/lib/types';
 import { TaskFormModal } from './task-form-modal';
@@ -58,7 +58,6 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [blockedBy, setBlockedBy] = useState<Task | null>(null);
   const [timerBusy, setTimerBusy] = useState(false);
   // UI-only expansion state for task details and the separately collapsible checklist.
   const [expanded, setExpanded] = useState(false);
@@ -92,16 +91,10 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
     : subtasks.length > 0 ? `Expand subtasks: ${completedSubtasks}/${subtasks.length} complete` : 'Add subtask';
 
   /**
-   * Only one task can be actively timed at a time. "Actively timed" means a
-   * running timer session (`startedAt` set), not an `in_progress` status: a
-   * paused task holds no clock, so it must never block starting another one.
+   * Timers are independent: starting this one never stops, pauses or replaces
+   * a timer running on any other task. Whatever else is running keeps running.
    */
-  const guardedStart = () => {
-    const other = blockingTimerTask(data.tasks, task.id);
-    if (other) {
-      setBlockedBy(other);
-      return;
-    }
+  const startTimer = () => {
     void runTimerAction(() => actions.startTask(task.id));
   };
 
@@ -325,7 +318,7 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
                 variant="secondary"
                 disabled={timerBusy}
                 aria-label="Start task"
-                onClick={guardedStart}
+                onClick={startTimer}
               >
                 <IconPlay width={13} height={13} />
                 <span className="hidden sm:inline">Start</span>
@@ -511,23 +504,6 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
           void actions.deleteTask(task.id);
         }}
       />
-
-      {/* Only one task can be timed at a time — inform instead of silently stopping the other. */}
-      <Modal
-        open={blockedBy !== null}
-        onClose={() => setBlockedBy(null)}
-        title="Another task is in progress"
-        size="sm"
-        footer={
-          <Button variant="primary" onClick={() => setBlockedBy(null)}>
-            Got it
-          </Button>
-        }
-      >
-        <p className="text-sm leading-relaxed text-ink-2">
-          “{blockedBy?.title}” is currently in progress. Finish or pause it before starting this task.
-        </p>
-      </Modal>
     </>
   );
 }

@@ -96,7 +96,13 @@ TZ=Asia/Kolkata npx tsx scripts/verify-review-stats.ts
 TZ=America/New_York npx tsx scripts/verify-review-stats.ts
 ```
 
+`scripts/verify-multi-tab.tsx` checks that two tabs sharing one browser never overwrite each other. Two repositories over one storage are driven through the races that matter — two tabs timing different tasks, a stale tab writing after the other has moved on, a pause in one tab while the other keeps running, four timers checkpointing in turn — and the result is always re-read through a third, fresh repository, so it asserts what is actually persisted rather than what either tab believes. It also checks that opening a second tab does not pause the first tab's timers, while a tab that really closed still has its session recovered:
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-multi-tab.tsx
+```
+
 ## Known limitations (v1)
 - Reminders fire only while the app is open. Background push needs a backend.
 - Supabase mode has no auth or sync conflict handling yet, so it's single-user only.
+- Another tab's changes are merged safely on write, but a tab shows them only after a reload — there is no live cross-tab UI refresh.
 - Recurrence is in the data model but has no UI yet.

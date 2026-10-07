@@ -20,7 +20,7 @@ async function main() {
   const { CalendarScreen } = await import('../components/calendar/calendar-screen');
   const { todayISO, addDays, addMonths, calendarGridStart, startOfWeek, endOfWeek, isoWeekKey, monthKey, monthName, formatFocusedTime } = await import('../lib/dates');
   const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst, monthlyWellbeingTotals } = await import('../lib/selectors');
-  const { blockingTimerTask, checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning } = await import('../lib/timer');
+  const { checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning, runningTimerTasks } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
   const Probe = () => { ctx = useData(); return null; };
@@ -215,7 +215,7 @@ async function main() {
 
   await run(() => c().actions.startTask(checklistParent.id));
   ok(isTimerRunning(get(checklistParent.id))
-     && blockingTimerTask(c().data.tasks, 'another-task')?.id === checklistParent.id
+     && runningTimerTasks(c().data.tasks).map((t) => t.id).join() === checklistParent.id
      && !('startedAt' in firstSubtask),
      'Subtasks L: the parent remains the only timer-bearing task');
   await click(document.querySelector(`#subtask-test-row button[aria-label="Complete subtask: ${firstSubtask.title}"]`), 'Complete first subtask');
@@ -253,7 +253,7 @@ async function main() {
      && parentWasInTodayTasks
      && !c().data.tasks.some((task) => [firstSubtask.title, 'Update the article content and SEO'].includes(task.title)),
      'Subtasks K: Today/Review still count only the parent task');
-  ok(blockingTimerTask(c().data.tasks, 'another-task') === undefined
+  ok(runningTimerTasks(c().data.tasks).length === 0
      && get(checklistParent.id).status === 'completed'
      && get(checklistParent.id).startedAt === undefined
      && typeof get(checklistParent.id).actualDurationSeconds === 'number',

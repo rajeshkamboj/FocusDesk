@@ -61,11 +61,9 @@ export function compareDatedEntities(
   a: { deadline?: string; createdAt: string; id: string },
   b: { deadline?: string; createdAt: string; id: string },
   sort: EntityDateSort,
-  activeRank: number = 0,
-  otherActiveRank: number = 0,
 ): number {
-  const status = activeRank - otherActiveRank;
-  if (status) return status;
+  // The selected sort is always the primary ordering. Status may be supplied
+  // by callers as contextual information, but must not override it.
   if (sort === 'deadline-asc' || sort === 'deadline-desc') {
     return compareOptionalDate(a.deadline, b.deadline, sort === 'deadline-asc' ? 'asc' : 'desc') || compareCreated(a, b, 'desc');
   }

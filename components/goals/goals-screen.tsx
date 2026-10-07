@@ -34,7 +34,7 @@ export function GoalsScreen() {
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
 
   const goals = useMemo(
-    () => [...data.goals].sort((a, b) => compareDatedEntities(a, b, sort, a.status === 'active' ? 0 : 1, b.status === 'active' ? 0 : 1)),
+    () => [...data.goals].sort((a, b) => compareDatedEntities(a, b, sort)),
     [data.goals, sort],
   );
 

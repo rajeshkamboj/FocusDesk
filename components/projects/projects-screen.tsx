@@ -46,7 +46,7 @@ export function ProjectsScreen() {
 
   const projects = useMemo(() => {
     const list = filter === 'all' ? data.projects : data.projects.filter((p) => p.status === filter);
-    return [...list].sort((a, b) => compareDatedEntities(a, b, sort, a.status === 'active' ? 0 : 1, b.status === 'active' ? 0 : 1));
+    return [...list].sort((a, b) => compareDatedEntities(a, b, sort));
   }, [data.projects, filter, sort]);
 
   return (

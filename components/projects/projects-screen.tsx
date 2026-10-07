@@ -14,7 +14,8 @@ import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { formatFocusedTime, formatShortDate, todayISO } from '@/lib/dates';
-import { projectFocusedSeconds, projectProgress } from '@/lib/selectors';
+import { compareDatedEntities, projectFocusedSeconds, projectProgress } from '@/lib/selectors';
+import type { EntityDateSort } from '@/lib/selectors';
 import type { Project, ProjectStatus } from '@/lib/types';
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -41,11 +42,12 @@ export function ProjectsScreen() {
   const [deleting, setDeleting] = useState<Project | undefined>(undefined);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addTaskFor, setAddTaskFor] = useState<string | null>(null);
+  const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
 
   const projects = useMemo(() => {
     const list = filter === 'all' ? data.projects : data.projects.filter((p) => p.status === filter);
-    return [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  }, [data.projects, filter]);
+    return [...list].sort((a, b) => compareDatedEntities(a, b, sort));
+  }, [data.projects, filter, sort]);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
@@ -60,7 +62,15 @@ export function ProjectsScreen() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap gap-1.5">
+      <div className="mb-5 flex flex-wrap items-center gap-1.5">
+        <div className="ml-auto min-w-0 sm:w-56">
+          <Select value={sort} onChange={(e) => setSort(e.target.value as EntityDateSort)} aria-label="Sort projects">
+            <option value="deadline-asc">Sort by · Deadline — Soonest first</option>
+            <option value="deadline-desc">Sort by · Deadline — Latest first</option>
+            <option value="created-desc">Sort by · Created — Newest first</option>
+            <option value="created-asc">Sort by · Created — Oldest first</option>
+          </Select>
+        </div>
         {(['all', 'active', 'on_hold', 'completed', 'archived'] as Filter[]).map((f) => (
           <button
             key={f}

@@ -19,6 +19,57 @@ import type {
 
 export const OPEN_STATUSES: TaskStatus[] = ['created', 'planned', 'today', 'in_progress', 'incomplete'];
 
+export type DateSortDirection = 'asc' | 'desc';
+export type TaskSort = 'deadline-asc' | 'deadline-desc' | 'scheduled-asc' | 'scheduled-desc' | 'priority-asc' | 'priority-desc' | 'created-desc' | 'created-asc';
+export type EntityDateSort = 'deadline-asc' | 'deadline-desc' | 'created-desc' | 'created-asc';
+
+const priorityRank: Record<Task['priority'], number> = { high: 0, medium: 1, low: 2 };
+
+function compareOptionalDate(a: string | undefined, b: string | undefined, direction: DateSortDirection): number {
+  const aMissing = !a;
+  const bMissing = !b;
+  if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+  const result = a.localeCompare(b);
+  return direction === 'asc' ? result : -result;
+}
+
+function compareCreated(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }, direction: DateSortDirection): number {
+  const result = a.createdAt.localeCompare(b.createdAt);
+  return result !== 0 ? (direction === 'asc' ? result : -result) : a.id.localeCompare(b.id);
+}
+
+export function compareTasks(a: Task, b: Task, sort: TaskSort): number {
+  const deadline = compareOptionalDate(a.dueDate, b.dueDate, sort.endsWith('asc') ? 'asc' : 'desc');
+  const scheduled = compareOptionalDate(a.scheduledDate, b.scheduledDate, sort.endsWith('asc') ? 'asc' : 'desc');
+  const priority = priorityRank[a.priority] - priorityRank[b.priority];
+  const created = compareCreated(a, b, sort.endsWith('asc') ? 'asc' : 'desc');
+
+  if (sort === 'deadline-asc' || sort === 'deadline-desc') {
+    return deadline || compareOptionalDate(a.scheduledDate, b.scheduledDate, 'asc') || priority || compareCreated(a, b, 'desc');
+  }
+  if (sort === 'scheduled-asc' || sort === 'scheduled-desc') {
+    return scheduled || compareOptionalDate(a.dueDate, b.dueDate, 'asc') || priority || compareCreated(a, b, 'desc');
+  }
+  if (sort === 'priority-asc' || sort === 'priority-desc') {
+    const priorityResult = sort === 'priority-asc' ? priority : -priority;
+    return priorityResult || compareOptionalDate(a.dueDate, b.dueDate, 'asc') || compareOptionalDate(a.scheduledDate, b.scheduledDate, 'asc') || compareCreated(a, b, 'desc');
+  }
+  return created;
+}
+
+export function compareDatedEntities(
+  a: { deadline?: string; createdAt: string; id: string },
+  b: { deadline?: string; createdAt: string; id: string },
+  sort: EntityDateSort,
+): number {
+  // The selected sort is always the primary ordering. Status may be supplied
+  // by callers as contextual information, but must not override it.
+  if (sort === 'deadline-asc' || sort === 'deadline-desc') {
+    return compareOptionalDate(a.deadline, b.deadline, sort === 'deadline-asc' ? 'asc' : 'desc') || compareCreated(a, b, 'desc');
+  }
+  return compareCreated(a, b, sort === 'created-asc' ? 'asc' : 'desc');
+}
+
 export function isOpenTask(task: Task): boolean {
   return OPEN_STATUSES.includes(task.status) && !task.archived;
 }

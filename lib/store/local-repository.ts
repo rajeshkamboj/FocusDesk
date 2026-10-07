@@ -4,6 +4,21 @@
  * Backed by `localStorage` behind a tiny key-value `StorageLike` interface so it
  * can also run in tests/Node with a shim. Mirrors exactly the contract that the
  * Supabase repository implements — swapping backends does not touch the UI.
+ *
+ * MULTI-TAB SAFETY
+ * ----------------
+ * localStorage is shared by every tab on the origin, but each tab builds its
+ * own in-memory copy of the database. A write therefore has to be a *merge*
+ * into the newest stored state, never a replay of the copy this tab loaded
+ * with — otherwise the last tab to write silently erases everything the other
+ * tabs did since it opened.
+ *
+ * Every read and every mutation goes through `current()`, which re-reads the
+ * stored string whenever it differs from the one this repository last saw
+ * (`lastRaw`). Mutations then apply to that fresh object and only the changed
+ * record differs when it is written back. Two tabs timing two different tasks
+ * can checkpoint each other's neighbours indefinitely without either losing an
+ * update.
  */
 
 import type {
@@ -121,6 +136,15 @@ export class LocalRepository implements AppRepository {
 
   private data: AppData;
   private readonly storage: StorageLike;
+  /**
+   * The exact string this repository last read from or wrote to storage.
+   *
+   * It is the revision marker that makes multi-tab writes safe: if the stored
+   * string still equals this one, nothing has changed since we last looked and
+   * the in-memory copy is current. If it differs, another tab (or another
+   * FocusDesk window) has written, and we re-read before touching anything.
+   */
+  private lastRaw: string | null = null;
 
   tasks: EntityRepository<Task, TaskInput>;
   subtasks: EntityRepository<Subtask, SubtaskInput>;
@@ -140,9 +164,13 @@ export class LocalRepository implements AppRepository {
     this.data = this.read();
 
     const persist = () => this.write();
+    // Every collection reads through `current()`, so each create/update/delete
+    // is applied to the newest persisted state rather than to the snapshot
+    // this tab happened to load with. See `sync()`.
+    const db = () => this.current();
 
     this.tasks = new Collection<Task, TaskInput>(
-      () => this.data,
+      db,
       'tasks',
       persist,
       (input) => ({
@@ -173,7 +201,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.subtasks = new Collection<Subtask, SubtaskInput>(
-      () => this.data,
+      db,
       'subtasks',
       persist,
       (input) => ({
@@ -192,7 +220,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.projects = new Collection<Project, ProjectInput>(
-      () => this.data,
+      db,
       'projects',
       persist,
       (input) => ({
@@ -207,7 +235,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.goals = new Collection<Goal, GoalInput>(
-      () => this.data,
+      db,
       'goals',
       persist,
       (input) => ({
@@ -221,7 +249,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.inbox = new Collection<InboxItem, InboxItemInput>(
-      () => this.data,
+      db,
       'inbox',
       persist,
       (input) => ({
@@ -233,7 +261,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.ideas = new Collection<Idea, IdeaInput>(
-      () => this.data,
+      db,
       'ideas',
       persist,
       (input) => ({
@@ -246,7 +274,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.milestones = new Collection<Milestone, MilestoneInput>(
-      () => this.data,
+      db,
       'milestones',
       persist,
       (input) => ({
@@ -260,7 +288,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.dailyPriorities = new Collection<DailyPriority, DailyPriorityInput>(
-      () => this.data,
+      db,
       'dailyPriorities',
       persist,
       (input) => ({
@@ -274,7 +302,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.weeklyPriorities = new Collection<WeeklyPriority, WeeklyPriorityInput>(
-      () => this.data,
+      db,
       'weeklyPriorities',
       persist,
       (input) => ({
@@ -287,7 +315,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.monthlyPriorities = new Collection<MonthlyPriority, MonthlyPriorityInput>(
-      () => this.data,
+      db,
       'monthlyPriorities',
       persist,
       (input) => ({
@@ -301,7 +329,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.wellbeingDays = new Collection<WellbeingDay, WellbeingDayInput>(
-      () => this.data,
+      db,
       'wellbeingDays',
       persist,
       (input) => ({
@@ -315,7 +343,7 @@ export class LocalRepository implements AppRepository {
     );
 
     this.timerSessions = new Collection<TimerSession, TimerSessionInput>(
-      () => this.data,
+      db,
       'timerSessions',
       persist,
       (input) => ({
@@ -336,12 +364,11 @@ export class LocalRepository implements AppRepository {
     );
   }
 
-  private read(): AppData {
+  private parse(raw: string | null): AppData {
+    const base = emptyData();
+    if (!raw) return base;
     try {
-      const raw = this.storage.getItem(STORAGE_KEY);
-      if (!raw) return emptyData();
       const parsed = JSON.parse(raw) as Partial<AppData>;
-      const base = emptyData();
       return {
         ...base,
         ...parsed,
@@ -352,13 +379,64 @@ export class LocalRepository implements AppRepository {
         },
       };
     } catch {
-      return emptyData();
+      return base;
     }
   }
 
+  private read(): AppData {
+    let raw: string | null = null;
+    try {
+      raw = this.storage.getItem(STORAGE_KEY);
+    } catch {
+      /* storage unavailable — fall back to an empty world */
+    }
+    this.lastRaw = raw;
+    return this.parse(raw);
+  }
+
+  /**
+   * Adopt another tab's writes before we touch the database.
+   *
+   * localStorage is shared by every tab on the origin, but each tab holds its
+   * own in-memory copy. Without this, a tab that loaded ten minutes ago would
+   * serialize *its* copy on the next write and silently erase everything the
+   * other tabs did in between — the whole database, not just the record being
+   * changed.
+   *
+   * Re-reading is cheap and skipped entirely when the stored string is
+   * byte-identical to the one we last saw, which is the common case: a tab
+   * working alone never re-parses.
+   */
+  private sync(): void {
+    let raw: string | null;
+    try {
+      raw = this.storage.getItem(STORAGE_KEY);
+    } catch {
+      return; // storage unreadable — keep operating on what we have
+    }
+    if (raw === this.lastRaw) return;
+    this.data = this.parse(raw);
+    this.lastRaw = raw;
+  }
+
+  /** The database as it exists right now, including other tabs' writes. */
+  private current(): AppData {
+    this.sync();
+    return this.data;
+  }
+
+  /**
+   * Persist the database.
+   *
+   * Callers always mutate the object returned by `current()`, so what is
+   * written here is the newest persisted state plus this one change — a merge,
+   * never a blind replacement of another tab's work.
+   */
   private write(): void {
     try {
-      this.storage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+      const raw = JSON.stringify(this.data);
+      this.storage.setItem(STORAGE_KEY, raw);
+      this.lastRaw = raw;
     } catch {
       /* quota exceeded — keep working in memory */
     }
@@ -366,7 +444,7 @@ export class LocalRepository implements AppRepository {
 
   taskHistory = {
     list: async (taskId?: string): Promise<TaskHistoryEntry[]> => {
-      const all = [...this.data.taskHistory].sort((a, b) => (a.at < b.at ? 1 : -1));
+      const all = [...this.current().taskHistory].sort((a, b) => (a.at < b.at ? 1 : -1));
       return taskId ? all.filter((h) => h.taskId === taskId) : all;
     },
     add: async (entry: Omit<TaskHistoryEntry, 'id' | 'at'> & { at?: string }): Promise<TaskHistoryEntry> => {
@@ -377,27 +455,28 @@ export class LocalRepository implements AppRepository {
         at: entry.at ?? nowISO(),
         note: entry.note,
       };
-      this.data.taskHistory.push(record);
+      this.current().taskHistory.push(record);
       this.write();
       return record;
     },
   };
 
   settings = {
-    get: async (): Promise<Settings> => ({ ...this.data.settings }),
+    get: async (): Promise<Settings> => ({ ...this.current().settings }),
     save: async (patch: Partial<Settings>): Promise<Settings> => {
-      this.data.settings = {
-        general: { ...this.data.settings.general, ...patch.general },
-        notifications: { ...this.data.settings.notifications, ...patch.notifications },
-        appearance: { ...this.data.settings.appearance, ...patch.appearance },
+      const data = this.current();
+      data.settings = {
+        general: { ...data.settings.general, ...patch.general },
+        notifications: { ...data.settings.notifications, ...patch.notifications },
+        appearance: { ...data.settings.appearance, ...patch.appearance },
       };
       this.write();
-      return { ...this.data.settings };
+      return { ...data.settings };
     },
   };
 
   async exportData(): Promise<AppData> {
-    return JSON.parse(JSON.stringify(this.data)) as AppData;
+    return JSON.parse(JSON.stringify(this.current())) as AppData;
   }
 
   async importData(data: AppData): Promise<void> {

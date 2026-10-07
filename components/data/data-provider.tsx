@@ -30,6 +30,7 @@ import {
   isTimerRunning,
   openTimerSession,
   pauseTimingPatch,
+  runningTimerTasks,
   sessionCreditedSeconds,
   settleTimingPatch,
   timerSessionInput,
@@ -60,6 +61,13 @@ import type {
   ISODate,
 } from '@/lib/types';
 import { emptyData } from '@/lib/store/defaults';
+import {
+  announceTab,
+  createTabId,
+  otherTabAlive,
+  releaseTab,
+  PRESENCE_HEARTBEAT_MS,
+} from '@/lib/store/tab-presence';
 
 const BACKUP_KEY = 'pace.backup.v1';
 const TIMER_CHECKPOINT_INTERVAL_MS = 10_000;
@@ -204,6 +212,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     dataRef.current = data;
   }, [data]);
 
+  /**
+   * This page's identity in the cross-tab presence registry.
+   *
+   * Used for exactly one decision: whether a task still marked running was
+   * left behind by a page that died (recover it) or is being timed right now
+   * by another open FocusDesk tab (leave it alone). It grants no ownership —
+   * every tab may run as many timers as it likes.
+   */
+  const tabIdRef = useRef<string>(createTabId());
+
   // The well-being record the user last touched per date (kept alongside the
   // optimistic state) and one queue per date that serializes its writes.
   const wellbeingRef = useRef<Map<ISODate, WellbeingDay>>(new Map());
@@ -270,18 +288,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // Any still-running session belongs to the previous page instance. A
         // pagehide write normally paused it precisely; if termination skipped
         // that write, stop at the task's last persisted timer checkpoint.
-        const tasks = await Promise.all(
-          storedTasks.map(async (task) => {
-            const patch = interruptedTimerPatch(task);
-            if (Object.keys(patch).length === 0) return task;
-            try {
-              return await repo.tasks.update(task.id, patch);
-            } catch (error) {
-              console.error('Could not persist interrupted timer recovery', error);
-              return { ...task, ...patch };
-            }
-          }),
-        );
+        //
+        // Unless another FocusDesk tab is alive: then those timers are not
+        // leftovers at all, they are running right now in that tab. Recovering
+        // them here would pause another tab's tasks, which no tab may ever do,
+        // so this page adopts the running state as-is instead.
+        const anotherTabIsLive = otherTabAlive(tabIdRef.current);
+        const tasks = anotherTabIsLive
+          ? storedTasks
+          : await Promise.all(
+              storedTasks.map(async (task) => {
+                const patch = interruptedTimerPatch(task);
+                if (Object.keys(patch).length === 0) return task;
+                try {
+                  return await repo.tasks.update(task.id, patch);
+                } catch (error) {
+                  console.error('Could not persist interrupted timer recovery', error);
+                  return { ...task, ...patch };
+                }
+              }),
+            );
         if (cancelled) return;
         const loaded: AppData = {
           tasks,
@@ -684,10 +710,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const checkpointRunningTasks = useCallback(() => {
     const nowMs = Date.now();
-    for (const task of dataRef.current.tasks) {
-      if (isTimerRunning(task)) checkpointRunningTask(task, nowMs);
+    // Archived tasks are excluded from the dock, from reporting and from the
+    // running set, so they must not be checkpointed either — otherwise an
+    // archived task left running would keep accruing time nothing displays.
+    for (const task of runningTimerTasks(dataRef.current.tasks)) {
+      checkpointRunningTask(task, nowMs);
     }
   }, [checkpointRunningTask]);
+
+  /**
+   * Announce this page while it is open, so a tab that opens later can tell a
+   * live FocusDesk window from an app that died with timers running. Runs
+   * independently of `ready`: a tab still loading is already alive.
+   */
+  useEffect(() => {
+    const selfId = tabIdRef.current;
+    announceTab(selfId);
+    const id = window.setInterval(() => announceTab(selfId), PRESENCE_HEARTBEAT_MS);
+    return () => {
+      window.clearInterval(id);
+      releaseTab(selfId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -718,8 +762,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!repository) return;
     const nowMs = Date.now();
 
-    for (const task of dataRef.current.tasks) {
-      if (!isTimerRunning(task)) continue;
+    // Same set the checkpoint uses, so an archived task is never settled with
+    // a burst of time no checkpoint ever recorded.
+    for (const task of runningTimerTasks(dataRef.current.tasks)) {
       const patch = pauseTimingPatch(task, nowMs);
       const paused = { ...task, ...patch };
       const seq = nextTaskSeq(task.id);
@@ -752,6 +797,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const onPageExit = () => {
       if (closing) return;
       closing = true;
+      // Stop announcing before pausing: a tab that reopens immediately must
+      // see this page as gone, so its timers are recovered rather than adopted.
+      releaseTab(tabIdRef.current);
       pauseRunningTasksOnExit();
     };
     const onPageShow = () => { closing = false; };

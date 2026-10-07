@@ -9,43 +9,44 @@ import { EmptyState } from '@/components/ui/card';
 import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Menu, MenuItem } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
-import { IconMilestones, IconMore, IconPencil, IconPlus, IconTrash, IconUpload } from '@/components/ui/icons';
+import { IconLearnings, IconMore, IconPencil, IconPlus, IconTrash, IconUpload } from '@/components/ui/icons';
 import { PageHeader } from '@/components/layout/page-header';
 import {
-  MILESTONE_CATEGORIES,
+  LEARNING_CATEGORIES,
   categoryLabel,
-  formatMilestoneDate,
-  groupMilestones,
-  isValidMilestoneDate,
+  formatLearningDate,
+  groupLearnings,
+  isValidLearningDate,
   precisionOf,
-} from '@/lib/milestones';
-import { parseMilestones } from '@/lib/milestones-import';
-import { MILESTONE_SEED } from '@/lib/milestones-seed';
-import type { Milestone, MilestoneCategory } from '@/lib/types';
+} from '@/lib/learnings';
+import { parseLearnings } from '@/lib/learnings-import';
+import { LEARNING_SEED } from '@/lib/learnings-seed';
+import type { Learning, LearningCategory } from '@/lib/types';
 
-type CategoryFilter = 'all' | MilestoneCategory;
+type CategoryFilter = 'all' | LearningCategory;
 
 /**
- * Milestones — the learning timeline.
+ * Learnings — the learning timeline (called "Milestones" before Phase 3;
+ * only the wording changed).
  *
  * Latest first, grouped Year → Month, with deliberately partial dates
  * (a year, a month, or an exact day) so an honest "sometime in 2024" can
  * sit next to "14 Aug 2025" without being faked into a precise day.
  */
-export function MilestonesScreen() {
+export function LearningsScreen() {
   const { data, actions } = useData();
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Milestone | undefined>(undefined);
-  const [deleting, setDeleting] = useState<Milestone | undefined>(undefined);
+  const [editing, setEditing] = useState<Learning | undefined>(undefined);
+  const [deleting, setDeleting] = useState<Learning | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
 
-  const milestones = data.milestones;
+  const learnings = data.learnings;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return milestones.filter((m) => {
+    return learnings.filter((m) => {
       if (category !== 'all' && m.category !== category) return false;
       if (!q) return true;
       return (
@@ -53,18 +54,18 @@ export function MilestonesScreen() {
         (m.description ?? '').toLowerCase().includes(q)
       );
     });
-  }, [milestones, category, query]);
+  }, [learnings, category, query]);
 
-  const years = useMemo(() => groupMilestones(filtered), [filtered]);
+  const years = useMemo(() => groupLearnings(filtered), [filtered]);
   const thisYear = new Date().getFullYear();
-  const thisYearCount = milestones.filter((m) => m.date.slice(0, 4) === String(thisYear)).length;
+  const thisYearCount = learnings.filter((m) => m.date.slice(0, 4) === String(thisYear)).length;
 
   // Only offer categories that actually exist in the data, plus "All" —
   // an empty filter is noise, not a feature.
   const usedCategories = useMemo(() => {
-    const present = new Set(milestones.map((m) => m.category));
-    return MILESTONE_CATEGORIES.filter((c) => present.has(c.id));
-  }, [milestones]);
+    const present = new Set(learnings.map((m) => m.category));
+    return LEARNING_CATEGORIES.filter((c) => present.has(c.id));
+  }, [learnings]);
 
   const openNew = () => {
     setEditing(undefined);
@@ -74,7 +75,7 @@ export function MilestonesScreen() {
   return (
     <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
-        title="Milestones"
+        title="Learnings"
         subtitle="When you first picked something up — tools, frameworks, ideas. Newest first."
         actions={
           <div className="flex items-center gap-2">
@@ -84,15 +85,15 @@ export function MilestonesScreen() {
             </Button>
             <Button variant="primary" onClick={openNew}>
               <IconPlus width={16} height={16} />
-              New Milestone
+              New Learning
             </Button>
           </div>
         }
       />
 
-      {milestones.length > 0 ? (
+      {learnings.length > 0 ? (
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">{milestones.length} total</Badge>
+          <Badge tone="neutral">{learnings.length} total</Badge>
           <Badge tone="accent">{thisYearCount} in {thisYear}</Badge>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Input
@@ -117,19 +118,19 @@ export function MilestonesScreen() {
 
       {years.length === 0 ? (
         <EmptyState
-          icon={<IconMilestones width={24} height={24} />}
-          title={milestones.length === 0 ? 'Your timeline starts here' : 'Nothing matches'}
+          icon={<IconLearnings width={24} height={24} />}
+          title={learnings.length === 0 ? 'Your timeline starts here' : 'Nothing matches'}
           hint={
-            milestones.length === 0
+            learnings.length === 0
               ? 'Log the day you first tried a tool, framework or idea — and look back later to see how fast you were moving.'
               : 'Try a different category or search term.'
           }
           action={
-            milestones.length === 0 ? (
+            learnings.length === 0 ? (
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button variant="primary" size="sm" onClick={openNew}>
                   <IconPlus width={15} height={15} />
-                  New Milestone
+                  New Learning
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
                   <IconUpload width={15} height={15} />
@@ -146,7 +147,7 @@ export function MilestonesScreen() {
               <div className="mb-3 flex items-baseline gap-2">
                 <h2 className="text-lg font-semibold tracking-tight text-ink">{year.year}</h2>
                 <span className="text-[11px] text-ink-3">
-                  {year.count} {year.count === 1 ? 'milestone' : 'milestones'}
+                  {year.count} {year.count === 1 ? 'learning' : 'learnings'}
                 </span>
               </div>
 
@@ -166,8 +167,8 @@ export function MilestonesScreen() {
                             precisionOf(m.date) === 'day' ? 'bg-accent' : 'bg-line-strong'
                           }`}
                         />
-                        <MilestoneCard
-                          milestone={m}
+                        <LearningCard
+                          learning={m}
                           onEdit={() => { setEditing(m); setFormOpen(true); }}
                           onDelete={() => setDeleting(m)}
                         />
@@ -183,25 +184,25 @@ export function MilestonesScreen() {
 
       {/* Keyed + conditionally mounted so each open starts clean. */}
       {formOpen ? (
-        <MilestoneFormModal
+        <LearningFormModal
           key={editing?.id ?? 'new'}
           open
-          milestone={editing}
+          learning={editing}
           onClose={() => { setFormOpen(false); setEditing(undefined); }}
         />
       ) : null}
 
-      {importOpen ? <MilestoneImportModal open onClose={() => setImportOpen(false)} /> : null}
+      {importOpen ? <LearningImportModal open onClose={() => setImportOpen(false)} /> : null}
 
       <ConfirmDialog
         open={deleting !== undefined}
-        title="Delete milestone?"
+        title="Delete learning?"
         message={`“${deleting?.title ?? ''}” will be permanently removed from your timeline.`}
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleting(undefined)}
         onConfirm={() => {
-          if (deleting) void actions.deleteMilestone(deleting.id);
+          if (deleting) void actions.deleteLearning(deleting.id);
           setDeleting(undefined);
         }}
       />
@@ -209,12 +210,12 @@ export function MilestonesScreen() {
   );
 }
 
-function MilestoneCard({
-  milestone,
+function LearningCard({
+  learning,
   onEdit,
   onDelete,
 }: {
-  milestone: Milestone;
+  learning: Learning;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -222,20 +223,20 @@ function MilestoneCard({
     <div className="group flex items-start gap-3 rounded-2xl border border-line bg-surface px-5 py-4 shadow-card">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[14.5px] font-semibold leading-snug text-ink">{milestone.title}</h3>
-          <Badge tone="muted">{categoryLabel(milestone.category)}</Badge>
+          <h3 className="text-[14.5px] font-semibold leading-snug text-ink">{learning.title}</h3>
+          <Badge tone="muted">{categoryLabel(learning.category)}</Badge>
         </div>
-        {milestone.description ? (
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{milestone.description}</p>
+        {learning.description ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{learning.description}</p>
         ) : null}
-        <p className="mt-1.5 text-[11px] text-ink-3">{formatMilestoneDate(milestone.date)}</p>
+        <p className="mt-1.5 text-[11px] text-ink-3">{formatLearningDate(learning.date)}</p>
       </div>
 
       <Menu
         trigger={({ toggle }) => (
           <button
             onClick={toggle}
-            aria-label="Milestone actions"
+            aria-label="Learning actions"
             className="rounded-lg p-1.5 text-ink-3 opacity-0 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
           >
             <IconMore width={17} height={17} />
@@ -262,39 +263,39 @@ const MONTH_OPTIONS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function MilestoneFormModal({
+function LearningFormModal({
   open,
   onClose,
-  milestone,
+  learning,
 }: {
   open: boolean;
   onClose: () => void;
-  milestone?: Milestone;
+  learning?: Learning;
 }) {
   const { actions } = useData();
-  const existingPrecision = milestone ? precisionOf(milestone.date) : 'day';
+  const existingPrecision = learning ? precisionOf(learning.date) : 'day';
 
-  const [title, setTitle] = useState(milestone?.title ?? '');
-  const [category, setCategory] = useState<MilestoneCategory>(milestone?.category ?? 'ai-tool');
-  const [description, setDescription] = useState(milestone?.description ?? '');
+  const [title, setTitle] = useState(learning?.title ?? '');
+  const [category, setCategory] = useState<LearningCategory>(learning?.category ?? 'ai-tool');
+  const [description, setDescription] = useState(learning?.description ?? '');
   const [precision, setPrecision] = useState(existingPrecision);
   const now = new Date();
-  const [year, setYear] = useState(milestone ? milestone.date.slice(0, 4) : String(now.getFullYear()));
+  const [year, setYear] = useState(learning ? learning.date.slice(0, 4) : String(now.getFullYear()));
   const [month, setMonth] = useState(
-    milestone && existingPrecision !== 'year'
-      ? milestone.date.slice(5, 7)
+    learning && existingPrecision !== 'year'
+      ? learning.date.slice(5, 7)
       : String(now.getMonth() + 1).padStart(2, '0'),
   );
   const [day, setDay] = useState(
-    milestone && existingPrecision === 'day'
-      ? milestone.date.slice(8, 10)
+    learning && existingPrecision === 'day'
+      ? learning.date.slice(8, 10)
       : String(now.getDate()).padStart(2, '0'),
   );
   const [saving, setSaving] = useState(false);
 
   const date =
     precision === 'year' ? year : precision === 'month' ? `${year}-${month}` : `${year}-${month}-${day}`;
-  const dateValid = isValidMilestoneDate(date);
+  const dateValid = isValidLearningDate(date);
   const canSave = title.trim().length > 0 && dateValid && !saving;
 
   const daysInMonth =
@@ -312,8 +313,8 @@ function MilestoneFormModal({
       date,
     };
     try {
-      if (milestone) await actions.updateMilestone(milestone.id, payload);
-      else await actions.addMilestone(payload);
+      if (learning) await actions.updateLearning(learning.id, payload);
+      else await actions.addLearning(payload);
     } catch (err) {
       setSaving(false);
       throw err;
@@ -326,12 +327,12 @@ function MilestoneFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={milestone ? 'Edit milestone' : 'New milestone'}
+      title={learning ? 'Edit learning' : 'New learning'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={() => void submit()} disabled={!canSave}>
-            {milestone ? 'Save changes' : 'Add to timeline'}
+            {learning ? 'Save changes' : 'Add to timeline'}
           </Button>
         </>
       }
@@ -347,8 +348,8 @@ function MilestoneFormModal({
         </Field>
 
         <Field label="Category">
-          <Select value={category} onChange={(e) => setCategory(e.target.value as MilestoneCategory)}>
-            {MILESTONE_CATEGORIES.map((c) => (
+          <Select value={category} onChange={(e) => setCategory(e.target.value as LearningCategory)}>
+            {LEARNING_CATEGORIES.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
             ))}
           </Select>
@@ -419,20 +420,20 @@ function MilestoneFormModal({
  * could not be understood (with its line number), so a typo is fixed rather
  * than quietly dropped.
  */
-function MilestoneImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function LearningImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data, actions } = useData();
   const [text, setText] = useState('');
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState<string[]>([]);
 
-  const parsed = useMemo(() => parseMilestones(text), [text]);
+  const parsed = useMemo(() => parseLearnings(text), [text]);
 
-  // A milestone is "already there" when the same title sits on the same date,
+  // A learning is "already there" when the same title sits on the same date,
   // so re-importing the same paste twice cannot double the timeline.
   const existingKeys = useMemo(
-    () => new Set(data.milestones.map((m) => `${m.date}::${m.title.toLowerCase()}`)),
-    [data.milestones],
+    () => new Set(data.learnings.map((m) => `${m.date}::${m.title.toLowerCase()}`)),
+    [data.learnings],
   );
   const fresh = parsed.valid.filter((m) => !existingKeys.has(`${m.date}::${m.title.toLowerCase()}`));
   const duplicates = parsed.valid.length - fresh.length;
@@ -446,7 +447,7 @@ function MilestoneImportModal({ open, onClose }: { open: boolean; onClose: () =>
     // and the backend sees a steady trickle rather than 50 parallel writes.
     for (let i = 0; i < fresh.length; i += 1) {
       try {
-        await actions.addMilestone(fresh[i]);
+        await actions.addLearning(fresh[i]);
       } catch {
         problems.push(fresh[i].title);
       }
@@ -464,28 +465,28 @@ function MilestoneImportModal({ open, onClose }: { open: boolean; onClose: () =>
     <Modal
       open={open}
       onClose={importing ? () => {} : onClose}
-      title="Import milestones"
+      title="Import learnings"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={importing}>
             {failed.length > 0 ? 'Close' : 'Cancel'}
           </Button>
           <Button variant="primary" onClick={() => void run()} disabled={fresh.length === 0 || importing}>
-            {importing ? `Adding ${progress} of ${fresh.length}…` : `Add ${fresh.length || ''} ${fresh.length === 1 ? 'milestone' : 'milestones'}`.trim()}
+            {importing ? `Adding ${progress} of ${fresh.length}…` : `Add ${fresh.length || ''} ${fresh.length === 1 ? 'learning' : 'learnings'}`.trim()}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <p className="text-[13px] leading-relaxed text-ink-2">
-          One milestone per line: <code className="text-ink">date | title | category | description</code>.
+          One learning per line: <code className="text-ink">date | title | category | description</code>.
           The date can be <code className="text-ink">2025</code>, <code className="text-ink">2025-08</code>,{' '}
           <code className="text-ink">2025-08-14</code> or <code className="text-ink">Aug 2025</code>. Commas work
           instead of pipes, and category and description are optional.
         </p>
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setText(MILESTONE_SEED)} disabled={importing}>
+          <Button size="sm" variant="secondary" onClick={() => setText(LEARNING_SEED)} disabled={importing}>
             Load my starter timeline
           </Button>
           {text ? (

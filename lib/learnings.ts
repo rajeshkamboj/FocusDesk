@@ -1,17 +1,18 @@
 /**
- * Milestones — helpers for the learning timeline.
+ * Learnings — helpers for the learning timeline (called "Milestones" before
+ * Phase 3; the behaviour is unchanged, only the names are).
  *
- * A milestone date is a *partial* ISO date, because memory is partial:
+ * A learning date is a *partial* ISO date, because memory is partial:
  *   'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD'
  * Everything here (sorting, grouping, labelling) is built to respect that
  * without ever inventing a precision the user did not claim.
  */
 
-import type { Milestone, MilestoneCategory, MilestoneDate } from './types';
+import type { Learning, LearningCategory, LearningDate } from './types';
 
-export type MilestonePrecision = 'year' | 'month' | 'day';
+export type LearningDatePrecision = 'year' | 'month' | 'day';
 
-export const MILESTONE_CATEGORIES: { id: MilestoneCategory; label: string }[] = [
+export const LEARNING_CATEGORIES: { id: LearningCategory; label: string }[] = [
   { id: 'ai-tool', label: 'AI tool' },
   { id: 'framework', label: 'Framework' },
   { id: 'platform', label: 'Platform' },
@@ -22,8 +23,8 @@ export const MILESTONE_CATEGORIES: { id: MilestoneCategory; label: string }[] = 
   { id: 'other', label: 'Other' },
 ];
 
-export function categoryLabel(category: MilestoneCategory): string {
-  return MILESTONE_CATEGORIES.find((c) => c.id === category)?.label ?? 'Other';
+export function categoryLabel(category: LearningCategory): string {
+  return LEARNING_CATEGORIES.find((c) => c.id === category)?.label ?? 'Other';
 }
 
 const MONTHS = [
@@ -32,13 +33,13 @@ const MONTHS = [
 ];
 
 /** 'YYYY' / 'YYYY-MM' / 'YYYY-MM-DD' → precision. Anything else → 'year'. */
-export function precisionOf(date: MilestoneDate): MilestonePrecision {
+export function precisionOf(date: LearningDate): LearningDatePrecision {
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'day';
   if (/^\d{4}-\d{2}$/.test(date)) return 'month';
   return 'year';
 }
 
-export function isValidMilestoneDate(date: string): boolean {
+export function isValidLearningDate(date: string): boolean {
   if (/^\d{4}$/.test(date)) return true;
   if (/^\d{4}-\d{2}$/.test(date)) return Number(date.slice(5, 7)) >= 1 && Number(date.slice(5, 7)) <= 12;
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -49,12 +50,12 @@ export function isValidMilestoneDate(date: string): boolean {
   return false;
 }
 
-export function yearOf(date: MilestoneDate): number {
+export function yearOf(date: LearningDate): number {
   return Number(date.slice(0, 4));
 }
 
 /** 1–12, or 0 when the entry is year-only. */
-export function monthOf(date: MilestoneDate): number {
+export function monthOf(date: LearningDate): number {
   return precisionOf(date) === 'year' ? 0 : Number(date.slice(5, 7));
 }
 
@@ -63,7 +64,7 @@ export function monthOf(date: MilestoneDate): number {
  * bucket ('2025' lands at the end of 2025, '2025-08' at the end of August)
  * because "sometime then" cannot claim a specific slot.
  */
-export function sortKey(date: MilestoneDate): string {
+export function sortKey(date: LearningDate): string {
   const p = precisionOf(date);
   if (p === 'day') return `${date}-1`;
   if (p === 'month') return `${date}-00-0`;
@@ -71,7 +72,7 @@ export function sortKey(date: MilestoneDate): string {
 }
 
 /** Latest first. Ties fall back to creation time so same-day entries stay stable. */
-export function compareMilestones(a: Milestone, b: Milestone): number {
+export function compareLearnings(a: Learning, b: Learning): number {
   const ka = sortKey(a.date);
   const kb = sortKey(b.date);
   if (ka !== kb) return ka < kb ? 1 : -1;
@@ -79,7 +80,7 @@ export function compareMilestones(a: Milestone, b: Milestone): number {
 }
 
 /** '14 Aug 2025' / 'August 2025' / '2025' — never more precise than the data. */
-export function formatMilestoneDate(date: MilestoneDate): string {
+export function formatLearningDate(date: LearningDate): string {
   const p = precisionOf(date);
   if (p === 'year') return date.slice(0, 4);
   const month = MONTHS[Number(date.slice(5, 7)) - 1] ?? '';
@@ -92,22 +93,22 @@ export function monthLabel(month: number): string {
   return month === 0 ? 'Sometime that year' : MONTHS[month - 1];
 }
 
-export interface MilestoneMonthGroup {
+export interface LearningMonthGroup {
   month: number;
   label: string;
-  items: Milestone[];
+  items: Learning[];
 }
 
-export interface MilestoneYearGroup {
+export interface LearningYearGroup {
   year: number;
   count: number;
-  months: MilestoneMonthGroup[];
+  months: LearningMonthGroup[];
 }
 
 /** Descending year → descending month, with year-only entries last in a year. */
-export function groupMilestones(milestones: Milestone[]): MilestoneYearGroup[] {
-  const sorted = [...milestones].sort(compareMilestones);
-  const years = new Map<number, Map<number, Milestone[]>>();
+export function groupLearnings(learnings: Learning[]): LearningYearGroup[] {
+  const sorted = [...learnings].sort(compareLearnings);
+  const years = new Map<number, Map<number, Learning[]>>();
 
   for (const m of sorted) {
     const y = yearOf(m.date);

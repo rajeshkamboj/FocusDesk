@@ -22,11 +22,11 @@ import {
   notificationsSupported,
   requestNotificationPermission,
 } from '@/lib/notifications';
-import type { AppData, ThemePreference } from '@/lib/types';
+import type { AppDataImport, ThemePreference } from '@/lib/types';
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
-  const { data, actions, repoKind, notify } = useData();
+  const { data, actions, repoKind, projectMilestonesEnabled, ready, notify } = useData();
   const [permission, setPermission] = useState(notificationPermission());
   const fileRef = useRef<HTMLInputElement>(null);
   const { general, notifications, appearance } = data.settings;
@@ -52,12 +52,17 @@ export function SettingsScreen() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as AppData;
+        // Current exports and pre-Phase-3 ones (learning timeline under
+        // `milestones`) are both accepted; the repository normalizes them.
+        const parsed = JSON.parse(String(reader.result)) as AppDataImport;
         if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.tasks)) {
           notify('That file does not look like a Pace export');
           return;
         }
-        void actions.importData(parsed);
+        void actions.importData(parsed).catch((error: unknown) => {
+          console.error('Import failed', error);
+          notify(error instanceof Error ? error.message : 'Import failed');
+        });
       } catch {
         notify('Could not read that file');
       }
@@ -278,6 +283,14 @@ export function SettingsScreen() {
                   {repoKind === 'supabase' ? 'Supabase (PostgreSQL)' : 'This browser (local storage)'}
                 </span>
               </p>
+              {repoKind === 'supabase' && ready ? (
+                <p>
+                  Project milestones:{' '}
+                  <span className="font-medium text-ink-2">
+                    {projectMilestonesEnabled ? 'Available' : 'Waiting for database migration 008'}
+                  </span>
+                </p>
+              ) : null}
               <p>
                 Import replaces everything currently stored. Backups live in this browser only — export to JSON for a
                 durable copy. When Supabase credentials are added, the same data flows into PostgreSQL without changing

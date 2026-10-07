@@ -45,6 +45,7 @@ npm run build && npm start
 ## Supabase setup
 1. Create a project, open the SQL editor and run `supabase/schema.sql`.
 2. Apply the idempotent migrations in `supabase/migrations/` in order for both new and existing databases. In particular, `003_task_timer.sql` adds task-timer columns, `004_daily_wellbeing.sql` creates the user-scoped `wellbeing_days` table, `005_task_subtasks.sql` creates the user-scoped `subtasks` table with RLS, and `006_timer_sessions.sql` creates the user-scoped `timer_sessions` table that makes daily focused time possible (the migration explains why the pre-existing columns could not answer it). Time recorded before that migration has no day information anywhere, so it is deliberately not backfilled — daily focused time starts accumulating from the first run recorded afterwards.
+   `007_milestones.sql` creates the `milestones` table that backs the **Learnings** timeline (the feature was renamed in Phase 3; the table keeps its name). `008_project_milestones.sql` adds Project Milestones — it is **prepared but not yet applied to production**; until it runs, the app detects the missing table/column and simply keeps Project Milestones switched off (Settings → Data shows the status). See *Learnings & Project Milestones* below.
 3. Copy the project URL and anon key into the env vars.
 4. **Before real use, enable Row Level Security and add auth-based policies.** The anon key is public, and the schema ships without auth because v1 is single-user. The app switches to `SupabaseRepository` automatically when the variables are set.
 
@@ -60,6 +61,14 @@ lib/selectors.ts      pure derived stats (review, progress)
 public/sw.js, manifest.webmanifest, icons/   PWA
 ```
 The UI only talks to `useData()`. Backends implement `AppRepository`, so you can swap storage without touching the UI. Future AI features (plan my day, break down, summarize week) can be added as services on top of the same layer.
+
+## Learnings & Project Milestones
+Two different things that used to share a word:
+
+- **Learnings** (`/learnings`, formerly "Milestones") — the personal learning timeline: when a tool, framework or idea was first picked up, with honest partial dates (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`). Code: `Learning` in `lib/types.ts`, `lib/learnings*.ts`, `components/learnings/`. In Supabase the records still live in the `milestones` table (`LEARNINGS_TABLE` in `lib/store/supabase-repository.ts`); nothing in the data changed. `/milestones` redirects to `/learnings`.
+- **Project Milestones** — structure inside a project: **Goal → Project → ProjectMilestone → Task**. A task may have no milestone; if it has one, the milestone belongs to the task's own project (enforced in `lib/project-milestones.ts`, re-checked by the local repository, and by foreign keys in PostgreSQL). Deleting a milestone keeps its tasks and clears their link; deleting a project removes its milestones and, as before, keeps its tasks. Order is manual (`position`). Shown inside each project on the Projects screen and as a "Milestone" field in the task form.
+
+Compatibility: old local data (`pace.db.v1`), old device backups (`pace.backup.v1`) and old JSON exports keep the timeline under `milestones`; they are read as Learnings by `lib/store/normalize.ts` — the single, idempotent, lossless migration path — and never as Project Milestones. New exports contain `learnings` and `projectMilestones` only.
 
 ## PWA installation
 Open the deployed site in Chrome or Edge and click **Install** in the address bar. To launch it when Windows starts, press `Win + R`, type `shell:startup`, and put the installed app's shortcut there.
@@ -100,6 +109,23 @@ TZ=America/New_York npx tsx scripts/verify-review-stats.ts
 ```bash
 npm i --no-save jsdom tsx && npx tsx scripts/verify-multi-tab.tsx
 ```
+
+`scripts/verify-learnings-project-milestones.tsx` checks the Phase 3 work end to end: old `milestones` data and exports loading as Learnings (record-for-record, partial dates untouched), new exports, idempotent local migration, the Supabase repository against a fake PostgREST both **before** migration 008 (no request ever names the new table/column in a write) and after it, the project/milestone/task invariant, milestone deletion, the task form's milestone selector, the project view and the `/milestones` redirect:
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-learnings-project-milestones.tsx
+```
+
+`scripts/verify-project-milestones-sql.ts` runs `schema.sql`, migrations 002–007 and then 008 (twice) on an in-memory PostgreSQL (PGlite — never Supabase) and checks structure, idempotency, RLS isolation between two users, the delete behaviour, and that the learning rows are untouched:
+```bash
+npm i --no-save @electric-sql/pglite tsx && npx tsx scripts/verify-project-milestones-sql.ts
+```
+
+`scripts/verify-learnings-backup.ts` checks a real export file read-only (count, ids MD5, byte-identical round trip through the Phase 3 code):
+```bash
+npx tsx scripts/verify-learnings-backup.ts path/to/pace-export.json
+```
+
+Install the optional tools in one command — a later `npm i --no-save` removes packages installed by an earlier one: `npm i --no-save jsdom tsx @electric-sql/pglite`.
 
 ## Known limitations (v1)
 - Reminders fire only while the app is open. Background push needs a backend.

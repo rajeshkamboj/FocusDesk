@@ -43,6 +43,14 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   projectId?: ID;
+  /**
+   * Optional Project Milestone inside the task's project (Goal → Project →
+   * ProjectMilestone → Task). Invariant: when set, the milestone belongs to
+   * `projectId` — a task without a project never has one. Enforced by the
+   * service layer (see lib/project-milestones.ts); deleting the milestone
+   * clears this field and keeps the task.
+   */
+  projectMilestoneId?: ID;
   goalId?: ID;
   parentTaskId?: ID;
   createdAt: ISODateTime;
@@ -85,6 +93,8 @@ export type TaskInput = {
   status?: TaskStatus;
   priority?: TaskPriority;
   projectId?: ID;
+  /** Must belong to `projectId` — see Task.projectMilestoneId. */
+  projectMilestoneId?: ID;
   goalId?: ID;
   parentTaskId?: ID;
   scheduledDate?: ISODate;
@@ -177,6 +187,47 @@ export type ProjectInput = {
   deadline?: ISODate;
   status?: ProjectStatus;
 };
+
+/**
+ * A structural checkpoint *inside one project*:
+ *
+ *   Goal → Project → ProjectMilestone → Task
+ *
+ * Not to be confused with a Learning (the personal learning timeline, which
+ * was called "Milestones" before Phase 3). The two share nothing: different
+ * type, table, repository, actions and UI.
+ *
+ * Deliberately minimal — no status, completion %, dependencies or schedule.
+ * Ordering is manual and stored in `position` only (never by createdAt,
+ * targetDate or name); `reorderProjectMilestones` rewrites it.
+ *
+ * Persisted in the `project_milestones` table
+ * (supabase/migrations/008_project_milestones.sql).
+ */
+export interface ProjectMilestone {
+  id: ID;
+  /** Owning project. Fixed for the milestone's lifetime. */
+  projectId: ID;
+  name: string;
+  description?: string;
+  /** Optional real calendar date (YYYY-MM-DD) — not a partial Learning date. */
+  targetDate?: ISODate;
+  /** Manual order within the project: 0, 1, 2… */
+  position: number;
+  createdAt: ISODateTime;
+}
+
+export type ProjectMilestoneInput = {
+  projectId: ID;
+  name: string;
+  description?: string;
+  targetDate?: ISODate;
+  /** Assigned by DataProvider (appended after the project's last milestone). */
+  position?: number;
+};
+
+/** What an edit may change. The project is fixed; order changes go through reorder. */
+export type ProjectMilestonePatch = Partial<Pick<ProjectMilestone, 'name' | 'description' | 'targetDate'>>;
 
 export type GoalStatus = 'active' | 'completed' | 'archived';
 
@@ -298,21 +349,28 @@ export interface Idea {
 }
 
 /* ------------------------------------------------------------------ */
-/* Milestones (learning timeline)                                      */
+/* Learnings (learning timeline)                                       */
 /* ------------------------------------------------------------------ */
 
 /**
  * A point on the personal learning timeline: the day/month/year a tool,
  * framework, platform or concept was first picked up.
  *
+ * Called "Milestones" until Phase 3. The records themselves did not change —
+ * only the name did — and in Supabase they still live in the `milestones`
+ * table (see learningMap in lib/store/supabase-repository.ts). Old local
+ * data and old JSON exports that use the `milestones` key are read as
+ * learnings (lib/store/normalize.ts). They are never Project Milestones.
+ *
  * `date` is deliberately a *partial* ISO date so memory can stay honest:
  *   'YYYY'        — sometime that year
  *   'YYYY-MM'     — sometime that month
  *   'YYYY-MM-DD'  — that exact day
+ * It is stored and moved around verbatim — never expanded to a full date.
  */
-export type MilestoneDate = string;
+export type LearningDate = string;
 
-export type MilestoneCategory =
+export type LearningCategory =
   | 'ai-tool'
   | 'framework'
   | 'platform'
@@ -322,21 +380,21 @@ export type MilestoneCategory =
   | 'habit'
   | 'other';
 
-export interface Milestone {
+export interface Learning {
   id: ID;
   title: string;
-  category: MilestoneCategory;
+  category: LearningCategory;
   description?: string;
-  /** Partial ISO date — see MilestoneDate. */
-  date: MilestoneDate;
+  /** Partial ISO date — see LearningDate. */
+  date: LearningDate;
   createdAt: ISODateTime;
 }
 
-export type MilestoneInput = {
+export type LearningInput = {
   title: string;
-  category?: MilestoneCategory;
+  category?: LearningCategory;
   description?: string;
-  date: MilestoneDate;
+  date: LearningDate;
 };
 
 /* ------------------------------------------------------------------ */
@@ -402,8 +460,10 @@ export interface AppData {
   goals: Goal[];
   inbox: InboxItem[];
   ideas: Idea[];
-  /** Learning timeline — when each tool/idea was first picked up. */
-  milestones: Milestone[];
+  /** Learning timeline — when each tool/idea was first picked up. (Exported as `learnings`.) */
+  learnings: Learning[];
+  /** Structural milestones inside projects — unrelated to `learnings`. */
+  projectMilestones: ProjectMilestone[];
   dailyPriorities: DailyPriority[];
   weeklyPriorities: WeeklyPriority[];
   monthlyPriorities: MonthlyPriority[];
@@ -414,3 +474,18 @@ export interface AppData {
   timerSessions: TimerSession[];
   settings: Settings;
 }
+
+/**
+ * What an import (or a stored local database) may look like.
+ *
+ * Exports written before Phase 3 carry the learning timeline under
+ * `milestones` and have no `learnings`/`projectMilestones`. That legacy key
+ * is accepted **only on the way in** and only ever means Learnings — it is
+ * folded into `learnings` by `normalizeAppData` (lib/store/normalize.ts) and
+ * never written back out. Nothing in the app reads `milestones` directly.
+ */
+export type AppDataImport = Partial<Omit<AppData, 'settings'>> & {
+  settings?: Partial<{ [K in keyof Settings]: Partial<Settings[K]> }>;
+  /** @deprecated Pre-Phase-3 name of `learnings`. Read on import/load only. */
+  milestones?: Learning[];
+};

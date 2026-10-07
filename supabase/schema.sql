@@ -114,6 +114,14 @@ insert into app_settings (id, data) values ('singleton', '{}') on conflict do no
 -- Daily well-being (Today page) lives in its own user-scoped table and is
 -- created by supabase/migrations/004_daily_wellbeing.sql.
 
+-- The learning timeline ("Learnings" in the app since Phase 3) is stored in the
+-- `milestones` table created by supabase/migrations/007_milestones.sql. The
+-- table keeps that name; only the application terminology changed.
+--
+-- Project Milestones (Goal → Project → ProjectMilestone → Task) are added by
+-- supabase/migrations/008_project_milestones.sql — prepared in Phase 3, NOT yet
+-- applied to production. The app runs unchanged until it is applied.
+
 -- IMPORTANT: enable RLS and add policies tied to auth.uid() before exposing
 -- real data. The anon key is public; without auth, anyone with the URL can
 -- read/write these tables.

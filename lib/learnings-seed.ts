@@ -1,6 +1,7 @@
 /**
  * The starter timeline — the learning history captured before FocusDesk had
- * a Milestones tab, ready to be loaded into the bulk-import box once.
+ * a Learnings tab (first called Milestones), ready to be loaded into the
+ * bulk-import box once. The text below is user content and is kept verbatim.
  *
  * Two translations were needed, because the source notes were vaguer than a
  * date field can be:
@@ -9,7 +10,7 @@
  *   • Ranges ("2015–2024", "Sep–Oct 2026") are filed at the point they
  *     *started*, with the span spelled out in the description.
  */
-export const MILESTONE_SEED = `2015 | WordPress | platform | PixlDot was started — WordPress and web development became part of your professional work.
+export const LEARNING_SEED = `2015 | WordPress | platform | PixlDot was started — WordPress and web development became part of your professional work.
 2015 | HTML, CSS & JavaScript | language | Start of the traditional web-development years (2015–2024): themes, plugins, SEO, client websites.
 2024 | GoDaddy | platform | Before 2025 — domains and hosting.
 2024 | Cloudflare | platform | Before 2025 — DNS, SSL and CDN work.

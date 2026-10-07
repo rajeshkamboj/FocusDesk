@@ -8,6 +8,15 @@ const nextConfig: NextConfig = {
         destination: '/curiosity',
         permanent: true,
       },
+      {
+        // "Milestones" became "Learnings" in Phase 3. Old bookmarks and a
+        // remembered last section keep working. Deliberately temporary (307):
+        // browsers never cache it, so /milestones stays free to be reused
+        // later (e.g. for a project-milestones view) without a stale redirect.
+        source: '/milestones',
+        destination: '/learnings',
+        permanent: false,
+      },
     ];
   },
 };

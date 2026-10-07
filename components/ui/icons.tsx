@@ -83,7 +83,8 @@ export function IconReview(props: IconProps) {
   );
 }
 
-export function IconMilestones(props: IconProps) {
+/** Learnings timeline (the glyph it had as "Milestones"). */
+export function IconLearnings(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="M5 21V4" />

@@ -14,7 +14,8 @@ import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { formatShortDate } from '@/lib/dates';
-import { goalProgress } from '@/lib/selectors';
+import { compareDatedEntities, goalProgress } from '@/lib/selectors';
+import type { EntityDateSort } from '@/lib/selectors';
 import type { Goal, GoalStatus } from '@/lib/types';
 
 const STATUS_LABEL: Record<GoalStatus, string> = {
@@ -30,10 +31,11 @@ export function GoalsScreen() {
   const [deleting, setDeleting] = useState<Goal | undefined>(undefined);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addTaskFor, setAddTaskFor] = useState<string | null>(null);
+  const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
 
   const goals = useMemo(
-    () => [...data.goals].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-    [data.goals],
+    () => [...data.goals].sort((a, b) => compareDatedEntities(a, b, sort, a.status === 'active' ? 0 : 1, b.status === 'active' ? 0 : 1)),
+    [data.goals, sort],
   );
 
   return (
@@ -48,6 +50,17 @@ export function GoalsScreen() {
           </Button>
         }
       />
+
+      <div className="mb-5 flex justify-end">
+        <div className="min-w-0 sm:w-56">
+          <Select value={sort} onChange={(e) => setSort(e.target.value as EntityDateSort)} aria-label="Sort goals">
+            <option value="deadline-asc">Sort by · Deadline — Soonest first</option>
+            <option value="deadline-desc">Sort by · Deadline — Latest first</option>
+            <option value="created-desc">Sort by · Created — Newest first</option>
+            <option value="created-asc">Sort by · Created — Oldest first</option>
+          </Select>
+        </div>
+      </div>
 
       {goals.length === 0 ? (
         <EmptyState

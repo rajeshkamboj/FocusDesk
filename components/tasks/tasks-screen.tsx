@@ -10,9 +10,9 @@ import { Tabs } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/page-header';
 import { TaskRow } from './task-row';
 import { TaskFormModal } from './task-form-modal';
-import { relativeDay, todayISO, addDays, isoWeekKey } from '@/lib/dates';
-import { dailyPriorityTimerTaskId } from '@/lib/selectors';
-import type { Task } from '@/lib/types';
+import { todayISO, addDays, isoWeekKey } from '@/lib/dates';
+import { compareTasks, dailyPriorityTimerTaskId } from '@/lib/selectors';
+import type { TaskSort } from '@/lib/selectors';
 
 type FilterId = 'all' | 'today' | 'upcoming' | 'unscheduled' | 'someday' | 'completed' | 'cancelled';
 
@@ -33,6 +33,7 @@ export function TasksScreen() {
   const [goalFilter, setGoalFilter] = useState('');
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [sort, setSort] = useState<TaskSort>('deadline-asc');
 
   const today = todayISO();
   const tomorrow = addDays(today, 1);
@@ -66,59 +67,18 @@ export function TasksScreen() {
   }, [data.tasks, data.dailyPriorities, data.projects, filter, projectFilter, goalFilter, query, today]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, Task[]>();
-    for (const task of filtered) {
-      // Completed tasks collect under a dedicated "__completed__" bucket that
-      // is ordered most-recent-first. Pending tasks keep their existing date /
-      // priority grouping.
-      const key =
-        task.status === 'completed'
-          ? '__completed__'
-          : task.scheduledDate ?? (task.status === 'someday' ? 'someday' : 'none');
-      const arr = map.get(key) ?? [];
-      arr.push(task);
-      map.set(key, arr);
-    }
-    const order = [...map.entries()].sort(([a], [b]) => {
-      if (a === '__completed__') return 1;
-      if (b === '__completed__') return -1;
-      if (a === 'someday') return 1;
-      if (b === 'someday') return -1;
-      if (a === 'none') return 1;
-      if (b === 'none') return -1;
-      return a < b ? -1 : 1;
-    });
-
-    const byCompletedDesc = (x: Task, y: Task): number => {
-      const xt = x.completedAt ? Date.parse(x.completedAt) : NaN;
-      const yt = y.completedAt ? Date.parse(y.completedAt) : NaN;
-      const xv = Number.isNaN(xt) ? 0 : xt;
-      const yv = Number.isNaN(yt) ? 0 : yt;
-      if (xv !== yv) return yv - xv; // newest first; null timestamps go last (0)
-      return y.createdAt.localeCompare(x.createdAt); // stable tiebreak
-    };
-
-    const activeSort = (x: Task, y: Task): number => {
-      const w = { high: 0, medium: 1, low: 2 } as const;
-      return w[x.priority] - w[y.priority];
-    };
-
-    return order.map(([key, tasks]) => ({
-      key,
-      label:
-        key === '__completed__'
-          ? 'Completed'
-          : key === 'someday'
-            ? 'Someday'
-            : key === 'none'
-              ? 'Unscheduled'
-              : relativeDay(key),
-      tasks:
-        key === '__completed__'
-          ? [...tasks].sort(byCompletedDesc)
-          : [...tasks].sort(activeSort),
-    }));
-  }, [filtered]);
+    const active = filtered.filter((task) => task.status !== 'completed').sort((a, b) => compareTasks(a, b, sort));
+    const completed = filtered
+      .filter((task) => task.status === 'completed')
+      .sort((a, b) => {
+        const completion = (b.completedAt ?? '').localeCompare(a.completedAt ?? '');
+        return completion || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
+      });
+    return [
+      ...(active.length ? [{ key: 'active', label: 'Tasks', tasks: active }] : []),
+      ...(completed.length ? [{ key: 'completed', label: 'Completed', tasks: completed }] : []),
+    ];
+  }, [filtered, sort]);
 
   const activeProjects = data.projects.filter((p) => p.status !== 'archived');
   const activeGoals = data.goals.filter((g) => g.status !== 'archived');
@@ -166,6 +126,18 @@ export function TasksScreen() {
               placeholder="Search tasks…"
               className="h-10"
             />
+          </div>
+          <div className="min-w-0 sm:w-56">
+            <Select value={sort} onChange={(e) => setSort(e.target.value as TaskSort)} className="h-10" aria-label="Sort tasks">
+              <option value="deadline-asc">Sort by · Deadline — Soonest first</option>
+              <option value="deadline-desc">Sort by · Deadline — Latest first</option>
+              <option value="scheduled-asc">Sort by · Scheduled Date — Earliest first</option>
+              <option value="scheduled-desc">Sort by · Scheduled Date — Latest first</option>
+              <option value="priority-asc">Sort by · Priority — High to Low</option>
+              <option value="priority-desc">Sort by · Priority — Low to High</option>
+              <option value="created-desc">Sort by · Created — Newest first</option>
+              <option value="created-asc">Sort by · Created — Oldest first</option>
+            </Select>
           </div>
           <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:flex sm:items-center">
             <div className="min-w-0 sm:w-40">

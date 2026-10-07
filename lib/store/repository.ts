@@ -7,6 +7,12 @@
  */
 
 import type {
+  ExistingProjectPlanImportResult,
+  ProjectPlanImportResult,
+  ResolvedExistingProjectImport,
+  ResolvedProjectPlan,
+} from '../project-plan';
+import type {
   AppData,
   AppDataImport,
   DailyPriority,
@@ -141,4 +147,48 @@ export interface AppRepository {
    * replaced.
    */
   importData(data: AppDataImport): Promise<void>;
+
+  /**
+   * Create the records of a validated FocusDesk project plan
+   * (Goal → Project → ProjectMilestone → Task). See lib/project-plan.ts.
+   *
+   * The opposite of `importData` in every way that matters:
+   *
+   *  - **Additive.** It only ever inserts. No existing goal, project, task,
+   *    project milestone or learning is read, updated or deleted — the plan's
+   *    temporary ids are replaced by freshly generated ones, so it cannot even
+   *    address an existing record.
+   *  - **All or nothing.** The plan is expected to be validated already; the
+   *    repository re-checks its references, then writes. Local storage does it
+   *    in one write. Supabase has no cross-table transaction over PostgREST,
+   *    so it inserts parents-first in whole-table batches and, if any request
+   *    fails, deletes exactly the rows this import created before reporting
+   *    the failure — the caller is never left guessing what landed.
+   *
+   * Records are written as the authenticated user, through the same paths as
+   * every other write, so Row Level Security applies unchanged.
+   */
+  importProjectPlan(plan: ResolvedProjectPlan): Promise<ProjectPlanImportResult>;
+
+  /**
+   * Add a validated plan to an existing project (Phase 5 — "Add to Existing
+   * Project"). See lib/project-plan.ts → resolveExistingProjectImport.
+   *
+   * Creates new project milestones and new tasks inside the target project —
+   * and nothing else. The target project, its goal relationship, its existing
+   * milestones and every existing task are never updated or deleted, and the
+   * plan's goal and project are source metadata only: they are never created.
+   * Milestones the user mapped to existing ones are reused by id (never
+   * modified); the rest are created after the project's existing milestones,
+   * in the imported order. Every task is new and bound to the target project.
+   *
+   * Same guarantees as `importProjectPlan`: the import is validated before the
+   * first write and is all or nothing (local storage: one write; Supabase:
+   * parents-first batches with a compensation delete of exactly what this
+   * import created), and records are written as the signed-in user, so Row
+   * Level Security applies unchanged.
+   */
+  importProjectPlanIntoExistingProject(
+    resolved: ResolvedExistingProjectImport,
+  ): Promise<ExistingProjectPlanImportResult>;
 }

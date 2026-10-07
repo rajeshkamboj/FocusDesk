@@ -1,0 +1,334 @@
+{
+  "format": "focusdesk-project-plan",
+  "version": 1,
+  "name": "Cambuz PDF Reader - build plan",
+  "goal": {
+    "id": "g1",
+    "name": "Ship Cambuz PDF Reader to real readers",
+    "description": "A fast, quiet, offline PDF reader for Windows and macOS: open a document, read it, find things in it, and remember where you stopped. No accounts, no telemetry, no cloud.",
+    "deadline": "2027-03-31",
+    "status": "active"
+  },
+  "projects": [
+    {
+      "id": "p1",
+      "name": "Cambuz PDF Reader",
+      "description": "Tauri 2 shell, React interface, pdf.js rendering engine, SQLite local library. Everything stays on the reader's device.",
+      "deadline": "2027-03-31",
+      "status": "active",
+      "milestones": [
+        {
+          "id": "m1",
+          "name": "Foundation",
+          "description": "The shell, the toolchain and the data model everything else is built on.",
+          "targetDate": "2026-10-20",
+          "tasks": [
+            {
+              "title": "Choose the app name and clear trademark conflicts",
+              "description": "Cambuz is free in every registry checked; keep the evidence in the project notes.",
+              "status": "completed",
+              "priority": "high",
+              "dueDate": "2026-10-08"
+            },
+            {
+              "title": "Set up the Tauri 2 + React project structure",
+              "description": "Workspaces for the shell, the renderer and the shared types; one command builds both.",
+              "priority": "high",
+              "dueDate": "2026-10-09",
+              "estimatedDuration": 120
+            },
+            {
+              "title": "Configure TypeScript strict mode, ESLint and the build gate",
+              "dueDate": "2026-10-10",
+              "estimatedDuration": 60
+            },
+            {
+              "title": "Add pdf.js and render a first page in a scratch window",
+              "priority": "high",
+              "dueDate": "2026-10-12",
+              "estimatedDuration": 90,
+              "tags": [
+                "pdf.js"
+              ]
+            },
+            {
+              "title": "Define the document and library data model",
+              "description": "Document, page, outline entry, highlight, reading position. No sync fields - v1 is local only.",
+              "dueDate": "2026-10-14"
+            },
+            {
+              "title": "Set up SQLite for the local library",
+              "dueDate": "2026-10-16",
+              "estimatedDuration": 120
+            },
+            {
+              "title": "Design tokens, typography and the base window layout",
+              "scheduledDate": "2026-10-17"
+            },
+            {
+              "title": "CI: build unsigned artifacts for Windows and macOS",
+              "status": "planned",
+              "priority": "low",
+              "dueDate": "2026-10-20"
+            }
+          ]
+        },
+        {
+          "id": "m2",
+          "name": "PDF Engine",
+          "description": "Everything between the bytes of a file and pixels on the screen.",
+          "targetDate": "2026-11-10",
+          "tasks": [
+            {
+              "title": "Render a single page to canvas at the correct scale",
+              "priority": "high",
+              "dueDate": "2026-10-24",
+              "estimatedDuration": 180
+            },
+            {
+              "title": "Move rendering into a worker with a page cache",
+              "description": "Keep at most 12 rendered pages; evict the furthest from the viewport.",
+              "dueDate": "2026-10-29"
+            },
+            {
+              "title": "Extract the text layer for selection and copy",
+              "dueDate": "2026-11-02"
+            },
+            {
+              "title": "Support the annotation layer: links and form fields",
+              "priority": "low",
+              "dueDate": "2026-11-05"
+            },
+            {
+              "title": "Zoom modes: fit width, fit page, and 25-400% continuous",
+              "dueDate": "2026-11-07"
+            },
+            {
+              "title": "Handle rotated pages and non-standard media boxes",
+              "scheduledDate": "2026-11-09"
+            },
+            {
+              "title": "Password-protected PDFs: prompt, decrypt, remember for the session",
+              "status": "someday"
+            }
+          ]
+        },
+        {
+          "id": "m3",
+          "name": "Reader UI",
+          "description": "The reading surface itself - the part a reader touches all day.",
+          "targetDate": "2026-12-05",
+          "tasks": [
+            {
+              "title": "Continuous vertical scroll view",
+              "priority": "high",
+              "dueDate": "2026-11-14",
+              "estimatedDuration": 240
+            },
+            {
+              "title": "Single-page and facing-page views",
+              "dueDate": "2026-11-19"
+            },
+            {
+              "title": "Thumbnail sidebar with click-to-jump",
+              "dueDate": "2026-11-24"
+            },
+            {
+              "title": "Toolbar: navigation, zoom, search, view mode",
+              "dueDate": "2026-11-28"
+            },
+            {
+              "title": "Light and dark themes following the system",
+              "dueDate": "2026-12-01"
+            },
+            {
+              "title": "Keyboard shortcuts and a printable cheat sheet",
+              "scheduledDate": "2026-12-03"
+            },
+            {
+              "title": "Open-with file association on Windows and macOS",
+              "priority": "high",
+              "dueDate": "2026-12-05"
+            },
+            {
+              "title": "Recent documents list",
+              "status": "planned",
+              "priority": "low"
+            }
+          ]
+        },
+        {
+          "id": "m4",
+          "name": "Search & Navigation",
+          "description": "Finding a page, a phrase or the place you left off.",
+          "targetDate": "2027-01-10",
+          "tasks": [
+            {
+              "title": "In-document full-text search with match highlighting",
+              "priority": "high",
+              "dueDate": "2026-12-12",
+              "estimatedDuration": 180
+            },
+            {
+              "title": "Search across the whole library",
+              "dueDate": "2026-12-19"
+            },
+            {
+              "title": "Outline and bookmarks panel",
+              "dueDate": "2026-12-23"
+            },
+            {
+              "title": "Follow internal and external links",
+              "dueDate": "2027-01-03"
+            },
+            {
+              "title": "Go to page, jump to first and last",
+              "scheduledDate": "2027-01-06"
+            },
+            {
+              "title": "Remember the last-read position per document",
+              "description": "Restored on open; never synced, never leaves the device.",
+              "priority": "high",
+              "dueDate": "2027-01-08"
+            },
+            {
+              "title": "Highlights and margin notes stored locally",
+              "status": "planned",
+              "priority": "low"
+            }
+          ]
+        },
+        {
+          "id": "m5",
+          "name": "Performance",
+          "description": "Fast on a five-year-old laptop with a 1000-page scanned PDF.",
+          "targetDate": "2027-01-30",
+          "tasks": [
+            {
+              "title": "Virtualize page rendering for 1000-page documents",
+              "priority": "high",
+              "dueDate": "2027-01-15"
+            },
+            {
+              "title": "Stay under 400 MB of memory on a 1000-page PDF",
+              "dueDate": "2027-01-20"
+            },
+            {
+              "title": "Cold start under two seconds",
+              "dueDate": "2027-01-24",
+              "estimatedDuration": 120
+            },
+            {
+              "title": "Benchmark harness and a nightly numbers page",
+              "priority": "low"
+            },
+            {
+              "title": "Index the library lazily in the background",
+              "scheduledDate": "2027-01-28"
+            }
+          ]
+        },
+        {
+          "id": "m6",
+          "name": "Testing",
+          "description": "Proof it works on documents we did not write ourselves.",
+          "targetDate": "2027-02-20",
+          "tasks": [
+            {
+              "title": "Build a corpus of 50 sample PDFs",
+              "description": "Scanned, forms, CJK, right-to-left, encrypted, 1000+ pages, broken xref tables.",
+              "dueDate": "2027-02-02",
+              "tags": [
+                "qa"
+              ]
+            },
+            {
+              "title": "Unit tests for the rendering and text-extraction engine",
+              "dueDate": "2027-02-06"
+            },
+            {
+              "title": "Integration tests for the main reading flows",
+              "dueDate": "2027-02-10"
+            },
+            {
+              "title": "Accessibility pass: keyboard-only and screen reader",
+              "dueDate": "2027-02-14"
+            },
+            {
+              "title": "Local crash log a reader can attach to an email",
+              "priority": "low",
+              "notes": "Deliberately not uploaded anywhere."
+            },
+            {
+              "title": "Closed beta with 10 readers and a feedback inbox",
+              "dueDate": "2027-02-20"
+            }
+          ]
+        },
+        {
+          "id": "m7",
+          "name": "Release",
+          "description": "Signed, installable, updatable, and announced.",
+          "targetDate": "2027-03-31",
+          "tasks": [
+            {
+              "title": "Code signing on Windows",
+              "priority": "high",
+              "dueDate": "2027-03-05"
+            },
+            {
+              "title": "Notarization on macOS",
+              "dueDate": "2027-03-10"
+            },
+            {
+              "title": "Installer and the auto-update channel",
+              "dueDate": "2027-03-18"
+            },
+            {
+              "title": "Landing page with screenshots and a download button",
+              "dueDate": "2027-03-24"
+            },
+            {
+              "title": "User documentation and a short FAQ",
+              "scheduledDate": "2027-03-27"
+            },
+            {
+              "title": "Release notes and the v1.0 announcement",
+              "dueDate": "2027-03-31"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "title": "Decide whether Cambuz is free, paid or both",
+          "description": "Sits outside every milestone on purpose - it is a decision, not a build step.",
+          "priority": "high",
+          "dueDate": "2026-11-30"
+        },
+        {
+          "title": "Write the privacy policy: everything stays on the device",
+          "dueDate": "2027-01-15"
+        },
+        {
+          "title": "Prepare the launch-day checklist",
+          "description": "Declared at project level but pointed at the Release milestone by its temporary id.",
+          "scheduledDate": "2027-03-29",
+          "milestoneId": "m7"
+        }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Read the PDF 2.0 specification chapter on object streams",
+      "description": "A personal task with no project - it belongs to the reader, not to the build.",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "title": "Renew the Apple Developer account before signing starts",
+      "priority": "high",
+      "dueDate": "2027-02-28"
+    }
+  ]
+}

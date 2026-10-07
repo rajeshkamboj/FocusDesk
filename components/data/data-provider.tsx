@@ -42,6 +42,12 @@ import {
   resolveTaskMilestone,
 } from '@/lib/project-milestones';
 import type {
+  ExistingProjectPlanImportResult,
+  ProjectPlanImportResult,
+  ResolvedExistingProjectImport,
+  ResolvedProjectPlan,
+} from '@/lib/project-plan';
+import type {
   AppData,
   AppDataImport,
   DailyPriority,
@@ -197,6 +203,34 @@ export interface DataActions {
   importData(data: AppDataImport): Promise<void>;
   backupNow(): Promise<void>;
   restoreBackup(): Promise<void>;
+
+  /* Project plan import (ChatGPT JSON — see lib/project-plan.ts) */
+  /**
+   * Create the records of an already validated plan:
+   * Goal → Project → ProjectMilestone → Task.
+   *
+   * Additive by construction — nothing that already exists (Learnings, goals,
+   * projects, tasks, project milestones) is read, changed or deleted. Validate
+   * first with `reviewProjectPlanText` and let the user confirm the preview;
+   * this only writes. Throws a `ProjectPlanError` when the write could not be
+   * completed, in which case nothing was kept.
+   */
+  importProjectPlan(plan: ResolvedProjectPlan): Promise<ProjectPlanImportResult>;
+
+  /**
+   * Add the records of an already validated plan to an existing project
+   * (Phase 5 — "Add to Existing Project"): new project milestones and new
+   * tasks only.
+   *
+   * Additive by construction — the target project, its goal relationship, its
+   * existing milestones and every existing task stay exactly as they are, and
+   * the plan's goal and project are source metadata only (never created).
+   * Resolve and preview first with `resolveExistingProjectImport` and
+   * `existingProjectImportPreview`; this only writes. Throws a
+   * `ProjectPlanError` when the write could not be completed, in which case
+   * nothing was kept.
+   */
+  importProjectPlanIntoExistingProject(resolved: ResolvedExistingProjectImport): Promise<ExistingProjectPlanImportResult>;
 }
 
 export interface DataContextValue {
@@ -1665,6 +1699,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // An inconsistent backup is refused before anything changes — say why.
           notify(error instanceof ProjectMilestoneError ? error.message : 'Backup could not be restored');
         }
+      },
+
+      importProjectPlan: async (plan) => {
+        // Settle any in-flight task write first: the snapshot the created
+        // records are merged into must not be overtaken by a timer checkpoint.
+        await settleTaskWrites(dataRef.current.tasks);
+        const created = await repo().importProjectPlan(plan);
+        applyDataChange((d) => ({
+          ...d,
+          goals: [...d.goals, ...created.goals],
+          projects: [...d.projects, ...created.projects],
+          projectMilestones: [...d.projectMilestones, ...created.projectMilestones],
+          tasks: [...d.tasks, ...created.tasks],
+        }));
+        return created;
+      },
+
+      importProjectPlanIntoExistingProject: async (resolved) => {
+        // Settle any in-flight task write first, exactly like importProjectPlan.
+        await settleTaskWrites(dataRef.current.tasks);
+        const created = await repo().importProjectPlanIntoExistingProject(resolved);
+        // Only new milestones and tasks exist — the target project, its goal
+        // and everything already in it are not part of the result, so the
+        // state merge cannot touch them.
+        applyDataChange((d) => ({
+          ...d,
+          projectMilestones: [...d.projectMilestones, ...created.projectMilestones],
+          tasks: [...d.tasks, ...created.tasks],
+        }));
+        return created;
       },
     }),
     [addTaskState, applyDataChange, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, refreshProjectMilestones, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, settleTaskWrites, startTimerForTask],

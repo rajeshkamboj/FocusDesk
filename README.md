@@ -58,6 +58,9 @@ components/data/      DataProvider — service layer (all writes + task history)
 lib/types.ts          data model
 lib/store/            repository interface, LocalRepository, SupabaseRepository
 lib/selectors.ts      pure derived stats (review, progress)
+lib/project-plan.ts   the ChatGPT project-plan format: parse, validate, resolve, preview
+docs/                 format documentation (focusdesk-project-plan-v1.md)
+fixtures/             sample plans used by the checks and the preview — never imported into production
 public/sw.js, manifest.webmanifest, icons/   PWA
 ```
 The UI only talks to `useData()`. Backends implement `AppRepository`, so you can swap storage without touching the UI. Future AI features (plan my day, break down, summarize week) can be added as services on top of the same layer.
@@ -69,6 +72,38 @@ Two different things that used to share a word:
 - **Project Milestones** — structure inside a project: **Goal → Project → ProjectMilestone → Task**. A task may have no milestone; if it has one, the milestone belongs to the task's own project. That is enforced three times over: in the app (`lib/project-milestones.ts`), in the local repository, and in PostgreSQL by foreign keys — `(project_id, user_id) → projects (id, user_id)` so a milestone can only sit in a project its owner owns, and `(project_milestone_id, project_id) → project_milestones (id, project_id)` so a task can only carry a milestone of its own project. Deleting a milestone keeps its tasks and clears their link; deleting a project removes its milestones and, as before, keeps its tasks. Order is manual (`position`). Shown inside each project on the Projects screen and as a "Milestone" field in the task form.
 
 Compatibility: old local data (`pace.db.v1`), old device backups (`pace.backup.v1`) and old JSON exports keep the timeline under `milestones`; they are read as Learnings by `lib/store/normalize.ts` — the single, idempotent, lossless migration path — and never as Project Milestones. New exports contain `learnings` and `projectMilestones` only.
+
+## Import a project plan (ChatGPT JSON)
+**Settings → Data → Import Project Plan** turns a plan you generated in ChatGPT into real records — a whole **Goal → Project → Project Milestone → Task** tree instead of dozens of hand-typed tasks. The format is `focusdesk-project-plan` version 1; it is documented in full (structure, rules, invalid examples and a copy-paste prompt for ChatGPT) in [`docs/focusdesk-project-plan-v1.md`](docs/focusdesk-project-plan-v1.md), and a realistic sample plan lives in `fixtures/focusdesk-project-plan-v1.json` (used by the checks and for previewing — never imported into production).
+
+```jsonc
+{ "format": "focusdesk-project-plan", "version": 1,
+  "goal": { "name": "Ship Cambuz PDF Reader" },
+  "projects": [{ "name": "Cambuz PDF Reader", "deadline": "2027-03-31",
+    "milestones": [{ "id": "m1", "name": "Foundation", "targetDate": "2026-10-20",
+      "tasks": [{ "title": "Set up the project structure", "dueDate": "2026-10-09", "priority": "high" }] }],
+    "tasks": [{ "title": "Decide the pricing model" }] }],
+  "tasks": [{ "title": "A task with no project" }] }
+```
+
+The flow is paste (or choose a file) → parse → validate → **preview** → confirm → import → result. Nothing is written until you press Import, and the preview shows the counts, the whole hierarchy, every date and any warning.
+
+The importer has two modes:
+
+- **Create New Project** — creates the plan's goal, projects, project milestones and tasks.
+- **Add to Existing Project** — adds the plan's milestones and tasks to one project you already have. The preview is a diff: imported milestones whose normalized name exactly matches an existing milestone of that project are *reused* (never modified — you can always choose "Create new" instead), new milestones are appended after the existing ones, and every task is created new inside the target project (the plan's top-level tasks become project-level tasks). The target project, its goal, its existing milestones and its existing tasks are never touched, and the plan's goal and project are metadata only — they are never created. See the "Add to Existing Project" section of the format doc.
+
+It is deliberately the opposite of *Import (JSON)*, which replaces the database:
+
+- **Additive only.** The format has no update and no delete. Existing goals, projects, tasks, project milestones, learnings, priorities and timer sessions are untouched; a plan can only create new records. Each entry point also recognises the other's payload and refuses it, so a plan can never be fed to the restoring import (or a backup to the plan importer).
+- **Validated as a whole first.** A missing name or title, a malformed or impossible date, an unsupported status, an unknown or duplicate temporary id, a milestone in a project that is not in the plan, or a task carrying a milestone of *another* project refuses the entire plan. Warnings (no goal, a past deadline, a task with no milestone, a field FocusDesk does not have) are shown and change nothing.
+- **All or nothing.** Local storage writes a plan in one store operation. Supabase has no cross-table transaction over PostgREST, so records go in parents-first — goals → projects → project milestones → tasks — in whole batches, and if any request fails the rows that did land are deleted again and the failure is reported rather than presented as a success.
+- **Temporary ids stay temporary.** An `id` in a plan only expresses a relationship (`milestoneId`, `projectId`); the repository mints real FocusDesk ids with the app's own generator and rewrites every reference through the map, so a plan cannot choose, collide with or address an existing record.
+- **Import as new, never merged.** A project whose name already exists is reported and you are asked to confirm; FocusDesk creates a second project and leaves the existing one exactly as it was. A plan's goal is always created new — it is never matched to an existing goal by name.
+- **Milestone positions come from the JSON order** (0, 1, 2 …), never from a date or a name.
+- **Authenticated, RLS-respecting writes** through `useData().actions.importProjectPlan` → `AppRepository.importProjectPlan`, as the signed-in user. No API key, no service-role key, no SQL from the browser, and no AI service is called — you generate the JSON in ChatGPT yourself.
+
+Code: `lib/project-plan.ts` (format, validation, resolution, preview — pure, no I/O), `importProjectPlan` in `lib/store/repository.ts` and both repositories, `components/settings/project-plan-import.tsx` (the UI).
 
 ## PWA installation
 Open the deployed site in Chrome or Edge and click **Install** in the address bar. To launch it when Windows starts, press `Win + R`, type `shell:startup`, and put the installed app's shortcut there.
@@ -118,6 +153,16 @@ npm i --no-save jsdom tsx && npx tsx scripts/verify-learnings-project-milestones
 `scripts/verify-project-milestones-sql.ts` runs `schema.sql`, migrations 002–007 and then 008 (twice) on an in-memory PostgreSQL (PGlite — never Supabase) and checks structure, idempotency, RLS isolation between two users, the delete behaviour, and that the learning rows are untouched. The integrity rules are probed **as the table owner as well as under RLS**, because foreign key checks bypass RLS — that is the only way to prove the constraint, not the policy, refuses a milestone hung on another user's project or on a different project than its task's. It also pins the two rules that are easy to get wrong: deleting a project must never leave a task pointing at a milestone that no longer exists, and a refused run must create nothing at all:
 ```bash
 npm i --no-save @electric-sql/pglite tsx && npx tsx scripts/verify-project-milestones-sql.ts
+```
+
+`scripts/verify-project-plan-import.tsx` checks the Phase 4 project-plan importer end to end: the format itself (every valid and invalid shape — envelope, required names and titles, dates, statuses, temporary ids, broken / duplicate / cross-project references, size limits, the migration-008 gate), the resolution into records (positions from the JSON order, references rewritten to real ids, defaults a plan cannot set), `LocalRepository` (one atomic write, existing records byte-identical afterwards, a refused plan writing nothing), `SupabaseRepository` against a fake PostgREST both before and after migration 008 (parents-first inserts, correct foreign keys, every row scoped to the signed-in user, no write to the learnings table, and a **failed insert rolled back** so nothing is kept), export compatibility (`milestones` still means Learnings, `learnings` and `projectMilestones` stay apart), and the real Settings screen and importer modal in jsdom (parse → validate → preview → duplicate-name question → import → result), plus `fixtures/focusdesk-project-plan-v1.json` read from disk:
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-import.tsx
+```
+
+`scripts/verify-project-plan-add-to-existing.tsx` checks the Phase 5 "Add to Existing Project" mode end to end: the exactly-one-project rule, normalized exact-name milestone matching (never fuzzy), the user's mapping choices, new-milestone positions after the existing ones, task/root-task placement, the zero-writes guarantee for invalid plans, `LocalRepository` and `SupabaseRepository` (only new milestones and tasks are ever written — no goal or project row is touched — and a failed insert is rolled back), the unchanged-records fingerprints before and after, and the real modal in jsdom (mode switch → target project → mapping preview → flip a mapping → import → result):
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-add-to-existing.tsx
 ```
 
 `scripts/verify-learnings-backup.ts` checks a real export file read-only (count, ids MD5, byte-identical round trip through the Phase 3 code):

@@ -64,6 +64,13 @@ import {
   planProjectMilestoneOrder,
   projectMilestonesFor,
 } from '../project-milestones';
+import { ProjectPlanError, buildExistingProjectPlanRecords, buildProjectPlanRecords } from '../project-plan';
+import type {
+  ExistingProjectPlanImportResult,
+  ProjectPlanImportResult,
+  ResolvedExistingProjectImport,
+  ResolvedProjectPlan,
+} from '../project-plan';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -608,5 +615,67 @@ export class LocalRepository implements AppRepository {
     assertProjectMilestonesConsistent(next);
     this.data = next;
     this.write();
+  }
+
+  /**
+   * Add a validated project plan (Goal → Project → ProjectMilestone → Task).
+   *
+   * Every record is built first — with real ids from this repository's own
+   * `createId`, references rewritten through the plan's temporary ids — and
+   * only then appended to the freshly synced database and written **once**.
+   * Local storage therefore gives a plan import what PostgreSQL would: it
+   * either happened completely or not at all, and nothing that was already
+   * stored (the Learnings included) is touched.
+   */
+  async importProjectPlan(plan: ResolvedProjectPlan): Promise<ProjectPlanImportResult> {
+    const { goals, projects, projectMilestones, tasks } = buildProjectPlanRecords(plan, {
+      newId: createId,
+      now: nowISO,
+    });
+
+    // Sync first: append to the newest stored state, never to this tab's
+    // snapshot, so a plan imported while another tab writes loses nothing.
+    const data = this.current();
+    data.goals.push(...goals);
+    data.projects.push(...projects);
+    data.projectMilestones.push(...projectMilestones);
+    data.tasks.push(...tasks);
+    this.write();
+
+    return { goals, projects, projectMilestones, tasks };
+  }
+
+  /**
+   * Add a validated plan to an existing project (Phase 5): new project
+   * milestones and new tasks only.
+   *
+   * The target project is re-checked against freshly stored data (it may have
+   * been deleted since the preview), records are built with this repository's
+   * own `createId`, and everything is appended to the freshly synced database
+   * and written **once** — so local storage gives this import the same
+   * all-or-nothing guarantee as `importProjectPlan`, and nothing that was
+   * already stored (the target project, its goal, its milestones and tasks,
+   * the Learnings included) is touched.
+   */
+  async importProjectPlanIntoExistingProject(
+    resolved: ResolvedExistingProjectImport,
+  ): Promise<ExistingProjectPlanImportResult> {
+    const data = this.current();
+    const target = data.projects.find((p) => p.id === resolved.targetProject.id);
+    if (!target) {
+      throw new ProjectPlanError(
+        `Import refused — nothing was created. The project “${resolved.targetProject.name}” no longer exists.`,
+      );
+    }
+    const { projectMilestones, tasks } = buildExistingProjectPlanRecords(resolved, {
+      newId: createId,
+      now: nowISO,
+    }, data.projectMilestones);
+
+    data.projectMilestones.push(...projectMilestones);
+    data.tasks.push(...tasks);
+    this.write();
+
+    return { projectMilestones, tasks };
   }
 }

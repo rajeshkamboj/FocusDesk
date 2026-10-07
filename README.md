@@ -88,6 +88,11 @@ Compatibility: old local data (`pace.db.v1`), old device backups (`pace.backup.v
 
 The flow is paste (or choose a file) → parse → validate → **preview** → confirm → import → result. Nothing is written until you press Import, and the preview shows the counts, the whole hierarchy, every date and any warning.
 
+The importer has two modes:
+
+- **Create New Project** — creates the plan's goal, projects, project milestones and tasks.
+- **Add to Existing Project** — adds the plan's milestones and tasks to one project you already have. The preview is a diff: imported milestones whose normalized name exactly matches an existing milestone of that project are *reused* (never modified — you can always choose "Create new" instead), new milestones are appended after the existing ones, and every task is created new inside the target project (the plan's top-level tasks become project-level tasks). The target project, its goal, its existing milestones and its existing tasks are never touched, and the plan's goal and project are metadata only — they are never created. See the "Add to Existing Project" section of the format doc.
+
 It is deliberately the opposite of *Import (JSON)*, which replaces the database:
 
 - **Additive only.** The format has no update and no delete. Existing goals, projects, tasks, project milestones, learnings, priorities and timer sessions are untouched; a plan can only create new records. Each entry point also recognises the other's payload and refuses it, so a plan can never be fed to the restoring import (or a backup to the plan importer).
@@ -153,6 +158,11 @@ npm i --no-save @electric-sql/pglite tsx && npx tsx scripts/verify-project-miles
 `scripts/verify-project-plan-import.tsx` checks the Phase 4 project-plan importer end to end: the format itself (every valid and invalid shape — envelope, required names and titles, dates, statuses, temporary ids, broken / duplicate / cross-project references, size limits, the migration-008 gate), the resolution into records (positions from the JSON order, references rewritten to real ids, defaults a plan cannot set), `LocalRepository` (one atomic write, existing records byte-identical afterwards, a refused plan writing nothing), `SupabaseRepository` against a fake PostgREST both before and after migration 008 (parents-first inserts, correct foreign keys, every row scoped to the signed-in user, no write to the learnings table, and a **failed insert rolled back** so nothing is kept), export compatibility (`milestones` still means Learnings, `learnings` and `projectMilestones` stay apart), and the real Settings screen and importer modal in jsdom (parse → validate → preview → duplicate-name question → import → result), plus `fixtures/focusdesk-project-plan-v1.json` read from disk:
 ```bash
 npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-import.tsx
+```
+
+`scripts/verify-project-plan-add-to-existing.tsx` checks the Phase 5 "Add to Existing Project" mode end to end: the exactly-one-project rule, normalized exact-name milestone matching (never fuzzy), the user's mapping choices, new-milestone positions after the existing ones, task/root-task placement, the zero-writes guarantee for invalid plans, `LocalRepository` and `SupabaseRepository` (only new milestones and tasks are ever written — no goal or project row is touched — and a failed insert is rolled back), the unchanged-records fingerprints before and after, and the real modal in jsdom (mode switch → target project → mapping preview → flip a mapping → import → result):
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-add-to-existing.tsx
 ```
 
 `scripts/verify-learnings-backup.ts` checks a real export file read-only (count, ids MD5, byte-identical round trip through the Phase 3 code):

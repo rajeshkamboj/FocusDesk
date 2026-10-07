@@ -64,8 +64,13 @@ import {
   planProjectMilestoneOrder,
   projectMilestonesFor,
 } from '../project-milestones';
-import { buildProjectPlanRecords } from '../project-plan';
-import type { ProjectPlanImportResult, ResolvedProjectPlan } from '../project-plan';
+import { ProjectPlanError, buildExistingProjectPlanRecords, buildProjectPlanRecords } from '../project-plan';
+import type {
+  ExistingProjectPlanImportResult,
+  ProjectPlanImportResult,
+  ResolvedExistingProjectImport,
+  ResolvedProjectPlan,
+} from '../project-plan';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -638,5 +643,39 @@ export class LocalRepository implements AppRepository {
     this.write();
 
     return { goals, projects, projectMilestones, tasks };
+  }
+
+  /**
+   * Add a validated plan to an existing project (Phase 5): new project
+   * milestones and new tasks only.
+   *
+   * The target project is re-checked against freshly stored data (it may have
+   * been deleted since the preview), records are built with this repository's
+   * own `createId`, and everything is appended to the freshly synced database
+   * and written **once** — so local storage gives this import the same
+   * all-or-nothing guarantee as `importProjectPlan`, and nothing that was
+   * already stored (the target project, its goal, its milestones and tasks,
+   * the Learnings included) is touched.
+   */
+  async importProjectPlanIntoExistingProject(
+    resolved: ResolvedExistingProjectImport,
+  ): Promise<ExistingProjectPlanImportResult> {
+    const data = this.current();
+    const target = data.projects.find((p) => p.id === resolved.targetProject.id);
+    if (!target) {
+      throw new ProjectPlanError(
+        `Import refused — nothing was created. The project “${resolved.targetProject.name}” no longer exists.`,
+      );
+    }
+    const { projectMilestones, tasks } = buildExistingProjectPlanRecords(resolved, {
+      newId: createId,
+      now: nowISO,
+    }, data.projectMilestones);
+
+    data.projectMilestones.push(...projectMilestones);
+    data.tasks.push(...tasks);
+    this.write();
+
+    return { projectMilestones, tasks };
   }
 }

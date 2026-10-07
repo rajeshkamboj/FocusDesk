@@ -57,8 +57,13 @@ import {
   planProjectMilestoneOrder,
   projectMilestonesFor,
 } from '../project-milestones';
-import { ProjectPlanError, buildProjectPlanRecords } from '../project-plan';
-import type { ProjectPlanImportResult, ResolvedProjectPlan } from '../project-plan';
+import { ProjectPlanError, buildExistingProjectPlanRecords, buildProjectPlanRecords } from '../project-plan';
+import type {
+  ExistingProjectPlanImportResult,
+  ProjectPlanImportResult,
+  ResolvedExistingProjectImport,
+  ResolvedProjectPlan,
+} from '../project-plan';
 import type {
   AppRepository,
   DailyPriorityInput,
@@ -1013,17 +1018,7 @@ export class SupabaseRepository implements AppRepository {
 
     /** Tables this import has written to, with the ids that really landed. */
     const written: { table: string; ids: string[] }[] = [];
-    const insert = async (table: string, rows: Row[], ids: string[]) => {
-      for (let start = 0; start < rows.length; start += PLAN_INSERT_BATCH) {
-        const end = start + PLAN_INSERT_BATCH;
-        await this.http.post(table, rows.slice(start, end));
-        // Recorded only once the request succeeded: a rejected batch inserted
-        // nothing, so `written` is exactly what a rollback has to remove.
-        const entry = written.find((w) => w.table === table) ?? { table, ids: [] };
-        if (!written.includes(entry)) written.push(entry);
-        entry.ids.push(...ids.slice(start, end));
-      }
-    };
+    const insert = (table: string, rows: Row[], ids: string[]) => this.insertImportRows(written, table, rows, ids);
 
     try {
       await insert('goals', goals.map(goalMap.toRow), goals.map((g) => g.id));
@@ -1071,6 +1066,102 @@ export class SupabaseRepository implements AppRepository {
       }
     }
     return [...new Set(failed)];
+  }
+
+  /**
+   * Insert whole batches, parents first, recording exactly what landed so a
+   * rollback can remove it. Shared by both plan imports.
+   */
+  private async insertImportRows(
+    written: { table: string; ids: string[] }[],
+    table: string,
+    rows: Row[],
+    ids: string[],
+  ): Promise<void> {
+    for (let start = 0; start < rows.length; start += PLAN_INSERT_BATCH) {
+      const end = start + PLAN_INSERT_BATCH;
+      await this.http.post(table, rows.slice(start, end));
+      // Recorded only once the request succeeded: a rejected batch inserted
+      // nothing, so `written` is exactly what a rollback has to remove.
+      const entry = written.find((w) => w.table === table) ?? { table, ids: [] };
+      if (!written.includes(entry)) written.push(entry);
+      entry.ids.push(...ids.slice(start, end));
+    }
+  }
+
+  /**
+   * Add a validated plan to an existing project (Phase 5 — "Add to Existing
+   * Project"). Creates new project milestones and new tasks inside the target
+   * project — and nothing else.
+   *
+   * Only ever INSERTs, always as `this.userId`, so Row Level Security applies
+   * exactly as it does to a record created through the UI. The target project
+   * is re-read (user-scoped) before anything is written: a project that does
+   * not exist — or belongs to someone else — is refused, and no goal or project
+   * rows are ever written, so the target project, its goal relationship and its
+   * existing milestones and tasks cannot change.
+   *
+   * ATOMICITY — the same honest shape as `importProjectPlan`: everything is
+   * built and re-checked first; inserts go parents-first (project milestones
+   * → tasks) in whole batches; if any request fails, exactly the rows this
+   * import created are deleted again, children first, and the failure is
+   * reported.
+   */
+  async importProjectPlanIntoExistingProject(
+    resolved: ResolvedExistingProjectImport,
+  ): Promise<ExistingProjectPlanImportResult> {
+    // User-scoped read: a foreign or deleted project id reads as empty.
+    const targets = await this.http.get('projects', { id: resolved.targetProject.id });
+    if (targets.length === 0) {
+      throw new ProjectPlanError(
+        `Import refused — nothing was created. The project “${resolved.targetProject.name}” does not exist.`,
+      );
+    }
+
+    const needsMilestones = resolved.mappings.some((m) => m.decision === 'create-new');
+    const milestoneSchema = await this.supportsProjectMilestones();
+    if (needsMilestones && !milestoneSchema) {
+      throw new ProjectPlanError(
+        `Import refused — nothing was created. This plan adds project milestones. ${NOT_MIGRATED_MESSAGE}`,
+      );
+    }
+    const existingMilestones = milestoneSchema
+      ? (await this.http.get(PROJECT_MILESTONES_TABLE, { project_id: resolved.targetProject.id }, { column: 'position', ascending: true }))
+          .map(projectMilestoneMap.fromRow)
+      : [];
+
+    const { projectMilestones, tasks } = buildExistingProjectPlanRecords(resolved, {
+      newId: uuid,
+      now: () => new Date().toISOString(),
+    }, existingMilestones);
+
+    /** Tables this import has written to, with the ids that really landed. */
+    const written: { table: string; ids: string[] }[] = [];
+    const insert = (table: string, rows: Row[], ids: string[]) => this.insertImportRows(written, table, rows, ids);
+
+    try {
+      if (projectMilestones.length > 0) {
+        await insert(
+          PROJECT_MILESTONES_TABLE,
+          projectMilestones.map(projectMilestoneMap.toRow),
+          projectMilestones.map((m) => m.id),
+        );
+      }
+      // Same guard as every other task write: the column is left out entirely
+      // when migration 008 is not there yet.
+      const taskRows = await Promise.all(tasks.map((t) => this.prepareTaskRow(taskMap.toRow(t))));
+      await insert('tasks', taskRows, tasks.map((t) => t.id));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const left = await this.undoProjectPlanImport(written);
+      throw new ProjectPlanError(
+        left.length === 0
+          ? `Import failed — nothing was kept. ${reason}`
+          : `Import failed, and ${left.length} of its records could not be removed again (${left.join(', ')}). ${reason}`,
+      );
+    }
+
+    return { projectMilestones, tasks };
   }
 }
 

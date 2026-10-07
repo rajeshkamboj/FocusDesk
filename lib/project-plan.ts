@@ -40,7 +40,7 @@
  */
 
 import { todayISO } from './dates';
-import { assertProjectMilestonesConsistent } from './project-milestones';
+import { assertProjectMilestonesConsistent, nextProjectMilestonePosition } from './project-milestones';
 import type {
   Goal,
   GoalStatus,
@@ -279,6 +279,14 @@ export interface ProjectPlanOptions {
   projectMilestonesAvailable?: boolean;
   /** Reference day for the "in the past" warnings. Defaults to local today. */
   today?: ISODate;
+  /**
+   * What the import does with the plan (Phase 5). `create-new-project` (the
+   * default) is the Phase 4 behavior: the plan's goal, projects, milestones
+   * and tasks are created. `add-to-existing-project` accepts exactly one
+   * source project and is resolved against a target project with
+   * `resolveExistingProjectImport` — validation only adds the one-project rule.
+   */
+  mode?: ProjectPlanImportMode;
 }
 
 const EMPTY_COUNTS: ProjectPlanCounts = { goals: 0, projects: 0, projectMilestones: 0, tasks: 0 };
@@ -328,9 +336,12 @@ class PlanReview {
   /** temporary id → where it was claimed, so a duplicate can name both. */
   private readonly ids = new Map<string, string>();
   private readonly today: ISODate;
+  /** The import mode — decides the mode-specific rules and warnings. */
+  readonly mode: ProjectPlanImportMode;
 
   constructor(private readonly options: ProjectPlanOptions) {
     this.today = options.today ?? todayISO();
+    this.mode = options.mode ?? 'create-new-project';
   }
 
   error(path: string, message: string): void {
@@ -576,7 +587,9 @@ function readTask(review: PlanReview, raw: unknown, path: string, context: TaskC
   if (status === 'completed') {
     review.warn(path, `Task “${title}” is imported as completed, and will be dated the day of the import.`);
   }
-  if (projectTempId === undefined && context.topLevel) {
+  if (projectTempId === undefined && context.topLevel && review.mode === 'create-new-project') {
+    // In add-to-existing-project mode a root task becomes a project-level task
+    // of the chosen project — see resolveExistingProjectImport.
     review.warn(path, `Task “${title}” has no project — it will sit in Tasks on its own.`);
   }
 
@@ -856,6 +869,21 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
   if (projects.length === 0 && goals.length === 0 && milestones.length === 0 && tasks.length === 0) {
     review.error('plan', 'This plan would create nothing. Add a goal, a project or a task.');
   }
+  if (options.mode === 'add-to-existing-project') {
+    // Adding to an existing project accepts exactly one source project, so the
+    // mapping from the plan to the target project is unambiguous.
+    if (projects.length === 0) {
+      review.error(
+        'plan.projects',
+        'Adding to an existing project needs exactly one project in the plan — this one has none. Everything in the plan is added to the project you choose.',
+      );
+    } else if (projects.length > 1) {
+      review.error(
+        'plan.projects',
+        `Adding to an existing project accepts exactly one project in the plan — this one has ${projects.length}. Split the plan and import each project separately, or import it with “Create New Project”.`,
+      );
+    }
+  }
   if (milestones.length > 0 && options.projectMilestonesAvailable === false) {
     review.error(
       'plan.projectMilestones',
@@ -874,7 +902,9 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
     const name = projects.find((p) => p.name.trim().toLowerCase() === key)?.name.trim() ?? key;
     review.warn('plan.projects', `“${name}” appears ${times} times — ${times} separate projects will be created.`);
   }
-  if (projects.length > 0 && goals.length === 0) {
+  // In add-to-existing-project mode the plan's goal is source metadata only
+  // (the target project's goal is preserved), so this warning would mislead.
+  if (projects.length > 0 && goals.length === 0 && options.mode !== 'add-to-existing-project') {
     review.warn('plan.goal', 'This plan has no goal — its projects will be created without one.');
   }
   if (projects.some((p) => !tasks.some((t) => t.projectTempId === p.tempId) && !milestones.some((m) => m.projectTempId === p.tempId))) {
@@ -1237,4 +1267,474 @@ export function buildProjectPlanRecords(plan: ResolvedProjectPlan, ids: ProjectP
  */
 export function isProjectPlanPayload(value: unknown): boolean {
   return isRecord(value) && value.format === PROJECT_PLAN_FORMAT;
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 5 — adding a plan to an existing project                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What an import does with a plan.
+ *
+ *  - `create-new-project` — the Phase 4 behavior: the plan's goal, projects,
+ *    project milestones and tasks are created. Unchanged by Phase 5.
+ *  - `add-to-existing-project` — the plan adds new project milestones and new
+ *    tasks to ONE project that already exists. The target project, its goal
+ *    relationship, its existing milestones and every existing task are never
+ *    modified; the plan's goal and project are source metadata only and are
+ *    never created.
+ */
+export type ProjectPlanImportMode = 'create-new-project' | 'add-to-existing-project';
+
+/** What happens to one imported milestone. */
+export type ProjectMilestoneMappingDecision = 'use-existing' | 'create-new';
+
+/**
+ * The user's choice for one imported milestone: the id of an existing
+ * milestone of the target project to reuse, or `'create-new'`.
+ */
+export type ProjectMilestoneMappingChoice = ID | 'create-new';
+
+/**
+ * Normalization for milestone matching — deliberately conservative and
+ * deterministic: trim, collapse runs of whitespace to one space, lowercase.
+ * `"SEO"`, `" seo "` and `"Seo"` match; `"SEO"` and `"SEO Optimization"` never
+ * do. There is no fuzzy, semantic or AI matching anywhere in the importer.
+ */
+export function normalizeProjectMilestoneName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** One imported milestone and what will happen to it. */
+export interface ProjectMilestoneMapping {
+  /** The imported milestone's temporary id. */
+  tempId: string;
+  name: string;
+  /** The normalized name matching runs against (never shown). */
+  normalizedName: string;
+  description?: string;
+  targetDate?: ISODate;
+  /** Order within the plan's milestones (the JSON order). */
+  position: number;
+  /** Existing milestones of the target project with the same normalized name, in position order. */
+  matches: Pick<ProjectMilestone, 'id' | 'name' | 'position'>[];
+  /** The existing milestone that will be reused — set when the decision is use-existing. */
+  existingMilestoneId?: ID;
+  decision: ProjectMilestoneMappingDecision;
+  /** Imported tasks nested under this milestone. */
+  taskCount: number;
+}
+
+/**
+ * Match every imported milestone of the plan's single source project against
+ * the milestones that already belong to the target project.
+ *
+ * The default decision is deterministic: an exact normalized-name match
+ * recommends `use-existing` (the first match in position order when several
+ * existing milestones share a name); anything else is `create-new`. The user
+ * can override every row — see `resolveExistingProjectImport`. Matching never
+ * modifies an existing milestone; at most its id is reused as the parent of
+ * newly imported tasks.
+ */
+export function planProjectMilestoneMappings(
+  plan: ResolvedProjectPlan,
+  targetProjectId: ID,
+  existingMilestones: Pick<ProjectMilestone, 'id' | 'projectId' | 'name' | 'position'>[],
+): ProjectMilestoneMapping[] {
+  const source = plan.projects[0];
+  const own = existingMilestones
+    .filter((m) => m.projectId === targetProjectId)
+    .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const byName = new Map<string, Pick<ProjectMilestone, 'id' | 'name' | 'position'>[]>();
+  for (const milestone of own) {
+    const key = normalizeProjectMilestoneName(milestone.name);
+    const list = byName.get(key) ?? [];
+    list.push(milestone);
+    byName.set(key, list);
+  }
+  const imported = plan.projectMilestones
+    .filter((m) => source === undefined || m.projectTempId === source.tempId)
+    .sort((a, b) => a.position - b.position);
+  return imported.map((milestone) => {
+    const key = normalizeProjectMilestoneName(milestone.name);
+    const matches = byName.get(key) ?? [];
+    return {
+      tempId: milestone.tempId,
+      name: milestone.name,
+      normalizedName: key,
+      description: milestone.description,
+      targetDate: milestone.targetDate,
+      position: milestone.position,
+      matches,
+      existingMilestoneId: matches.length > 0 ? matches[0].id : undefined,
+      decision: (matches.length > 0 ? 'use-existing' : 'create-new') as ProjectMilestoneMappingDecision,
+      taskCount: plan.tasks.filter((t) => t.projectMilestoneTempId === milestone.tempId).length,
+    };
+  });
+}
+
+/** Counts the preview and the result screen show. */
+export interface ExistingProjectImportCounts {
+  /** Milestones that will be created. */
+  newMilestones: number;
+  /** Existing milestones that will be reused (never modified). */
+  reusedMilestones: number;
+  /** New tasks that will sit under a milestone. */
+  milestoneTasks: number;
+  /** New tasks from the project's own `tasks` array — project-level, no milestone. */
+  projectLevelTasks: number;
+  /** New tasks from the plan's top-level `tasks` — they become project-level tasks. */
+  rootTasks: number;
+  /** All new tasks. */
+  newTasks: number;
+}
+
+/**
+ * A validated plan resolved against one existing project — the Phase 5 write
+ * input. Built by `resolveExistingProjectImport`, written by
+ * `AppRepository.importProjectPlanIntoExistingProject`.
+ *
+ * `targetProject` is the project the plan is added to. `sourceProject` and
+ * `sourceGoal` are the plan's own records, kept as metadata for the preview —
+ * neither is ever created or applied.
+ */
+export interface ResolvedExistingProjectImport {
+  mode: 'add-to-existing-project';
+  targetProject: Project;
+  sourceProject: PendingProject;
+  sourceGoal?: PendingGoal;
+  planName?: string;
+  mappings: ProjectMilestoneMapping[];
+  /**
+   * Every imported task, exactly as the plan placed it. The builder binds them
+   * all to the target project: a task under a milestone keeps that milestone
+   * (through its mapping), everything else becomes a project-level task
+   * (projectId set, projectMilestoneId null) — including the plan's top-level
+   * tasks.
+   */
+  tasks: PendingTask[];
+  /** First position after the target project's existing milestones (at preview time). */
+  positionBase: number;
+  counts: ExistingProjectImportCounts;
+  /** How much already exists in the target project — shown as "unchanged". */
+  existing: { milestones: number; tasks: number };
+}
+
+/** What a repository hands back after a successful add-to-existing import. */
+export interface ExistingProjectPlanImportResult {
+  projectMilestones: ProjectMilestone[];
+  tasks: Task[];
+}
+
+/**
+ * Resolve a validated plan against the target project — the step between
+ * validation and the write. Pure: it reads nothing and writes nothing.
+ *
+ * `choices` overrides the default mapping decisions, keyed by the imported
+ * milestone's temporary id: the id of an existing milestone to reuse (it must
+ * be one of that milestone's normalized-name matches) or `'create-new'`.
+ * Anything else is refused — a mapping can never point outside the target
+ * project.
+ */
+export function resolveExistingProjectImport(
+  review: ProjectPlanReview,
+  targetProject: Project,
+  existingMilestones: ProjectMilestone[],
+  existingTasks: Pick<Task, 'id' | 'projectId'>[],
+  choices: Readonly<Record<string, ProjectMilestoneMappingChoice>> = {},
+): ResolvedExistingProjectImport {
+  if (!review.ok || !review.plan) {
+    throw new ProjectPlanError('The plan is not valid — nothing can be added to a project.');
+  }
+  const plan = review.plan;
+  if (plan.projects.length !== 1) {
+    throw new ProjectPlanError('Adding to an existing project accepts exactly one project in the plan.');
+  }
+  const sourceProject = plan.projects[0];
+  const mappings = planProjectMilestoneMappings(plan, targetProject.id, existingMilestones);
+  for (const mapping of mappings) {
+    const choice = choices[mapping.tempId];
+    if (choice === undefined) continue; // keep the default
+    if (choice === 'create-new') {
+      mapping.decision = 'create-new';
+      mapping.existingMilestoneId = undefined;
+    } else if (mapping.matches.some((m) => m.id === choice)) {
+      mapping.decision = 'use-existing';
+      mapping.existingMilestoneId = choice;
+    } else {
+      throw new ProjectPlanError(
+        `Milestone “${mapping.name}” cannot be mapped to that existing milestone — it is not a name match in project “${targetProject.name}”.`,
+      );
+    }
+  }
+
+  const milestoneTasks = plan.tasks.filter((t) => t.projectMilestoneTempId !== undefined);
+  const rootTasks = plan.tasks.filter((t) => t.projectTempId === undefined);
+  const projectLevelTasks = plan.tasks.filter((t) => t.projectTempId !== undefined && t.projectMilestoneTempId === undefined);
+  const ownExisting = existingMilestones.filter((m) => m.projectId === targetProject.id);
+
+  return {
+    mode: 'add-to-existing-project',
+    targetProject,
+    sourceProject,
+    sourceGoal: plan.goals[0],
+    planName: review.preview?.planName,
+    mappings,
+    tasks: plan.tasks,
+    positionBase: nextProjectMilestonePosition(existingMilestones, targetProject.id),
+    counts: {
+      newMilestones: mappings.filter((m) => m.decision === 'create-new').length,
+      reusedMilestones: mappings.filter((m) => m.decision === 'use-existing').length,
+      milestoneTasks: milestoneTasks.length,
+      projectLevelTasks: projectLevelTasks.length,
+      rootTasks: rootTasks.length,
+      newTasks: plan.tasks.length,
+    },
+    existing: {
+      milestones: ownExisting.length,
+      tasks: existingTasks.filter((t) => t.projectId === targetProject.id).length,
+    },
+  };
+}
+
+/**
+ * Non-fatal things the preview should say about a resolved add-to-existing
+ * import. Deterministic observations only — never a reason to write less or
+ * more than the user confirmed.
+ */
+export function findExistingProjectImportWarnings(resolved: ResolvedExistingProjectImport): string[] {
+  const warnings: string[] = [];
+  const chosen = new Map<ID, { name: string; existingName?: string }[]>();
+  for (const mapping of resolved.mappings) {
+    if (mapping.decision !== 'use-existing' || mapping.existingMilestoneId === undefined) continue;
+    const list = chosen.get(mapping.existingMilestoneId) ?? [];
+    list.push({ name: mapping.name, existingName: mapping.matches.find((m) => m.id === mapping.existingMilestoneId)?.name });
+    chosen.set(mapping.existingMilestoneId, list);
+  }
+  for (const [id, list] of chosen) {
+    if (list.length < 2) continue;
+    warnings.push(
+      `The imported milestones ${list.map((m) => `“${m.name}”`).join(' and ')} both use the existing milestone “${
+        list[0].existingName ?? id
+      }” — their tasks will share it. Choose “Create new milestone” for one of them if that is not what you want.`,
+    );
+  }
+  return warnings;
+}
+
+/**
+ * Integrity problems that make a resolved add-to-existing import unsafe to
+ * write. `reviewProjectPlan` + `resolveExistingProjectImport` cannot produce
+ * one that fails this; it exists so a repository refuses a hand-built import,
+ * exactly like `findProjectPlanProblems` does for Phase 4.
+ */
+export function findExistingProjectImportProblems(
+  resolved: ResolvedExistingProjectImport,
+  existingMilestones: Pick<ProjectMilestone, 'id' | 'projectId' | 'name' | 'position'>[],
+): string[] {
+  const problems: string[] = [];
+  const ownExisting = new Set(existingMilestones.filter((m) => m.projectId === resolved.targetProject.id).map((m) => m.id));
+  const mappingIds = new Set<string>();
+  for (const mapping of resolved.mappings) {
+    if (mapping.tempId === resolved.sourceProject.tempId) {
+      problems.push(`The imported milestone “${mapping.name}” shares its temporary id with the source project.`);
+    }
+    if (mappingIds.has(mapping.tempId)) problems.push(`Two imported milestones share the temporary id “${mapping.tempId}”.`);
+    mappingIds.add(mapping.tempId);
+    if (mapping.decision === 'use-existing') {
+      if (mapping.existingMilestoneId === undefined) {
+        problems.push(`The imported milestone “${mapping.name}” is mapped to an existing milestone but names none.`);
+      } else if (!ownExisting.has(mapping.existingMilestoneId)) {
+        problems.push(
+          `The imported milestone “${mapping.name}” is mapped to milestone “${mapping.existingMilestoneId}”, which does not belong to project “${resolved.targetProject.name}”.`,
+        );
+      }
+    } else if (mapping.existingMilestoneId !== undefined) {
+      problems.push(`The imported milestone “${mapping.name}” will be created new but still names an existing milestone.`);
+    }
+  }
+  const seen = new Set<string>();
+  for (const task of resolved.tasks) {
+    if (seen.has(task.tempId)) problems.push(`Two tasks share the temporary id “${task.tempId}".`);
+    seen.add(task.tempId);
+    if (task.projectMilestoneTempId !== undefined && !mappingIds.has(task.projectMilestoneTempId)) {
+      problems.push(`Task “${task.title}” refers to a project milestone that is not in the plan.`);
+    }
+  }
+  return problems;
+}
+
+/** Throw one readable error if a resolved add-to-existing import is inconsistent. */
+export function assertExistingProjectImportConsistent(
+  resolved: ResolvedExistingProjectImport,
+  existingMilestones: Pick<ProjectMilestone, 'id' | 'projectId' | 'name' | 'position'>[],
+): void {
+  const problems = findExistingProjectImportProblems(resolved, existingMilestones);
+  if (problems.length === 0) return;
+  const shown = problems.slice(0, 3).join(' ');
+  const more = problems.length > 3 ? ` (and ${problems.length - 3} more)` : '';
+  throw new ProjectPlanError(`Import refused — nothing was created. ${shown}${more}`);
+}
+
+export interface BuiltExistingProjectPlan extends ExistingProjectPlanImportResult {
+  /** temporary id → the real FocusDesk id that replaced it. */
+  idOf: Map<string, ID>;
+}
+
+/**
+ * Build the records an add-to-existing import creates — new project milestones
+ * and new tasks, and nothing else. Pure: it writes nothing.
+ *
+ * The temporary-id map is seeded before anything is minted: the source
+ * project's temporary id maps to the TARGET project's real id (the plan's
+ * project is never created), and every milestone mapped to an existing one
+ * maps to that milestone's real id. New milestones get fresh ids and positions
+ * after the target project's existing milestones, in the imported order —
+ * existing milestones are never renumbered. Every task is bound to the target
+ * project; the plan's top-level tasks included.
+ */
+export function buildExistingProjectPlanRecords(
+  resolved: ResolvedExistingProjectImport,
+  ids: ProjectPlanIdSource,
+  existingMilestones: ProjectMilestone[],
+): BuiltExistingProjectPlan {
+  assertExistingProjectImportConsistent(resolved, existingMilestones);
+
+  const idOf = new Map<string, ID>();
+  idOf.set(resolved.sourceProject.tempId, resolved.targetProject.id);
+  for (const mapping of resolved.mappings) {
+    if (mapping.decision === 'use-existing' && mapping.existingMilestoneId !== undefined) {
+      idOf.set(mapping.tempId, mapping.existingMilestoneId);
+    }
+  }
+  const real = (tempId: string): ID => {
+    const existing = idOf.get(tempId);
+    if (existing !== undefined) return existing;
+    const id = ids.newId();
+    idOf.set(tempId, id);
+    return id;
+  };
+  const createdAt = ids.now();
+
+  // Recomputed from the milestones that exist NOW, so a milestone added by
+  // another tab between preview and import cannot cause a position clash.
+  const base = nextProjectMilestonePosition(existingMilestones, resolved.targetProject.id);
+  const projectMilestones: ProjectMilestone[] = [];
+  let nextPosition = base;
+  for (const mapping of resolved.mappings) {
+    if (mapping.decision !== 'create-new') continue;
+    projectMilestones.push({
+      id: real(mapping.tempId),
+      projectId: resolved.targetProject.id,
+      name: mapping.name.trim(),
+      description: mapping.description?.trim() || undefined,
+      targetDate: mapping.targetDate,
+      position: nextPosition,
+      createdAt,
+    });
+    nextPosition += 1;
+  }
+
+  const tasks: Task[] = resolved.tasks.map((task) => ({
+    id: real(task.tempId),
+    title: task.title.trim(),
+    description: task.description?.trim() || undefined,
+    status: task.status,
+    priority: task.priority,
+    // Every imported task belongs to the target project, whatever the plan's
+    // structure said — the plan's top-level tasks included.
+    projectId: resolved.targetProject.id,
+    projectMilestoneId: task.projectMilestoneTempId ? real(task.projectMilestoneTempId) : undefined,
+    goalId: undefined,
+    parentTaskId: undefined,
+    createdAt,
+    scheduledDate: task.scheduledDate,
+    dueDate: task.dueDate,
+    completedAt: task.completed ? createdAt : undefined,
+    estimatedDuration: task.estimatedDuration,
+    reminder: undefined,
+    notes: task.notes?.trim() || undefined,
+    tags: [...task.tags],
+    postponementCount: 0,
+    archived: false,
+  }));
+
+  // The invariant the rest of the app enforces, on the records that are about
+  // to be written: every new task's milestone belongs to the target project.
+  const ownExisting = existingMilestones.filter((m) => m.projectId === resolved.targetProject.id);
+  assertProjectMilestonesConsistent({
+    projects: [resolved.targetProject],
+    projectMilestones: [...ownExisting, ...projectMilestones],
+    tasks,
+  });
+
+  return { projectMilestones, tasks, idOf };
+}
+
+/** One imported milestone with its decision and the tasks that will land in it. */
+export interface ExistingProjectImportPreviewMilestone {
+  mapping: ProjectMilestoneMapping;
+  tasks: PreviewTask[];
+}
+
+/** The add-to-existing preview: a diff between the target project and the plan. */
+export interface ExistingProjectImportPreview {
+  planName?: string;
+  targetProject: Pick<Project, 'id' | 'name' | 'goalId'>;
+  /** The plan's project — source information only, never written. */
+  sourceProject: { name: string; description?: string; deadline?: ISODate; status: ProjectStatus };
+  /** The plan's goal — source information only, never created. */
+  sourceGoal?: { name: string; status: GoalStatus; deadline?: ISODate };
+  milestones: ExistingProjectImportPreviewMilestone[];
+  /** New tasks from the project's own `tasks` array — project-level, no milestone. */
+  projectLevelTasks: PreviewTask[];
+  /** New tasks from the plan's top-level `tasks` — they become project-level tasks. */
+  rootTasks: PreviewTask[];
+  counts: ExistingProjectImportCounts;
+  /** What already exists in the target project — and will not change. */
+  existing: { milestones: number; tasks: number };
+  warnings: string[];
+}
+
+/**
+ * The preview of an add-to-existing import, built from the resolved import —
+ * the same object the repository writes, so the preview cannot disagree with
+ * the write.
+ */
+export function existingProjectImportPreview(resolved: ResolvedExistingProjectImport): ExistingProjectImportPreview {
+  const byMilestone = new Map<string, PreviewTask[]>();
+  for (const mapping of resolved.mappings) byMilestone.set(mapping.tempId, []);
+  const projectLevelTasks: PreviewTask[] = [];
+  const rootTasks: PreviewTask[] = [];
+  for (const task of resolved.tasks) {
+    if (task.projectMilestoneTempId !== undefined) {
+      byMilestone.get(task.projectMilestoneTempId)?.push(previewTask(task));
+    } else if (task.projectTempId === undefined) {
+      rootTasks.push(previewTask(task));
+    } else {
+      projectLevelTasks.push(previewTask(task));
+    }
+  }
+  return {
+    planName: resolved.planName,
+    targetProject: { id: resolved.targetProject.id, name: resolved.targetProject.name, goalId: resolved.targetProject.goalId },
+    sourceProject: {
+      name: resolved.sourceProject.name,
+      description: resolved.sourceProject.description,
+      deadline: resolved.sourceProject.deadline,
+      status: resolved.sourceProject.status,
+    },
+    sourceGoal: resolved.sourceGoal
+      ? { name: resolved.sourceGoal.name, status: resolved.sourceGoal.status, deadline: resolved.sourceGoal.deadline }
+      : undefined,
+    milestones: resolved.mappings.map((mapping) => ({
+      mapping,
+      tasks: byMilestone.get(mapping.tempId) ?? [],
+    })),
+    projectLevelTasks,
+    rootTasks,
+    counts: resolved.counts,
+    existing: resolved.existing,
+    warnings: findExistingProjectImportWarnings(resolved),
+  };
 }

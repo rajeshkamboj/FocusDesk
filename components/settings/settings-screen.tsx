@@ -316,8 +316,10 @@ export function SettingsScreen() {
                 <span className="font-medium text-ink-2">{PROJECT_PLAN_FORMAT}</span> JSON plan (the kind ChatGPT can
                 write) and <span className="font-medium text-ink-2">adds</span> its goal, projects, project milestones
                 and tasks after showing you exactly what will be created. It never changes or deletes anything that
-                already exists. See <span className="font-medium text-ink-2">docs/focusdesk-project-plan-v1.md</span>{' '}
-                for the format and the prompt to give ChatGPT.
+                already exists. It can either create a new project from the plan, or add the milestones and tasks of a
+                plan to a project you already have. See{' '}
+                <span className="font-medium text-ink-2">docs/focusdesk-project-plan-v1.md</span> for the format and the
+                prompt to give ChatGPT.
               </p>
             </div>
           </div>

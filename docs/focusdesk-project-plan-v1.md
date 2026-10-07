@@ -12,6 +12,13 @@ JSON (or choose a file), read the preview, press **Import plan**. Nothing is
 written before you confirm, and nothing that already exists is ever changed —
 a plan only *adds* records.
 
+The importer has two modes (a switch at the top of the dialog):
+
+* **Create New Project** — creates the plan's goal, projects, project
+  milestones and tasks (the Phase 4 behavior, documented below).
+* **Add to Existing Project** — adds the plan's milestones and tasks to one
+  project that already exists (documented in §8).
+
 The importer is application-level. It needs no API key, calls no AI service and
 runs no migration: you generate the JSON in ChatGPT yourself and paste it in.
 
@@ -278,7 +285,11 @@ bigger plan and import it in parts.
 confirm — FocusDesk then creates a second project with that name. It never
 merges, renames, updates or deletes the existing project, its tasks or its
 milestones. The same is true of goals: a plan's goal is always created new, and
-is never matched against an existing goal by name.
+is never matched against an existing goal by name. Tasks are always created new
+too — a duplicate title never merges into the existing task. (In **Add to
+Existing Project** mode, milestones are the one exception to "always new":
+an exact normalized-name match is *offered* as "Use existing", and only your
+choice reuses it — see §8.)
 
 ---
 
@@ -473,7 +484,111 @@ check the preview (counts, hierarchy, warnings) and press **Import plan**.
 
 ---
 
-## 8. Versioning
+## 8. Add to Existing Project
+
+The same `focusdesk-project-plan` JSON can be **added to a project that already
+exists** instead of creating a new one. In the importer, switch to **Add to
+Existing Project**, choose the target project, and paste the plan. The flow is
+the same as everywhere else — parse → validate → preview → confirm → import —
+and nothing is written before you confirm.
+
+This mode accepts **exactly one** source project in the plan's `projects`
+array. A plan with zero projects or with more than one is refused — that keeps
+the mapping from the plan to the target project unambiguous.
+
+### What is never touched
+
+"Add to existing project" means *add*: new milestones and new tasks inside the
+selected project. It never:
+
+* creates, updates, renames or deletes the target project — its `name`,
+  `description`, `deadline`, `status`, `goal` relationship and timestamps stay
+  exactly as they are;
+* creates or modifies the project's goal — if the plan contains a `goal`, it is
+  shown as *source plan* metadata only: *"Existing project goal will be
+  preserved. Imported plan goal will not be created or applied."* (A target
+  project without a goal simply stays without one — attaching one would mean
+  modifying the project, which this mode never does.);
+* updates, renames or deletes an existing project milestone;
+* updates, merges or deletes an existing task — every imported task is new,
+  even when an existing task has exactly the same title;
+* creates another project or another goal.
+
+### Milestone matching
+
+Every imported milestone is compared against the milestones that already
+belong to the target project. Matching is a conservative, deterministic
+**normalized exact-name** rule: trim whitespace, collapse runs of whitespace
+to one space, lowercase. `"SEO"`, `" seo "` and `"Seo"` match; `"SEO"` and
+`"SEO Optimization"` never do. There is no fuzzy, semantic or AI matching.
+
+For each imported milestone the preview shows its mapping and lets you choose:
+
+* **Use existing** — the milestone's normalized name matches an existing
+  milestone of the target project. That milestone is **reused, not modified**:
+  the imported `description`, `targetDate` and order are discarded, and only
+  its id becomes the parent of the newly imported tasks. When several existing
+  milestones share the normalized name, all of them are offered and you pick
+  one (the lowest position is recommended).
+* **Create new** — always available, even for an exact name match, when you
+  intentionally want a second milestone with the same name.
+
+Example — target project has `Foundation` (0), `Backend` (1), `SEO` (2); the
+plan imports `Foundation`, `Backend`, `SEO`, `Launch`, `Analytics`:
+
+```
+✓ Foundation  → Use existing milestone (stays at position 0)
+✓ Backend     → Use existing milestone (stays at position 1)
+✓ SEO         → Use existing milestone (stays at position 2)
++ Launch      → Create new milestone (position 3)
++ Analytics   → Create new milestone (position 4)
+```
+
+New milestones are appended **after** the project's existing milestones, in
+the imported order (`max(position) + 1`, then +2, …) — existing milestones are
+never renumbered, the same rule the app uses when you add a milestone by hand.
+
+If two imported milestones both map to the same existing milestone, the preview
+warns you — their tasks would share it — and you can switch either one to
+"Create new".
+
+### Task behavior
+
+* Tasks nested under an imported milestone become new tasks with
+  `projectId` = the target project and `projectMilestoneId` = the mapped
+  milestone (the existing milestone's id, or the new milestone's id). A task can
+  never carry a milestone of another project — the same invariant the database
+  enforces (`tasks_project_milestone_same_project_fkey`).
+* Tasks in the plan's project `tasks` array become new **project-level tasks**:
+  `projectId` = the target project, no milestone.
+* Tasks in the plan's top-level `tasks` array do **not** become unassigned
+  tasks here — they become project-level tasks of the target project
+  (`projectId` = target, no milestone). The preview labels them
+  *"root task → project-level task"*. (In Create New Project mode they stay
+  project-less.)
+* Every task is created new. Duplicate titles are never deduplicated: an
+  imported "Configure WordPress API" next to an existing "Configure WordPress
+  API" produces a second, new task. The preview says so explicitly.
+
+### Safety guarantees
+
+* **Validated as a whole first.** The same validation as Create New Project
+  runs, plus the exactly-one-project rule, plus the target project must exist
+  (and, on Supabase, belong to the signed-in user — the repository re-checks
+  before writing). Any failure means zero writes.
+* **All or nothing.** Local storage writes the import in a single store
+  operation. Supabase inserts parents-first (project milestones → tasks) in
+  whole batches and, if any request fails, deletes exactly the rows this import
+  created and reports the failure.
+* **Additive only.** No update and no delete is ever issued for existing
+  records — the preview's "Existing data" box lists what will remain unchanged.
+* **Authenticated, RLS-respecting writes** through
+  `useData().actions.importProjectPlanIntoExistingProject` →
+  `AppRepository.importProjectPlanIntoExistingProject`, as the signed-in user.
+
+---
+
+## 9. Versioning
 
 `version: 1` is the only version this build understands. A plan with any other
 version is refused with a message saying so, rather than being guessed at. When

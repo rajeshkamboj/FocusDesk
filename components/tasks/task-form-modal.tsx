@@ -54,6 +54,7 @@ export function TaskFormModal({
   const [reminder, setReminder] = useState('');
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState('');
+  const [completedAt, setCompletedAt] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [wasOpen, setWasOpen] = useState(false);
@@ -75,6 +76,7 @@ export function TaskFormModal({
     setReminder(toLocalInputValue(task?.reminder ?? defaults?.reminder));
     setNotes(task?.notes ?? '');
     setTags((task?.tags ?? defaults?.tags ?? []).join(', '));
+    setCompletedAt(toLocalInputValue(task?.completedAt));
     setSaving(false);
   }
 
@@ -87,6 +89,25 @@ export function TaskFormModal({
   const submit = async () => {
     const clean = title.trim();
     if (!clean || saving) return;
+
+    let finalCompletedAt: string | undefined = undefined;
+    if (task && task.status === 'completed') {
+      if (!completedAt) {
+        notify('Completion date and time cannot be empty for a completed task');
+        return;
+      }
+      const parsed = new Date(completedAt);
+      if (Number.isNaN(parsed.getTime())) {
+        notify('Please enter a valid completion date and time');
+        return;
+      }
+      if (parsed.getTime() > Date.now()) {
+        notify('Completion date and time cannot be in the future');
+        return;
+      }
+      finalCompletedAt = parsed.toISOString();
+    }
+
     setSaving(true);
     const payload: TaskInput & Partial<Task> = {
       title: clean,
@@ -106,6 +127,7 @@ export function TaskFormModal({
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean),
+      ...(task && task.status === 'completed' && finalCompletedAt ? { completedAt: finalCompletedAt } : {}),
     };
     try {
       if (task) {
@@ -247,6 +269,15 @@ export function TaskFormModal({
           <Field label="Tags" hint="Comma separated">
             <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="focus, admin…" />
           </Field>
+          {task?.status === 'completed' ? (
+            <Field label="Completed on" hint="Historical completion date & time">
+              <Input
+                type="datetime-local"
+                value={completedAt}
+                onChange={(e) => setCompletedAt(e.target.value)}
+              />
+            </Field>
+          ) : null}
         </div>
 
         <Field label="Notes">

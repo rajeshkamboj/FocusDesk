@@ -2,10 +2,13 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useLocalDate } from '@/lib/use-local-date';
-import { Card, EmptyState } from '@/components/ui/card';
-import { SectionTitle } from '@/components/layout/page-header';
+import { EmptyState } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DailyQuote } from './daily-quote';
+import { SectionCard, VisualMark } from './section-card';
+import { SectionGroup } from './sections/section-group';
+import { SpeakBetterSection } from './sections/speak-better';
+import { MythologySection } from './sections/mythology';
 import { getDailyQuote } from '@/lib/quotes';
 import {
   IconBook,
@@ -34,23 +37,6 @@ function LinkOut({ href, children }: { href: string; children: React.ReactNode }
     >
       {children}
     </a>
-  );
-}
-
-function VisualMark({
-  children,
-  tone = 'bg-accent-soft text-accent',
-}: {
-  children: React.ReactNode;
-  tone?: string;
-}) {
-  return (
-    <div
-      aria-hidden
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone}`}
-    >
-      {children}
-    </div>
   );
 }
 
@@ -108,23 +94,6 @@ function RadarItem({ item }: { item: DeveloperDiscovery }) {
         {item.why} {item.pricing}
       </p>
     </article>
-  );
-}
-
-function SectionCard({
-  label,
-  className = '',
-  children,
-}: {
-  label: React.ReactNode;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className={`relative isolate flex h-full min-w-0 flex-col overflow-hidden p-4 sm:p-6 ${className}`}>
-      <div className="relative"><SectionTitle>{label}</SectionTitle></div>
-      <div className="relative mt-3.5">{children}</div>
-    </Card>
   );
 }
 
@@ -331,6 +300,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           <DailyQuote quote={dailyQuote} />
         </section>
 
+        {/* ---- Group: the existing daily highlights ------------------- */}
+        <SectionGroup flush label="Daily highlights" hint="the briefing that was already here" />
+
         {/* 1. Today in History */}
         {briefing.history ? (
           <section>
@@ -414,6 +386,23 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
             </SectionCard>
           </section>
         </div>
+
+        {/* ---- Group: Speak Better ------------------------------------ */}
+        <SectionGroup label="Speak better" hint="practical spoken English, one situation a day" />
+
+        <section>
+          <SpeakBetterSection lesson={briefing.speakBetter} />
+        </section>
+
+        {/* ---- Group: Mythology --------------------------------------- */}
+        <SectionGroup label="Mythology" hint="character of the day, with its evidence labelled" />
+
+        <section>
+          <MythologySection character={briefing.mythology} />
+        </section>
+
+        {/* ---- Group: Reading & practice ------------------------------ */}
+        <SectionGroup label="Reading & practice" hint="the reading, developer and brain cards" />
 
         {/* 4. A Few Minutes of Literature & One Book */}
         <div className="grid gap-7 lg:grid-cols-2">

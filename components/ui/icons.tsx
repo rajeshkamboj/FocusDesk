@@ -347,3 +347,29 @@ export function IconLink(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * A speaking mark and an “ancient world” mark for the Curiosity sections that
+ * are about language and mythology. Same 24px grid and 1.7px stroke as the
+ * rest of the set so they never read as a different visual family.
+ */
+export function IconSpeech(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20.5 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4.5 2.6L4.8 17A7.5 7.5 0 0 1 13 4a7.5 7.5 0 0 1 7.5 7.5z" />
+      <path d="M9 12h.01M12.5 12h.01M16 12h.01" />
+    </svg>
+  );
+}
+
+export function IconMyth(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 21h18" />
+      <path d="M5 21V10.5L12 5l7 5.5V21" />
+      <path d="M9.5 21v-5.5h5V21" />
+      <path d="M12 2v3" />
+    </svg>
+  );
+}
+

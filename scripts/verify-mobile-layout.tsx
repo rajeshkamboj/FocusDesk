@@ -484,8 +484,24 @@ async function main() {
   const { DataProvider, useData } = await import('../components/data/data-provider');
   const { UIProvider } = await import('../components/ui/ui-provider');
 
+  // Curiosity is server-fed in the app (the page passes a briefing prop), so it
+  // is rendered here with a real editorial briefing for today's date. Using the
+  // current date matters: the screen refetches only when the day changes, so a
+  // stale date would send it looking for a fetch that jsdom does not provide.
+  const { CuriosityScreen } = await import('../components/curiosity/curiosity-screen');
+  const { dailyEditorial } = await import('../lib/curiosity/content');
+  const curiosityDate = (await import('../lib/dates')).todayISO();
+  const curiosityBriefing: React.ComponentProps<typeof CuriosityScreen>['briefing'] = {
+    date: curiosityDate,
+    aiWorld: [],
+    developerRadar: [],
+    ...dailyEditorial(curiosityDate),
+  };
+  const Curiosity = () => React.createElement(CuriosityScreen, { briefing: curiosityBriefing });
+
   const screens = {
     Today: (await import('../components/today/today-screen')).TodayScreen,
+    Curiosity,
     Tasks: (await import('../components/tasks/tasks-screen')).TasksScreen,
     Inbox: (await import('../components/inbox/inbox-screen')).InboxScreen,
     Review: (await import('../components/review/review-screen')).ReviewScreen,

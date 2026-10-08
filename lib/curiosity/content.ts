@@ -6,6 +6,8 @@ import type {
 } from './types';
 import { speakBetterLessons } from './content/speak-better';
 import { mythCharacters } from './content/mythology';
+import { chemistryConcepts } from './content/chemistry';
+import { physicsConcepts } from './content/physics';
 
 const books = [
   {
@@ -392,10 +394,21 @@ const brainSharpeners: BrainSharpener[] = [
  */
 const SPEAK_BETTER_OFFSET = 5;
 const MYTHOLOGY_OFFSET = 2;
+const CHEMISTRY_OFFSET = 7;
+const PHYSICS_OFFSET = 11;
 
 export function dailyEditorial(date: string): Pick<
   CuriosityBriefing,
-  'book' | 'oneThing' | 'learning' | 'history' | 'literature' | 'sharpener' | 'speakBetter' | 'mythology'
+  | 'book'
+  | 'oneThing'
+  | 'learning'
+  | 'history'
+  | 'literature'
+  | 'sharpener'
+  | 'speakBetter'
+  | 'mythology'
+  | 'chemistry'
+  | 'physics'
 > {
   const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
   const safeDay = Number.isFinite(day) ? Math.abs(day) : 0;
@@ -409,5 +422,7 @@ export function dailyEditorial(date: string): Pick<
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
     speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],
     mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
+    chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
+    physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],
   };
 }

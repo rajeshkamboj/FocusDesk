@@ -9,12 +9,15 @@ import { SectionCard, VisualMark } from './section-card';
 import { SectionGroup } from './sections/section-group';
 import { SpeakBetterSection } from './sections/speak-better';
 import { MythologySection } from './sections/mythology';
+import { ScienceCard } from './sections/science';
 import { getDailyQuote } from '@/lib/quotes';
 import {
   IconBook,
   IconCalendar,
+  IconChemistry,
   IconChevronDown,
   IconIdeas,
+  IconPhysics,
   IconProjects,
   IconReview,
 } from '@/components/ui/icons';
@@ -400,6 +403,28 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         <section>
           <MythologySection character={briefing.mythology} />
         </section>
+
+        {/* ---- Group: Science ----------------------------------------- */}
+        <SectionGroup label="Science" hint="a compact chemistry and physics pair" />
+
+        <div className="grid gap-7 lg:grid-cols-2">
+          <section className="h-full">
+            <ScienceCard
+              label="Chemistry of the Day"
+              connectionLabel="Everyday connection"
+              icon={<IconChemistry width={18} height={18} />}
+              concept={briefing.chemistry}
+            />
+          </section>
+          <section className="h-full">
+            <ScienceCard
+              label="Physics of the Day"
+              connectionLabel="Real-world connection"
+              icon={<IconPhysics width={18} height={18} />}
+              concept={briefing.physics}
+            />
+          </section>
+        </div>
 
         {/* ---- Group: Reading & practice ------------------------------ */}
         <SectionGroup label="Reading & practice" hint="the reading, developer and brain cards" />

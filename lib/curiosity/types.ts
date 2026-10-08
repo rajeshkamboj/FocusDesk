@@ -127,6 +127,33 @@ export interface MythCharacter {
   analysis: string;
 }
 
+/**
+ * Chemistry and Physics of the Day share one shape because they are the same
+ * kind of card: a compact concept with an optional deeper layer, an equation
+ * where an equation genuinely helps, a connection to real life, one surprising
+ * fact, and one question to carry away. They stay two named types — and two
+ * separate fields on the briefing — so each subject's content file, and the
+ * label on each card, can be honest about its own subject.
+ */
+export interface ScienceConcept {
+  id: string;
+  topic: string;
+  simple: string;
+  deeper?: string;
+  equation?: string;
+  /**
+   * The connection to real life — labelled “Everyday connection” on the
+   * chemistry card and “Real-world connection” on the physics card. One field,
+   * because it is one idea; the label is the only thing that differs.
+   */
+  connection: string;
+  surprising: string;
+  question: string;
+}
+
+export type ChemistryConcept = ScienceConcept;
+export type PhysicsConcept = ScienceConcept;
+
 export type CuriosityBriefing = {
   date: string;
   aiWorld: CuriosityNewsItem[];
@@ -139,4 +166,6 @@ export type CuriosityBriefing = {
   sharpener: BrainSharpener;
   speakBetter: SpeakBetterLesson;
   mythology: MythCharacter;
+  chemistry: ChemistryConcept;
+  physics: PhysicsConcept;
 };

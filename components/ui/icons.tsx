@@ -373,3 +373,23 @@ export function IconMyth(props: IconProps) {
   );
 }
 
+export function IconChemistry(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 3h6M10 3v6.2L5.3 17.6A2 2 0 0 0 7 20.6h10a2 2 0 0 0 1.7-3L14 9.2V3" />
+      <path d="M7.4 14h9.2" />
+    </svg>
+  );
+}
+
+export function IconPhysics(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="2.2" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(120 12 12)" />
+    </svg>
+  );
+}
+

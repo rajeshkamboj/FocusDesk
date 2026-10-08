@@ -40,12 +40,23 @@ import type {
   WellbeingDayInput,
 } from '../types';
 
-/** CRUD contract for one collection. */
+/**
+ * CRUD contract for one collection.
+ *
+ * `deleteMany` is the bulk counterpart of `delete` — exactly these rows are
+ * removed and nothing else, with the same per-record semantics. An empty id
+ * list deletes nothing and writes nothing. Ids that do not (or no longer)
+ * exist are ignored: a bulk delete is therefore safe to retry, and safe
+ * against another tab having deleted the same record first. Deletion is
+ * always the real removal of the rows — never a hide, a filter or a state
+ * edit — and on Supabase every request stays scoped to the signed-in user.
+ */
 export interface EntityRepository<T, C> {
   list(): Promise<T[]>;
   create(input: C): Promise<T>;
   update(id: string, patch: Partial<T>): Promise<T>;
   delete(id: string): Promise<void>;
+  deleteMany(ids: string[]): Promise<void>;
 }
 
 export interface DailyPriorityInput {
@@ -82,7 +93,9 @@ export interface IdeaInput {
  *
  * Referential behaviour is the same on every backend: deleting a milestone
  * clears `projectMilestoneId` on the tasks that used it (tasks are never
- * deleted), and a milestone can never move to another project.
+ * deleted), and a milestone can never move to another project. `deleteMany`
+ * carries exactly that contract: detach all listed milestones' tasks, then
+ * remove the milestone rows — and nothing else.
  */
 export interface ProjectMilestoneRepository extends EntityRepository<ProjectMilestone, ProjectMilestoneInput> {
   /** One project's milestones in manual order. */
@@ -118,6 +131,58 @@ export interface AppRepository {
    * build runs unchanged against the current database.
    */
   supportsProjectMilestones(): Promise<boolean>;
+
+  /* ------------------------------------------------------------------ */
+  /* Bulk deletion (Phase 6 — Bulk Select & Delete)                      */
+  /*                                                                     */
+  /* Each method is the batched form of an existing single-record        */
+  /* delete, with exactly its semantics — no new cascade rules:          */
+  /*                                                                     */
+  /*   - empty id list = no-op (no reads, no writes, no requests);       */
+  /*   - unknown / already-deleted ids are ignored, so a partial         */
+  /*     failure is safe to retry and a stale tab can't double-delete;   */
+  /*   - on Supabase every request stays `user_id = <me> AND id IN(…)`,  */
+  /*     chunked at 200 ids per request. PostgREST has no cross-table    */
+  /*     transaction, so multi-table operations run children-aware in    */
+  /*     the order the single-record paths already use; a mid-sequence   */
+  /*     failure leaves a consistent SUPERSET (some selected rows may     */
+  /*     still exist — never half a row, never a foreign record touched) */
+  /*     and the caller re-reads the affected lists.                     */
+  /*   - on LocalRepository each operation is ONE whole-store write, so  */
+  /*     other tabs observe it atomically.                               */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Permanently removes exactly the listed task rows, together with the rows
+   * that belong to them alone: their subtasks and their recorded timer
+   * sessions (the same cascade DataProvider.deleteTask performs for one task).
+   * Surviving tasks that had a deleted task as their broken-down parent lose
+   * only that link. The tasks' projects, project milestones and goals are
+   * never touched.
+   */
+  deleteTasks(ids: string[]): Promise<void>;
+  /**
+   * Removes the listed projects and, per this app's architecture, every
+   * milestone belonging to them (detaching the milestones' tasks first).
+   * Tasks are NEVER deleted — they survive, detached from the removed
+   * projects and milestones, exactly as the single-project delete detaches
+   * them. Goals are never touched.
+   */
+  deleteProjects(ids: string[]): Promise<void>;
+  /**
+   * Bulk form of `projectMilestones.delete`: removes exactly the listed
+   * milestone rows; tasks that used them survive with `projectMilestoneId`
+   * cleared. On Supabase, refuses to run before migration 008 is applied,
+   * like the single delete.
+   */
+  deleteProjectMilestones(ids: string[]): Promise<void>;
+  /**
+   * Removes exactly the listed goal rows. Linked projects and tasks are NEVER
+   * deleted — they survive, detached from the removed goals (their
+   * `goalId` links are cleared).
+   */
+  deleteGoals(ids: string[]): Promise<void>;
+
   dailyPriorities: EntityRepository<DailyPriority, DailyPriorityInput>;
   weeklyPriorities: EntityRepository<WeeklyPriority, WeeklyPriorityInput>;
   monthlyPriorities: EntityRepository<MonthlyPriority, MonthlyPriorityInput>;

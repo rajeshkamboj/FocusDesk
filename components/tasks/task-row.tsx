@@ -27,6 +27,7 @@ import { addDays, formatCompletionTimestamp, formatDuration, formatFocusedTime, 
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { subtasksForTask } from '@/lib/selectors';
 import type { Task } from '@/lib/types';
+import { SelectionCheckbox, type RowSelection } from '@/components/ui/bulk-select';
 import { TaskFormModal } from './task-form-modal';
 import { TaskSubtasks } from './task-subtasks';
 import { useNow } from './use-now';
@@ -51,7 +52,16 @@ function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
-export function TaskRow({ task, showDate = true }: { task: Task; showDate?: boolean }) {
+export function TaskRow({
+  task,
+  showDate = true,
+  selection,
+}: {
+  task: Task;
+  showDate?: boolean;
+  /** Present only while the screen's bulk-select mode is on. */
+  selection?: RowSelection;
+}) {
   const { data, actions } = useData();
   const [editOpen, setEditOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -205,7 +215,14 @@ export function TaskRow({ task, showDate = true }: { task: Task; showDate?: bool
 
   return (
     <>
-      <div className={`group flex items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 ${rowBg}`}>
+      <div className={`group flex items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}>
+        {selection ? (
+          <SelectionCheckbox
+            checked={selection.selected}
+            onChange={selection.onToggle}
+            label={`${selection.selected ? 'Deselect' : 'Select'} "${task.title}" for bulk actions`}
+          />
+        ) : null}
         <TaskCheckbox
           checked={done}
           label={done ? 'Reopen task' : 'Complete task'}

@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { Badge } from '@/components/ui/badge';
+import { BulkActionBar, BulkDeleteDialog, SelectionCheckbox, pluralCount, useBulkSelection } from '@/components/ui/bulk-select';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm';
 import { EmptyState, ProgressBar } from '@/components/ui/card';
@@ -32,11 +33,72 @@ export function GoalsScreen() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addTaskFor, setAddTaskFor] = useState<string | null>(null);
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
+  // Bulk select & delete (Phase 6).
+  const [selectMode, setSelectMode] = useState(false);
+  const selection = useBulkSelection();
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const goals = useMemo(
     () => [...data.goals].sort((a, b) => compareDatedEntities(a, b, sort)),
     [data.goals, sort],
   );
+
+  /* ---- Bulk selection (Phase 6) ---- */
+
+  const visibleGoalIds = useMemo(() => goals.map((g) => g.id), [goals]);
+  const allVisibleSelected = visibleGoalIds.length > 0 && visibleGoalIds.every((id) => selection.has(id));
+  const someVisibleSelected = visibleGoalIds.some((id) => selection.has(id));
+  const selectAllLabel = `${allVisibleSelected ? 'Deselect' : 'Select'} all ${pluralCount(visibleGoalIds.length, 'goal')} in view`;
+
+  const selectedGoals = data.goals.filter((g) => selection.has(g.id));
+  const selectedGoalIds = new Set(selectedGoals.map((g) => g.id));
+  // What survives, with live counts — the whole point of the confirm step:
+  // goal delete is DETACH-only, projects and tasks are never deleted.
+  const detachProjects = data.projects.filter((p) => p.goalId !== undefined && selectedGoalIds.has(p.goalId));
+  const detachTasks = data.tasks.filter((t) => t.goalId !== undefined && selectedGoalIds.has(t.goalId));
+
+  // Escape leaves select mode; while the confirm dialog is up it belongs to it.
+  useEffect(() => {
+    if (!selectMode || bulkOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitSelectMode();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, bulkOpen]);
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    selection.clear();
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkBusy(true);
+    try {
+      await actions.deleteGoals([...selectedGoalIds]);
+      selection.clear();
+      setBulkOpen(false);
+    } catch {
+      // The provider re-read the affected lists and reported the failure;
+      // selection and dialog stay open so a retry touches only survivors.
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const detachBits: string[] = [];
+  if (detachProjects.length > 0) detachBits.push(pluralCount(detachProjects.length, 'project'));
+  if (detachTasks.length > 0) detachBits.push(pluralCount(detachTasks.length, 'task'));
+  const bulkDialogLines = [
+    'This will permanently delete:',
+    `• ${pluralCount(selectedGoals.length, 'goal')}`,
+    detachBits.length > 0
+      ? `The ${detachBits.join(' and ')} linked to them will NOT be deleted. They will simply lose the goal link.`
+      : 'No projects or tasks are linked to them — nothing else is touched.',
+    'This action cannot be undone.',
+  ];
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
@@ -44,10 +106,19 @@ export function GoalsScreen() {
         title="Goals"
         subtitle="Broader outcomes you are moving toward. A goal can own projects — or stand on its own."
         actions={
-          <Button variant="primary" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
-            <IconPlus width={16} height={16} />
-            New Goal
-          </Button>
+          <>
+            <Button
+              variant={selectMode ? 'soft' : 'secondary'}
+              aria-pressed={selectMode}
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            >
+              {selectMode ? 'Done' : 'Select'}
+            </Button>
+            <Button variant="primary" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
+              <IconPlus width={16} height={16} />
+              New Goal
+            </Button>
+          </>
         }
       />
 
@@ -61,6 +132,35 @@ export function GoalsScreen() {
           </Select>
         </div>
       </div>
+
+      {selectMode ? (
+        <BulkActionBar>
+          <SelectionCheckbox
+            checked={allVisibleSelected}
+            indeterminate={someVisibleSelected && !allVisibleSelected}
+            onChange={() => selection.setAll(visibleGoalIds, !allVisibleSelected)}
+            label={selectAllLabel}
+          />
+          <span className="text-[13px] text-ink-2" aria-live="polite">
+            {pluralCount(visibleGoalIds.length, 'goal')} in view ·{' '}
+            {selection.count > 0 ? `${pluralCount(selection.count, 'goal')} selected` : 'Nothing selected'}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => selection.clear()} disabled={selection.count === 0}>
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => setBulkOpen(true)}
+              disabled={selectedGoals.length === 0}
+              aria-label={`Delete ${pluralCount(selection.count, 'selected goal')}`}
+            >
+              Delete selected{selection.count > 0 ? ` (${selection.count})` : ''}
+            </Button>
+          </span>
+        </BulkActionBar>
+      ) : null}
 
       {goals.length === 0 ? (
         <EmptyState
@@ -87,6 +187,15 @@ export function GoalsScreen() {
             return (
               <div key={goal.id} className="rounded-2xl border border-line bg-surface shadow-card">
                 <div className="flex items-start gap-3 p-5">
+                  {selectMode ? (
+                    <span className="mt-2.5">
+                      <SelectionCheckbox
+                        checked={selection.has(goal.id)}
+                        onChange={() => selection.toggle(goal.id)}
+                        label={`${selection.has(goal.id) ? 'Deselect' : 'Select'} goal "${goal.name}" for bulk actions`}
+                      />
+                    </span>
+                  ) : null}
                   <button
                     className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-ink-3 transition-colors hover:border-line-strong hover:text-ink"
                     onClick={() => setExpanded(isExpanded ? null : goal.id)}
@@ -206,6 +315,16 @@ export function GoalsScreen() {
           if (deleting) void actions.deleteGoal(deleting.id);
           setDeleting(undefined);
         }}
+      />
+
+      <BulkDeleteDialog
+        open={bulkOpen}
+        title={`Delete ${pluralCount(selectedGoals.length, 'goal')}?`}
+        lines={bulkDialogLines}
+        confirmLabel={`Delete ${pluralCount(selectedGoals.length, 'goal')}`}
+        busy={bulkBusy}
+        onConfirm={() => void confirmBulkDelete()}
+        onCancel={() => setBulkOpen(false)}
       />
     </div>
   );

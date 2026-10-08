@@ -457,6 +457,18 @@ class RestCollection<T extends { id: string }, C> implements EntityRepository<T,
   async delete(id: string): Promise<void> {
     await this.http.delete(this.table, id);
   }
+
+  /**
+   * Bulk form of `delete`: removes exactly the listed rows of the signed-in
+   * user, chunked so one huge selection never becomes one huge URL. Unknown
+   * ids match nothing and are ignored, which keeps retries and stale-tab
+   * repeats harmless. An empty selection sends no request at all.
+   */
+  async deleteMany(ids: string[]): Promise<void> {
+    for (let start = 0; start < ids.length; start += BULK_DELETE_BATCH) {
+      await this.http.deleteMany(this.table, ids.slice(start, start + BULK_DELETE_BATCH));
+    }
+  }
 }
 
 /**
@@ -488,21 +500,30 @@ class SupabaseHttpClient {
     throw new Error(`Supabase read from ${table} failed: ${error.message}`);
   }
 
-  /** Partial update of every own row matching `filters` (only the given columns change). */
-  async patchWhere(table: string, filters: Record<string, string>, body: Row): Promise<void> {
+  /**
+   * Partial update of every own row matching `filters` (only the given columns
+   * change). A filter value may be a list — `IN (...)` — which is what makes
+   * bulk referential fixes (detach N milestones' tasks) one request instead
+   * of N.
+   */
+  async patchWhere(table: string, filters: Record<string, string | string[]>, body: Row): Promise<void> {
     let query = this.client.from(table).update(body).eq('user_id', this.userId);
-    for (const [column, value] of Object.entries(filters)) query = query.eq(column, value);
+    for (const [column, value] of Object.entries(filters)) {
+      query = Array.isArray(value) ? query.in(column, value) : query.eq(column, value);
+    }
     const { error } = await query;
     if (error) throw new Error(`Supabase update of ${table} failed: ${error.message}`);
   }
 
   async get(
     table: string,
-    filters: Record<string, string> = {},
+    filters: Record<string, string | string[]> = {},
     order?: { column: string; ascending: boolean },
   ): Promise<Row[]> {
     let query = this.client.from(table).select('*').eq('user_id', this.userId);
-    for (const [column, value] of Object.entries(filters)) query = query.eq(column, value);
+    for (const [column, value] of Object.entries(filters)) {
+      query = Array.isArray(value) ? query.in(column, value) : query.eq(column, value);
+    }
     if (order) query = query.order(order.column, { ascending: order.ascending });
     const { data, error } = await query;
     if (error) throw new Error(`Supabase read from ${table} failed: ${error.message}`);
@@ -631,6 +652,24 @@ class SupabaseProjectMilestones implements ProjectMilestoneRepository {
     await this.requireSchema();
     await this.http.patchWhere('tasks', { project_milestone_id: id }, { project_milestone_id: null });
     await this.http.delete(PROJECT_MILESTONES_TABLE, id);
+  }
+
+  /**
+   * Bulk form of `delete`, same contract per milestone: the tasks that used
+   * any listed milestone are detached first (`IN (...)` per chunk), then the
+   * milestone rows are deleted. Detach-before-delete means a failure midway
+   * can only ever leave MORE links pointing at still-existing milestones —
+   * never a task pointing at a row that is gone. Gated on migration 008 like
+   * every other write here.
+   */
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.requireSchema();
+    for (let start = 0; start < ids.length; start += BULK_DELETE_BATCH) {
+      const chunk = ids.slice(start, start + BULK_DELETE_BATCH);
+      await this.http.patchWhere('tasks', { project_milestone_id: chunk }, { project_milestone_id: null });
+      await this.http.deleteMany(PROJECT_MILESTONES_TABLE, chunk);
+    }
   }
 
   async listForProject(projectId: string): Promise<ProjectMilestone[]> {
@@ -834,6 +873,71 @@ export class SupabaseRepository implements AppRepository {
       });
     }
     return this.projectMilestoneSchema;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Bulk deletion (Phase 6) — contracts in ./repository.ts.             */
+  /* PostgREST gives no cross-table transaction, so nothing here pretends */
+  /* to be atomic: each statement is individually user-scoped and         */
+  /* id-matched, statements run in the same order the single-record       */
+  /* deletes already use, and a failure midway leaves a consistent        */
+  /* SUPERSET — some selected rows still there, never a foreign row       */
+  /* touched, never half a row gone. The provider re-reads affected lists */
+  /* so the screen shows the truth and the user can retry the rest.       */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * One `DELETE FROM tasks WHERE user_id = me AND id IN (…)` per chunk. The
+   * rows that belong to a task alone — its subtasks and its recorded timer
+   * runs — disappear with it through the database's own `ON DELETE CASCADE`
+   * foreign keys (migrations 005, 006), and surviving children's
+   * `parent_task_id` is cleared by the `SET NULL` key, exactly as it already
+   * works for the single-task delete. No new request surface is needed to
+   * match that guarantee; projects, milestones and goals are untouched.
+   */
+  async deleteTasks(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.tasks.deleteMany(ids);
+  }
+
+  /**
+   * Detach-then-delete per milestone, batched — delegates to the gated
+   * milestone collection so the migration-008 refusal is the same as the
+   * single delete's.
+   */
+  async deleteProjectMilestones(ids: string[]): Promise<void> {
+    await this.projectMilestones.deleteMany(ids);
+  }
+
+  /**
+   * A project's milestones never outlive it. With migration 008 applied the
+   * app removes them explicitly — detach their tasks, delete them, then
+   * delete the projects — so both backends and a pre-008 database all behave
+   * the same way the single-project delete does. Tasks are never deleted;
+   * their `project_id` links are cleared by the base `SET NULL` foreign key.
+   * Goals are never touched.
+   */
+  async deleteProjects(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    if (await this.supportsProjectMilestones()) {
+      const doomed = new Set(ids);
+      const ownedMilestoneIds = (await this.projectMilestones.list())
+        .filter((m) => doomed.has(m.projectId))
+        .map((m) => m.id);
+      if (ownedMilestoneIds.length > 0) await this.projectMilestones.deleteMany(ownedMilestoneIds);
+    }
+    await this.projects.deleteMany(ids);
+  }
+
+  /**
+   * Deletes the goal rows; the database's `ON DELETE SET NULL` foreign keys
+   * detach every project and task that pointed at them — the same
+   * detach-not-delete behaviour as the single-goal delete. Projects and tasks
+   * are never deleted here.
+   */
+  async deleteGoals(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.goals.deleteMany(ids);
   }
 
   /**
@@ -1167,5 +1271,8 @@ export class SupabaseRepository implements AppRepository {
 
 /** Rows per request when writing a project plan: big enough to be few requests, small enough to stay well inside any PostgREST body limit. */
 const PLAN_INSERT_BATCH = 200;
+
+/** Ids per DELETE/detach request for bulk operations — same sizing logic as PLAN_INSERT_BATCH, applied to URL filters. */
+const BULK_DELETE_BATCH = 200;
 
 export const supabaseDefaults = defaultSettings;

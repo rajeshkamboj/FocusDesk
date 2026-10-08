@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input, Textarea } from '@/components/ui/form';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
+import { SelectionCheckbox } from '@/components/ui/bulk-select';
 import { IconMore, IconPencil, IconPlus, IconTrash } from '@/components/ui/icons';
 import { TaskList } from '@/components/tasks/task-list';
 import { formatShortDate } from '@/lib/dates';
@@ -26,6 +27,7 @@ export function ProjectMilestoneSections({
   onAddTask,
   onEdit,
   onDelete,
+  milestoneSelection,
 }: {
   /** This project's milestones, already in manual order. */
   milestones: ProjectMilestone[];
@@ -34,6 +36,15 @@ export function ProjectMilestoneSections({
   onAddTask: (milestone: ProjectMilestone) => void;
   onEdit: (milestone: ProjectMilestone) => void;
   onDelete: (milestone: ProjectMilestone) => void;
+  /**
+   * Present only while the screen's bulk-select mode is on: a checkbox per
+   * milestone header. It sits beside the name — the edit menu, Move
+   * up/down and every other control keep working exactly as before.
+   */
+  milestoneSelection?: {
+    has(id: string): boolean;
+    toggle(id: string): void;
+  };
 }) {
   const { actions, notify } = useData();
   const known = new Set(milestones.map((m) => m.id));
@@ -56,6 +67,15 @@ export function ProjectMilestoneSections({
         return (
           <section key={milestone.id} aria-label={`Milestone: ${milestone.name}`}>
             <div className="mb-1.5 flex items-start gap-2 px-1">
+              {milestoneSelection ? (
+                <span className="mt-0.5">
+                  <SelectionCheckbox
+                    checked={milestoneSelection.has(milestone.id)}
+                    onChange={() => milestoneSelection.toggle(milestone.id)}
+                    label={`${milestoneSelection.has(milestone.id) ? 'Deselect' : 'Select'} milestone "${milestone.name}" for bulk actions`}
+                  />
+                </span>
+              ) : null}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <h4 className="break-words text-[13px] font-semibold text-ink">{milestone.name}</h4>

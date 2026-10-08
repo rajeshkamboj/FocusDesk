@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { Badge } from '@/components/ui/badge';
+import { BulkActionBar, BulkDeleteDialog, SelectionCheckbox, pluralCount, useBulkSelection } from '@/components/ui/bulk-select';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm';
 import { EmptyState, ProgressBar } from '@/components/ui/card';
@@ -48,11 +49,106 @@ export function ProjectsScreen() {
   const [milestoneForm, setMilestoneForm] = useState<{ projectId: string; milestone?: ProjectMilestone } | null>(null);
   const [deletingMilestone, setDeletingMilestone] = useState<ProjectMilestone | undefined>(undefined);
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
+  // Bulk select & delete (Phase 6). One Set covers projects and milestones —
+  // the two share an entity id space, and deleting them is one combined
+  // confirm so the user sees the full consequence in one place.
+  const [selectMode, setSelectMode] = useState(false);
+  const selection = useBulkSelection();
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const projects = useMemo(() => {
     const list = filter === 'all' ? data.projects : data.projects.filter((p) => p.status === filter);
     return [...list].sort((a, b) => compareDatedEntities(a, b, sort));
   }, [data.projects, filter, sort]);
+
+  /* ---- Bulk selection (Phase 6) ---- */
+
+  const visibleProjectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+  const allVisibleSelected = visibleProjectIds.length > 0 && visibleProjectIds.every((id) => selection.has(id));
+  const someVisibleSelected = visibleProjectIds.some((id) => selection.has(id));
+  const selectAllLabel = `${allVisibleSelected ? 'Deselect' : 'Select'} all ${pluralCount(visibleProjectIds.length, 'project')}${
+    filter !== 'all' ? ` in the “${STATUS_LABEL[filter]}” filter` : ''
+  }`;
+
+  const selectedProjects = data.projects.filter((p) => selection.has(p.id));
+  const selectedProjectIds = new Set(selectedProjects.map((p) => p.id));
+  const selectedMilestonesAll = projectMilestonesEnabled ? data.projectMilestones.filter((m) => selection.has(m.id)) : [];
+  // A milestone of a selected project is redundant — deleting the project
+  // deletes that milestone anyway (existing architecture). The selection may
+  // still hold the id; the counts and the calls below say and do it once.
+  const selectedMilestones = selectedMilestonesAll.filter((m) => !selectedProjectIds.has(m.projectId));
+  const cascadedMilestones = selectedProjects.flatMap((p) => data.projectMilestones.filter((m) => m.projectId === p.id));
+  const deletedMilestoneCount = selectedMilestones.length + cascadedMilestones.length;
+  const doomedMilestoneIds = new Set([...selectedMilestones, ...cascadedMilestones].map((m) => m.id));
+  const detachedTaskCount = data.tasks.filter(
+    (t) =>
+      (t.projectId !== undefined && selectedProjectIds.has(t.projectId)) ||
+      (t.projectMilestoneId !== undefined && doomedMilestoneIds.has(t.projectMilestoneId)),
+  ).length;
+  const bulkNothingToConfirm = selectedProjects.length === 0 && selectedMilestones.length === 0;
+
+  // Escape leaves select mode; while the confirm dialog is up it belongs to it.
+  useEffect(() => {
+    if (!selectMode || bulkOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitSelectMode();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, bulkOpen]);
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    selection.clear();
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkBusy(true);
+    try {
+      // Milestones first, then the projects themselves — the same order the
+      // single-project delete uses, so a mid-way failure can only leave MORE
+      // structure in place, never a task pointing at a row that is gone.
+      if (selectedMilestones.length > 0) await actions.deleteProjectMilestones(selectedMilestones.map((m) => m.id));
+      if (selectedProjects.length > 0) await actions.deleteProjects([...selectedProjectIds]);
+      selection.clear();
+      setBulkOpen(false);
+    } catch {
+      // The provider re-read the affected lists and reported the failure.
+      // Selection and dialog stay open; a retry touches only what survived.
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkDialogTitle =
+    selectedProjects.length > 0 && selectedMilestones.length > 0
+      ? `Delete ${pluralCount(selectedProjects.length, 'project')} and ${pluralCount(selectedMilestones.length, 'milestone')}?`
+      : selectedProjects.length > 0
+        ? `Delete ${pluralCount(selectedProjects.length, 'project')}?`
+        : `Delete ${pluralCount(selectedMilestones.length, 'project milestone')}?`;
+  const bulkDialogLines = [
+    'This will permanently delete:',
+    ...(selectedProjects.length > 0 ? [`• ${pluralCount(selectedProjects.length, 'project')}`] : []),
+    ...(deletedMilestoneCount > 0
+      ? [
+          cascadedMilestones.length === 0
+            ? `• ${pluralCount(deletedMilestoneCount, 'project milestone')}`
+            : selectedMilestones.length === 0
+              ? `• ${pluralCount(deletedMilestoneCount, 'project milestone')} of the selected projects`
+              : `• ${pluralCount(deletedMilestoneCount, 'project milestone')} (${selectedMilestones.length} you selected, ${cascadedMilestones.length} belonging to the selected projects)`,
+        ]
+      : []),
+    ...(deletedMilestoneCount === 0 && selectedProjects.length > 0 ? ['The projects have no milestones.'] : []),
+    detachedTaskCount > 0
+      ? `The ${pluralCount(detachedTaskCount, 'task')} inside them will NOT be deleted. They will be detached${
+          selectedProjects.length > 0 ? ' from the projects' : ''
+        }${deletedMilestoneCount > 0 ? (selectedProjects.length > 0 ? ' and from the milestones' : ' from their milestones') : ''}.`
+      : 'No tasks are attached to what you delete — nothing else is touched.',
+    'Goals will NOT be deleted.',
+    'This action cannot be undone.',
+  ];
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
@@ -60,10 +156,19 @@ export function ProjectsScreen() {
         title="Projects"
         subtitle="Group related work toward an outcome. Projects are yours to define — nothing is predefined."
         actions={
-          <Button variant="primary" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
-            <IconPlus width={16} height={16} />
-            New Project
-          </Button>
+          <>
+            <Button
+              variant={selectMode ? 'soft' : 'secondary'}
+              aria-pressed={selectMode}
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            >
+              {selectMode ? 'Done' : 'Select'}
+            </Button>
+            <Button variant="primary" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
+              <IconPlus width={16} height={16} />
+              New Project
+            </Button>
+          </>
         }
       />
 
@@ -88,6 +193,36 @@ export function ProjectsScreen() {
           </button>
         ))}
       </div>
+
+      {selectMode ? (
+        <BulkActionBar>
+          <SelectionCheckbox
+            checked={allVisibleSelected}
+            indeterminate={someVisibleSelected && !allVisibleSelected}
+            onChange={() => selection.setAll(visibleProjectIds, !allVisibleSelected)}
+            label={selectAllLabel}
+          />
+          <span className="text-[13px] text-ink-2" aria-live="polite">
+            {pluralCount(visibleProjectIds.length, 'project')} in view
+            {filter !== 'all' ? ` (${STATUS_LABEL[filter]} filter)` : ''} ·{' '}
+            {selection.count > 0 ? `${pluralCount(selection.count, 'item')} selected` : 'Nothing selected'}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => selection.clear()} disabled={selection.count === 0}>
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => setBulkOpen(true)}
+              disabled={bulkNothingToConfirm}
+              aria-label={`Delete ${pluralCount(selection.count, 'selected item')}`}
+            >
+              Delete selected{selection.count > 0 ? ` (${selection.count})` : ''}
+            </Button>
+          </span>
+        </BulkActionBar>
+      ) : null}
 
       {projects.length === 0 ? (
         <EmptyState
@@ -116,6 +251,15 @@ export function ProjectsScreen() {
             return (
               <div key={project.id} className="rounded-2xl border border-line bg-surface shadow-card">
                 <div className="flex items-start gap-3 p-5">
+                  {selectMode ? (
+                    <span className="mt-2.5">
+                      <SelectionCheckbox
+                        checked={selection.has(project.id)}
+                        onChange={() => selection.toggle(project.id)}
+                        label={`${selection.has(project.id) ? 'Deselect' : 'Select'} project "${project.name}" for bulk actions`}
+                      />
+                    </span>
+                  ) : null}
                   <button
                     className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-ink-3 transition-colors hover:border-line-strong hover:text-ink"
                     onClick={() => setExpanded(isExpanded ? null : project.id)}
@@ -223,6 +367,11 @@ export function ProjectsScreen() {
                         onAddTask={(m) => setAddTaskFor({ projectId: project.id, projectMilestoneId: m.id })}
                         onEdit={(m) => setMilestoneForm({ projectId: project.id, milestone: m })}
                         onDelete={(m) => setDeletingMilestone(m)}
+                        milestoneSelection={
+                          selectMode
+                            ? { has: (id: string) => selection.has(id), toggle: (id: string) => selection.toggle(id) }
+                            : undefined
+                        }
                       />
                     ) : tasks.length > 0 ? (
                       <TaskList tasks={tasks} />
@@ -288,6 +437,22 @@ export function ProjectsScreen() {
           if (deleting) void actions.deleteProject(deleting.id);
           setDeleting(undefined);
         }}
+      />
+
+      <BulkDeleteDialog
+        open={bulkOpen}
+        title={bulkDialogTitle}
+        lines={bulkDialogLines}
+        confirmLabel={
+          selectedProjects.length > 0
+            ? `Delete ${pluralCount(selectedProjects.length, 'project')}${
+                deletedMilestoneCount > 0 ? ` (+${deletedMilestoneCount} milestone${deletedMilestoneCount === 1 ? '' : 's'})` : ''
+              }`
+            : `Delete ${pluralCount(selectedMilestones.length, 'milestone')}`
+        }
+        busy={bulkBusy}
+        onConfirm={() => void confirmBulkDelete()}
+        onCancel={() => setBulkOpen(false)}
       />
     </div>
   );

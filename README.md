@@ -105,6 +105,38 @@ It is deliberately the opposite of *Import (JSON)*, which replaces the database:
 
 Code: `lib/project-plan.ts` (format, validation, resolution, preview — pure, no I/O), `importProjectPlan` in `lib/store/repository.ts` and both repositories, `components/settings/project-plan-import.tsx` (the UI).
 
+## Bulk select & safe bulk delete
+
+Tasks, Projects and Goals each carry a **Select** toggle for list hygiene. While it is on, every row
+gets its own checkbox — row clicks, edit menus, timer controls and the milestone Move up/down keep
+working exactly as before — and a bar under the filters counts the selection and names the active
+filters. "Select all" selects what is currently visible and says so; it never reaches past the
+filters. Selection is view state: never persisted, cleared when a delete succeeds, kept (with the
+failure toast and a re-read list) when one fails, so retrying touches only what genuinely survived.
+
+A bulk delete **always** confirms — even with "confirm task deletion" turned off, because deleting
+many records at once is worth one more careful look — and the dialog states exactly what is and is
+not deleted, with live counts:
+
+- **Tasks** are permanently deleted, together with the rows that belong to them alone: their
+  subtasks and their recorded focus time go with them (the existing single-task behavior), and a
+  running timer on a selected task is stopped and discarded. Projects, project milestones and
+  goals are never touched.
+- **Project milestones** are deleted, and the tasks that used them are detached — exactly what the
+  single-milestone delete does. Tasks are never deleted by it.
+- **Projects** are deleted together with their milestones (the existing architecture), and their
+  tasks stay in the list — detached from the project and from its milestones. The linked Goal is
+  never deleted.
+- **Goals** delete only themselves: linked projects and tasks keep existing and simply lose the
+  goal link.
+
+Both backends delete for real — never hide, never filter. Local storage applies the whole bulk
+operation as ONE atomic write, so another tab can never observe, and never re-persist, half a
+deletion. Supabase sends one user-scoped `id IN (…)` request per batch of 200 ids, honoring Row
+Level Security on every request; there is no transaction across tables, so a failure mid-way
+leaves a consistent superset (whatever was already deleted stays deleted) and the app re-reads
+what remains. There is no undo — a JSON export (Settings → Data) is the escape hatch, as always.
+
 ## PWA installation
 Open the deployed site in Chrome or Edge and click **Install** in the address bar. To launch it when Windows starts, press `Win + R`, type `shell:startup`, and put the installed app's shortcut there.
 
@@ -163,6 +195,11 @@ npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-import.tsx
 `scripts/verify-project-plan-add-to-existing.tsx` checks the Phase 5 "Add to Existing Project" mode end to end: the exactly-one-project rule, normalized exact-name milestone matching (never fuzzy), the user's mapping choices, new-milestone positions after the existing ones, task/root-task placement, the zero-writes guarantee for invalid plans, `LocalRepository` and `SupabaseRepository` (only new milestones and tasks are ever written — no goal or project row is touched — and a failed insert is rolled back), the unchanged-records fingerprints before and after, and the real modal in jsdom (mode switch → target project → mapping preview → flip a mapping → import → result):
 ```bash
 npm i --no-save jsdom tsx && npx tsx scripts/verify-project-plan-add-to-existing.tsx
+```
+
+`scripts/verify-bulk-delete.tsx` checks the Phase 6 work end to end: the generic `deleteMany` and the four bulk aggregates against the REAL store state (a `LocalRepository` over instrumented storage — a 90-task delete is one write, a Cancel writes zero bytes, a selection that matches nothing writes nothing), `SupabaseRepository` against a fake PostgREST (every request user-scoped and id-matched, >200 ids chunked, milestones detached strictly before deletion, the audited FK cascades and SET NULL behaviour modelled so table state matches PostgreSQL, another user's rows byte-identical throughout, bulk milestone deletes refusing to run before migration 008 like the single delete, and a partially failed bulk delete retryable to completion), two tabs sharing one store (a stale tab can neither undo a bulk delete nor resurrect a deleted row), and the three real screens in jsdom (select mode, filter-aware select-all with scoped wording, the dialog's exact counts and detach promises, Cancel/confirm flows against `localStorage` truth, running-timer settle with no orphaned session row, and the no-hijack contract for row clicks, menus and milestone controls):
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-bulk-delete.tsx
 ```
 
 `scripts/verify-learnings-backup.ts` checks a real export file read-only (count, ids MD5, byte-identical round trip through the Phase 3 code):

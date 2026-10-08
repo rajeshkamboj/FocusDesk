@@ -162,6 +162,21 @@ export interface DataActions {
   updateGoal(id: string, patch: Partial<Goal>): Promise<void>;
   deleteGoal(id: string): Promise<void>;
 
+  /* Bulk deletion (Phase 6 — Bulk Select & Delete). The batched form of the
+   * single deletes above with exactly their semantics: the listed rows are
+   * permanently removed; the rows the app already removes with a task (its
+   * subtasks and its recorded timer sessions) go with it; and everything the
+   * single paths only detach — tasks when a project, milestone or goal goes,
+   * projects and tasks when a goal goes — survives, detached, NEVER deleted.
+   * An empty selection is a no-op. If the store rejects the operation these
+   * actions re-read the affected lists, show a toast AND rethrow, so the
+   * screen can keep the selection for a safe retry (the repository ignores
+   * rows a partial failure already removed). */
+  deleteTasks(ids: string[]): Promise<void>;
+  deleteProjects(ids: string[]): Promise<void>;
+  deleteProjectMilestones(ids: string[]): Promise<void>;
+  deleteGoals(ids: string[]): Promise<void>;
+
   /* Inbox */
   addInboxItem(title: string, note?: string): Promise<InboxItem>;
   deleteInboxItem(id: string): Promise<void>;
@@ -591,6 +606,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       /* keep the current state */
     }
   }, [applyDataChange]);
+
+  /**
+   * Re-read the given lists from the store after a bulk delete that may have
+   * been PARTIALLY applied (Supabase has no cross-table transaction — see
+   * lib/store/repository.ts). The screen then shows what the database
+   * actually holds, not this tab's stale opinion, and a retry of the kept
+   * selection only sees the rows that genuinely survived.
+   */
+  const resyncPartial = useCallback(
+    async (read: (r: AppRepository) => Promise<Partial<AppData>>) => {
+      try {
+        const fresh = await read(repo());
+        applyDataChange((d) => ({ ...d, ...fresh }));
+      } catch {
+        /* the store could not be re-read either — keep what is on screen */
+      }
+    },
+    [applyDataChange],
+  );
 
   const persistSubtaskUpdate = useCallback(
     (id: string, patch: Pick<Subtask, 'title' | 'completed'>): Promise<Subtask> => {
@@ -1658,6 +1692,171 @@ export function DataProvider({ children }: { children: ReactNode }) {
         applyDataChange((d) => ({ ...d, projectMilestones: d.projectMilestones.map((m) => byId.get(m.id) ?? m) }));
       },
 
+      /* ---------------- Bulk deletion (Phase 6) ---------------- */
+
+      deleteTasks: async (ids) => {
+        if (ids.length === 0) return;
+        const doomed = new Set(ids);
+        const targets = dataRef.current.tasks.filter((t) => doomed.has(t.id));
+        // Timer safety before touching the store: queued per-task writes
+        // (checkpoints) must not race the delete, and the open-run bookmarks
+        // are dropped so the state-driven close effect can never try to
+        // record a "final" session row onto a task whose row is about to
+        // disappear. A running timer is discarded with its task — its time
+        // was only ever attributed through that task anyway.
+        await settleTaskWrites(targets);
+        for (const t of targets) openSessionRef.current.delete(t.id);
+        try {
+          await repo().deleteTasks(ids);
+        } catch (error) {
+          console.error('Bulk task deletion failed', error);
+          notify('Could not delete all selected tasks — the list was re-read; try again');
+          await resyncPartial(async (r) => {
+            const [tasks, subtasks, timerSessions] = await Promise.all([
+              r.tasks.list(),
+              r.subtasks.list(),
+              r.timerSessions.list(),
+            ]);
+            return { tasks, subtasks, timerSessions };
+          });
+          throw error;
+        }
+        // Mirror what the store now holds: the selected tasks plus the rows
+        // that belong to them alone — subtasks and recorded timer runs — are
+        // gone, and surviving broken-down tasks lose only the deleted parent
+        // link (the SET NULL the Supabase foreign key applies the same way).
+        applyDataChange((d) => ({
+          ...d,
+          tasks: d.tasks
+            .filter((t) => !doomed.has(t.id))
+            .map((t) => (t.parentTaskId && doomed.has(t.parentTaskId) ? { ...t, parentTaskId: undefined } : t)),
+          subtasks: d.subtasks.filter((s) => !doomed.has(s.parentTaskId)),
+          timerSessions: d.timerSessions.filter((s) => !doomed.has(s.taskId)),
+        }));
+        if (targets.length > 0) {
+          notify(`${targets.length} ${targets.length === 1 ? 'task' : 'tasks'} deleted`);
+        }
+      },
+
+      deleteProjects: async (ids) => {
+        if (ids.length === 0) return;
+        const doomed = new Set(ids);
+        const targets = dataRef.current.projects.filter((p) => doomed.has(p.id));
+        // Milestones cannot outlive their project, so the aggregate removes
+        // them too — and their tasks must survive detached. Tasks linked to a
+        // doomed project or milestone keep existing, but a queued timer
+        // checkpoint should not race the detach writes, so those rows are
+        // settled first (the single-project delete's care for milestone
+        // tasks, extended to every task losing a link).
+        const doomedMilestones = new Set(
+          dataRef.current.projectMilestones.filter((m) => doomed.has(m.projectId)).map((m) => m.id),
+        );
+        const losesLink = (t: Task) =>
+          (t.projectId !== undefined && doomed.has(t.projectId)) ||
+          (t.projectMilestoneId !== undefined && doomedMilestones.has(t.projectMilestoneId));
+        try {
+          await settleTaskWrites(dataRef.current.tasks.filter(losesLink));
+          await repo().deleteProjects(ids);
+        } catch (error) {
+          console.error('Bulk project deletion failed', error);
+          notify('Could not delete all selected projects — the lists were re-read; try again');
+          await resyncPartial(async (r) => {
+            const [projects, tasks, projectMilestones] = await Promise.all([
+              r.projects.list(),
+              r.tasks.list(),
+              r.projectMilestones.list(),
+            ]);
+            return { projects, tasks, projectMilestones };
+          });
+          throw error;
+        }
+        applyDataChange((d) => ({
+          ...d,
+          projects: d.projects.filter((p) => !doomed.has(p.id)),
+          projectMilestones: d.projectMilestones.filter((m) => !doomed.has(m.projectId)),
+          tasks: d.tasks.map((t) =>
+            losesLink(t)
+              ? {
+                  ...t,
+                  projectId: t.projectId !== undefined && doomed.has(t.projectId) ? undefined : t.projectId,
+                  projectMilestoneId:
+                    t.projectMilestoneId !== undefined && doomedMilestones.has(t.projectMilestoneId)
+                      ? undefined
+                      : t.projectMilestoneId,
+                }
+              : t,
+          ),
+        }));
+        if (targets.length > 0) {
+          notify(`${targets.length} ${targets.length === 1 ? 'project' : 'projects'} deleted`);
+        }
+      },
+
+      deleteProjectMilestones: async (ids) => {
+        if (ids.length === 0) return;
+        const doomed = new Set(ids);
+        const targets = dataRef.current.projectMilestones.filter((m) => doomed.has(m.id));
+        // Tasks are never deleted here — they stay in their project with no
+        // milestone, exactly like the single-milestone delete; its queued
+        // writes settle before the batch runs.
+        try {
+          await settleTaskWrites(
+            dataRef.current.tasks.filter((t) => t.projectMilestoneId !== undefined && doomed.has(t.projectMilestoneId)),
+          );
+          await repo().deleteProjectMilestones(ids);
+        } catch (error) {
+          console.error('Bulk milestone deletion failed', error);
+          notify('Could not delete all selected milestones — the lists were re-read; try again');
+          await resyncPartial(async (r) => {
+            const [projectMilestones, tasks] = await Promise.all([r.projectMilestones.list(), r.tasks.list()]);
+            return { projectMilestones, tasks };
+          });
+          throw error;
+        }
+        applyDataChange((d) => ({
+          ...d,
+          projectMilestones: d.projectMilestones.filter((m) => !doomed.has(m.id)),
+          tasks: d.tasks.map((t) =>
+            t.projectMilestoneId !== undefined && doomed.has(t.projectMilestoneId)
+              ? { ...t, projectMilestoneId: undefined }
+              : t,
+          ),
+        }));
+        if (targets.length > 0) {
+          notify(`${targets.length} ${targets.length === 1 ? 'milestone' : 'milestones'} deleted`);
+        }
+      },
+
+      deleteGoals: async (ids) => {
+        if (ids.length === 0) return;
+        const doomed = new Set(ids);
+        const targets = dataRef.current.goals.filter((g) => doomed.has(g.id));
+        try {
+          await repo().deleteGoals(ids);
+        } catch (error) {
+          console.error('Bulk goal deletion failed', error);
+          notify('Could not delete all selected goals — the lists were re-read; try again');
+          await resyncPartial(async (r) => {
+            const [goals, projects, tasks] = await Promise.all([r.goals.list(), r.projects.list(), r.tasks.list()]);
+            return { goals, projects, tasks };
+          });
+          throw error;
+        }
+        // Only the goal rows disappear. Projects and tasks survive detached —
+        // and the LocalRepository aggregate cleared the dangling references
+        // in the store itself (matching what the Supabase foreign keys do at
+        // the database level), so the snapshot simply mirrors it.
+        applyDataChange((d) => ({
+          ...d,
+          goals: d.goals.filter((g) => !doomed.has(g.id)),
+          projects: d.projects.map((p) => (p.goalId !== undefined && doomed.has(p.goalId) ? { ...p, goalId: undefined } : p)),
+          tasks: d.tasks.map((t) => (t.goalId !== undefined && doomed.has(t.goalId) ? { ...t, goalId: undefined } : t)),
+        }));
+        if (targets.length > 0) {
+          notify(`${targets.length} ${targets.length === 1 ? 'goal' : 'goals'} deleted`);
+        }
+      },
+
       updateSettings: async (patch) => {
         const updated = await repo().settings.save(patch);
         setData((d) => ({ ...d, settings: updated }));
@@ -1731,7 +1930,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return created;
       },
     }),
-    [addTaskState, applyDataChange, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, refreshProjectMilestones, removeSessionsForTask, removeSubtaskState, removeTaskState, resumeTimerForTask, settleTaskWrites, startTimerForTask],
+    [addTaskState, applyDataChange, applySubtaskPatch, applyTaskPatch, applyWellbeing, createFromTitle, logHistory, notify, patchSubtaskState, patchTaskState, refreshProjectMilestones, removeSessionsForTask, removeSubtaskState, removeTaskState, resyncPartial, resumeTimerForTask, settleTaskWrites, startTimerForTask],
   );
 
   const value = useMemo<DataContextValue>(

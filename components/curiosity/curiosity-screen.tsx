@@ -304,7 +304,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         </section>
 
         {/* ---- Group: the existing daily highlights ------------------- */}
-        <SectionGroup flush label="Daily highlights" hint="the briefing that was already here" />
+        <SectionGroup flush label="Daily highlights" hint="history, AI world and today’s picks" />
 
         {/* 1. Today in History */}
         {briefing.history ? (
@@ -405,7 +405,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         </section>
 
         {/* ---- Group: Science ----------------------------------------- */}
-        <SectionGroup label="Science" hint="a compact chemistry and physics pair" />
+        <SectionGroup label="Science" hint="chemistry and physics, compact enough for a break" />
 
         <div className="grid gap-7 lg:grid-cols-2">
           <section className="h-full">
@@ -427,7 +427,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         </div>
 
         {/* ---- Group: Reading & practice ------------------------------ */}
-        <SectionGroup label="Reading & practice" hint="the reading, developer and brain cards" />
+        <SectionGroup label="Reading & practice" hint="reading, developer tools and brain sharpeners" />
 
         {/* 4. A Few Minutes of Literature & One Book */}
         <div className="grid gap-7 lg:grid-cols-2">

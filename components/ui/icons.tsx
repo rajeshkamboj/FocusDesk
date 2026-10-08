@@ -393,3 +393,14 @@ export function IconPhysics(props: IconProps) {
   );
 }
 
+export function IconBiology(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 3c0 5 10 6 10 9s-10 4-10 9" />
+      <path d="M17 3c0 5-10 6-10 9s10 4 10 9" />
+      <path d="M8.4 12h7.2" />
+      <path d="M8 6.6h8M8 17.4h8" />
+    </svg>
+  );
+}
+

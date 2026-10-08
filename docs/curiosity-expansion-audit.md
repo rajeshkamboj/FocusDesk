@@ -1,6 +1,6 @@
 # CURIOSITY EXPANSION — AUDIT
 
-**Status: AUDIT ONLY — no implementation. Awaiting explicit approval.**
+**Status: audit only at the time of writing — since approved and implemented; see the addendum at the end.**
 **Base:** `main` @ `93f8eae` (PR #37 merged). Working branch: `arena/f0e7d042-focusdesk` (branched from that commit; `main` untouched).
 **Scope asked for:** Speak Better, Mythology — Character of the Day, Chemistry of the Day, Physics of the Day.
 
@@ -165,3 +165,26 @@ This is a **hybrid**: new *card types* rendered into the *existing* grid, groupe
 ---
 
 **Nothing has been implemented. Awaiting approval on:** (a) the hybrid structure in §6/§11, (b) the evidence-layer typing for Mythology in §9.9, (c) seed counts in §12, (d) whether to add Curiosity to `verify-mobile-layout.tsx`.
+
+---
+
+## Addendum — what was actually built (post-approval)
+
+The audit was approved with three answers: seed **12 entries per category** (not ~30), keep Mythology **balanced** between subcontinental and world traditions, and deliver as **two reviewable commits** rather than two PRs (this session is pinned to one branch, and GitHub allows one PR per branch).
+
+Built on `arena/f0e7d042-focusdesk`, `main` untouched at `93f8eae`:
+
+| Commit | Contents |
+| --- | --- |
+| `616ed2b` | Speak Better + Mythology (12 lessons, 12 characters) |
+| `0b66f12` | Chemistry + Physics (12 concepts each) |
+| `325ed96` | copy pass on the section hints |
+| — | **Biology of the Day**, added afterwards at the user's request on the same architecture |
+
+Decisions taken during implementation that differ from, or refine, the plan above:
+
+1. **`ScienceConcept` is the shared shape** — `{ id, topic, simple, deeper?, equation?, connection, surprising, question }`. One `connection` field, labelled “Everyday connection” on chemistry and biology and “Real-world connection” on physics; chemistry, physics and biology are three aliases of the same type, kept as separate briefing fields so each subject's content file and card label stay honest. The first draft used `everyday`/`realWorld`, which made the shared type impossible — the honest fix was one field with a per-card label, not a union.
+2. **Biology joined the Science group as a third card**, so that row became `lg:grid-cols-3` (≈296px per card at the page's 5xl max width) instead of a pair. Chemistry and Physics render through the identical component with identical labels — the only change to them is the track width. Nothing in Speak Better, Mythology, the pre-existing nine cards, the API route, the nav or the store was touched.
+3. **Four independent day offsets** (`+5`, `+2`, `+7`, `+11`, `+3`) keep the rotations from advancing in lockstep, and the `unstable_cache` key was bumped for every shape change — `v7 → v8 → v9 → v10`. Forgetting it is the one failure mode that looks like a bug in the browser and not in the code.
+4. **The evidence-layer labels are structural**, as recommended in §9.9: `layer` is required on every mythology claim, the legend is printed in the card, and the verify script refuses a character that cites no text or labels no claim as analysis/inference.
+5. **Verification grew two guards**: `verify-daily-content.tsx` now renders the real screen and asserts all nine original cards still appear in their original order with the new sections between them, and `verify-mobile-layout.tsx` renders Curiosity (empty and populated) at 320/360/390/430 and 1024/1280/1536.

@@ -8,6 +8,7 @@ import { speakBetterLessons } from './content/speak-better';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
+import { biologyConcepts } from './content/biology';
 
 const books = [
   {
@@ -396,6 +397,7 @@ const SPEAK_BETTER_OFFSET = 5;
 const MYTHOLOGY_OFFSET = 2;
 const CHEMISTRY_OFFSET = 7;
 const PHYSICS_OFFSET = 11;
+const BIOLOGY_OFFSET = 3;
 
 export function dailyEditorial(date: string): Pick<
   CuriosityBriefing,
@@ -409,6 +411,7 @@ export function dailyEditorial(date: string): Pick<
   | 'mythology'
   | 'chemistry'
   | 'physics'
+  | 'biology'
 > {
   const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
   const safeDay = Number.isFinite(day) ? Math.abs(day) : 0;
@@ -424,5 +427,6 @@ export function dailyEditorial(date: string): Pick<
     mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
     chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
     physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],
+    biology: biologyConcepts[(safeDay + BIOLOGY_OFFSET) % biologyConcepts.length],
   };
 }

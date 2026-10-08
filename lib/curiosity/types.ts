@@ -128,12 +128,13 @@ export interface MythCharacter {
 }
 
 /**
- * Chemistry and Physics of the Day share one shape because they are the same
- * kind of card: a compact concept with an optional deeper layer, an equation
- * where an equation genuinely helps, a connection to real life, one surprising
- * fact, and one question to carry away. They stay two named types — and two
- * separate fields on the briefing — so each subject's content file, and the
- * label on each card, can be honest about its own subject.
+ * Chemistry, Physics and Biology of the Day share one shape because they are
+ * the same kind of card: a compact concept, an intuitive explanation, an
+ * optional deeper layer, an equation or worked example where it genuinely
+ * helps, a connection to real life, one surprising fact, and one question a
+ * teacher can put to a class as it stands. They stay separate named types —
+ * and separate fields on the briefing — so each subject's content file, and
+ * the label on each card, can be honest about its own subject.
  */
 export interface ScienceConcept {
   id: string;
@@ -153,6 +154,7 @@ export interface ScienceConcept {
 
 export type ChemistryConcept = ScienceConcept;
 export type PhysicsConcept = ScienceConcept;
+export type BiologyConcept = ScienceConcept;
 
 export type CuriosityBriefing = {
   date: string;
@@ -168,4 +170,5 @@ export type CuriosityBriefing = {
   mythology: MythCharacter;
   chemistry: ChemistryConcept;
   physics: PhysicsConcept;
+  biology: BiologyConcept;
 };

@@ -12,6 +12,7 @@ import { MythologySection } from './sections/mythology';
 import { ScienceCard } from './sections/science';
 import { getDailyQuote } from '@/lib/quotes';
 import {
+  IconBiology,
   IconBook,
   IconCalendar,
   IconChemistry,
@@ -405,9 +406,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         </section>
 
         {/* ---- Group: Science ----------------------------------------- */}
-        <SectionGroup label="Science" hint="chemistry and physics, compact enough for a break" />
+        <SectionGroup label="Science" hint="chemistry, physics and biology, one card each" />
 
-        <div className="grid gap-7 lg:grid-cols-2">
+        <div className="grid gap-7 lg:grid-cols-3">
           <section className="h-full">
             <ScienceCard
               label="Chemistry of the Day"
@@ -422,6 +423,14 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
               connectionLabel="Real-world connection"
               icon={<IconPhysics width={18} height={18} />}
               concept={briefing.physics}
+            />
+          </section>
+          <section className="h-full">
+            <ScienceCard
+              label="Biology of the Day"
+              connectionLabel="Everyday connection"
+              icon={<IconBiology width={18} height={18} />}
+              concept={briefing.biology}
             />
           </section>
         </div>

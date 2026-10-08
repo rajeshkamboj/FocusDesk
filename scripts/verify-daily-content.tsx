@@ -18,6 +18,7 @@ async function main() {
   const mythologyIds = new Set<string>();
   const chemistryIds = new Set<string>();
   const physicsIds = new Set<string>();
+  const biologyIds = new Set<string>();
   const dailyPairs = new Set<string>();
   for (let day = 0; day < 366; day++) {
     const date = new Date(Date.UTC(2028, 0, 1 + day)).toISOString().slice(0, 10);
@@ -71,6 +72,7 @@ async function main() {
     for (const [subject, concept, ids] of [
       ['Chemistry', editorial.chemistry, chemistryIds],
       ['Physics', editorial.physics, physicsIds],
+      ['Biology', editorial.biology, biologyIds],
     ] as const) {
       ids.add(concept.id);
       assert.ok(concept.id && concept.topic && concept.simple && concept.surprising, `${subject} ${concept.id} is incomplete`);
@@ -87,6 +89,7 @@ async function main() {
   assert.ok(dailyPairs.size >= 12, 'the Speak Better and Mythology rotations are locked together');
   assert.equal(chemistryIds.size, 12, `only ${chemistryIds.size} chemistry concepts appear`);
   assert.equal(physicsIds.size, 12, `only ${physicsIds.size} physics concepts appear`);
+  assert.equal(biologyIds.size, 12, `only ${biologyIds.size} biology concepts appear`);
   // The Curiosity page renders every card from the briefing, so a content change
   // that quietly dropped or reordered a section would only show up on screen.
   // This renders the real screen and checks the briefing end to end: every card
@@ -109,8 +112,9 @@ async function main() {
       'Learn Something',
     ];
     for (const label of existingCards) assert.ok(html.includes(label), `the Curiosity page no longer renders ${label}`);
+    assert.ok(html.includes('Everyday connection') && html.includes('Real-world connection'), 'the science cards lost their connection labels');
     // React escapes the ampersand in markup, so the group label is matched as rendered.
-    for (const label of ['Daily highlights', 'Speak better', 'Speak Better', 'Mythology · Character of the Day', 'Science', 'Chemistry of the Day', 'Physics of the Day', 'Everyday connection', 'Real-world connection', 'Reading &amp; practice']) {
+    for (const label of ['Daily highlights', 'Speak better', 'Speak Better', 'Mythology · Character of the Day', 'Science', 'Chemistry of the Day', 'Physics of the Day', 'Biology of the Day', 'Everyday connection', 'Real-world connection', 'Reading &amp; practice']) {
       assert.ok(html.includes(label), `the Curiosity page does not render the ${label} section`);
     }
     for (const layer of ['A · Textual', 'B · Traditional', 'C · Analysis', 'D · Inference']) {
@@ -122,7 +126,8 @@ async function main() {
     assert.ok(order('Speak Better') < order('Mythology · Character of the Day'), 'Speak Better must come before Mythology');
     assert.ok(order('Mythology · Character of the Day') < order('Chemistry of the Day'), 'the science pair must follow Mythology');
     assert.ok(order('Chemistry of the Day') < order('Physics of the Day'), 'chemistry is the left half of the science pair');
-    assert.ok(order('Physics of the Day') < order('A Few Minutes of Literature'), 'the science pair must come before the reading cards');
+    assert.ok(order('Physics of the Day') < order('Biology of the Day'), 'biology is the third card of the science row');
+    assert.ok(order('Biology of the Day') < order('A Few Minutes of Literature'), 'the science cards must come before the reading cards');
     assert.ok(order('Mythology · Character of the Day') < order('A Few Minutes of Literature'), 'Mythology must come before the reading cards');
     assert.ok(order('A Few Minutes of Literature') < order('Brain Sharpener'), 'the reading cards must keep their existing order');
   }
@@ -163,6 +168,6 @@ async function main() {
   assert.equal(restored.general.displayName, 'Rajesh');
   assert.equal(restored.general.defaultTaskDuration, 45);
   assert.deepEqual(restored.notifications, defaultSettings.notifications);
-  console.log('PASS 366 daily selections (12 Speak Better lessons and 12 myth characters, every claim layer-labelled and every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip');
+  console.log('PASS 366 daily selections (12 each of Speak Better lessons, myth characters, chemistry, physics and biology concepts; every claim layer-labelled; every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip');
 }
 main().catch((error) => { console.error(error); process.exit(1); });

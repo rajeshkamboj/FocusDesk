@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/card';
@@ -8,6 +8,8 @@ import { Input, Select } from '@/components/ui/form';
 import { IconPlus, IconTasks } from '@/components/ui/icons';
 import { Tabs } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/layout/page-header';
+import { BulkActionBar, BulkDeleteDialog, SelectionCheckbox, pluralCount, useBulkSelection } from '@/components/ui/bulk-select';
+import { isTimerRunning } from '@/lib/timer';
 import { TaskRow } from './task-row';
 import { TaskFormModal } from './task-form-modal';
 import { todayISO, addDays, isoWeekKey } from '@/lib/dates';
@@ -27,13 +29,20 @@ const FILTERS = [
 ];
 
 export function TasksScreen() {
-  const { data } = useData();
+  const { data, actions } = useData();
   const [filter, setFilter] = useState<FilterId>('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [goalFilter, setGoalFilter] = useState('');
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [sort, setSort] = useState<TaskSort>('deadline-asc');
+  // Bulk select & delete (Phase 6). Selection is this screen's view state —
+  // never persisted, cleared when the delete succeeds, kept when it fails so
+  // the user can retry exactly what they had picked.
+  const [selectMode, setSelectMode] = useState(false);
+  const selection = useBulkSelection();
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const today = todayISO();
   const tomorrow = addDays(today, 1);
@@ -83,16 +92,92 @@ export function TasksScreen() {
   const activeProjects = data.projects.filter((p) => p.status !== 'archived');
   const activeGoals = data.goals.filter((g) => g.status !== 'archived');
 
+  /* ---- Bulk selection (Phase 6) ---- */
+
+  // This screen has no pagination: everything matching the filters is on the
+  // page, so "visible" is "matching" — select-all means exactly what the user
+  // can see under the current filters, and never reaches past them.
+  const visibleIds = useMemo(() => filtered.map((t) => t.id), [filtered]);
+  const filtersActive = filter !== 'all' || projectFilter !== '' || goalFilter !== '' || query.trim() !== '';
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selection.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selection.has(id));
+  const selectAllLabel = `${allVisibleSelected ? 'Deselect' : 'Select'} all ${pluralCount(visibleIds.length, 'task')}${
+    filtersActive ? ' matching the current filters' : ' in view'
+  }`;
+
+  const selectedTasks = data.tasks.filter((t) => selection.has(t.id));
+  const doomedSelected = new Set(selectedTasks.map((t) => t.id));
+  const selectedSubtaskCount = data.subtasks.filter((s) => doomedSelected.has(s.parentTaskId)).length;
+  const selectedSessionCount = data.timerSessions.filter((s) => s.taskId && doomedSelected.has(s.taskId)).length;
+  const selectedRunningCount = selectedTasks.filter(isTimerRunning).length;
+
+  // Escape leaves select mode (but never interrupts an open confirm dialog —
+  // the modal owns Escape while it is up).
+  useEffect(() => {
+    if (!selectMode || bulkOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitSelectMode();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, bulkOpen]);
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    selection.clear();
+  }
+
+  const confirmBulkDelete = async () => {
+    setBulkBusy(true);
+    try {
+      await actions.deleteTasks([...selection.ids]);
+      selection.clear();
+      setBulkOpen(false);
+    } catch {
+      // The provider re-read the lists and told the user what failed. The
+      // selection and the dialog stay open: what survived is now visible and
+      // retrying only ever touches what is genuinely still there.
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkDialogLines = [
+    'This will permanently delete:',
+    `• ${pluralCount(selectedTasks.length, 'task')}`,
+    ...(selectedSubtaskCount > 0
+      ? [`  – and ${pluralCount(selectedSubtaskCount, 'subtask')} that ${selectedSubtaskCount === 1 ? 'hangs' : 'hang'} off them`]
+      : []),
+    ...(selectedSessionCount > 0
+      ? [`  – and ${pluralCount(selectedSessionCount, 'recorded focus session', 'recorded focus sessions')} on them`]
+      : []),
+    ...(selectedRunningCount > 0
+      ? [`${selectedRunningCount} of the selected tasks ${selectedRunningCount === 1 ? 'has' : 'have'} a running timer — that timer stops and its unrecorded time is discarded.`]
+      : []),
+    'The tasks’ projects, project milestones and goals will NOT be deleted.',
+    'This action cannot be undone.',
+  ];
+
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Tasks"
         subtitle="Everything you have committed to — planned, in progress, waiting or done."
         actions={
-          <Button variant="primary" onClick={() => setAddOpen(true)}>
-            <IconPlus width={16} height={16} />
-            Add Task
-          </Button>
+          <>
+            <Button
+              variant={selectMode ? 'soft' : 'secondary'}
+              aria-pressed={selectMode}
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            >
+              {selectMode ? 'Done' : 'Select'}
+            </Button>
+            <Button variant="primary" onClick={() => setAddOpen(true)}>
+              <IconPlus width={16} height={16} />
+              Add Task
+            </Button>
+          </>
         }
       />
 
@@ -164,6 +249,35 @@ export function TasksScreen() {
         </div>
       </div>
 
+      {selectMode ? (
+        <BulkActionBar>
+          <SelectionCheckbox
+            checked={allVisibleSelected}
+            indeterminate={someVisibleSelected && !allVisibleSelected}
+            onChange={() => selection.setAll(visibleIds, !allVisibleSelected)}
+            label={selectAllLabel}
+          />
+          <span className="text-[13px] text-ink-2" aria-live="polite">
+            {filtersActive ? `${pluralCount(visibleIds.length, 'task')} match the current filters · ` : `${pluralCount(visibleIds.length, 'task')} in view · `}
+            {selection.count > 0 ? `${pluralCount(selection.count, 'task')} selected` : 'Nothing selected'}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => selection.clear()} disabled={selection.count === 0}>
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => setBulkOpen(true)}
+              disabled={selection.count === 0}
+              aria-label={`Delete ${pluralCount(selection.count, 'selected task')}`}
+            >
+              Delete selected{selection.count > 0 ? ` (${selection.count})` : ''}
+            </Button>
+          </span>
+        </BulkActionBar>
+      ) : null}
+
       {groups.length === 0 ? (
         <EmptyState
           icon={<IconTasks width={24} height={24} />}
@@ -186,7 +300,15 @@ export function TasksScreen() {
               </div>
               <div className="space-y-0.5">
                 {group.tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} />
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    selection={
+                      selectMode
+                        ? { selected: selection.has(task.id), onToggle: () => selection.toggle(task.id) }
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             </section>
@@ -200,6 +322,16 @@ export function TasksScreen() {
       </p>
 
       <TaskFormModal open={addOpen} onClose={() => setAddOpen(false)} />
+
+      <BulkDeleteDialog
+        open={bulkOpen}
+        title={`Delete ${pluralCount(selectedTasks.length, 'task')}?`}
+        lines={bulkDialogLines}
+        confirmLabel={`Delete ${pluralCount(selectedTasks.length, 'task')}`}
+        busy={bulkBusy}
+        onConfirm={() => void confirmBulkDelete()}
+        onCancel={() => setBulkOpen(false)}
+      />
     </div>
   );
 }

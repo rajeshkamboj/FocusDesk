@@ -158,6 +158,23 @@ class Collection<T extends { id: string; createdAt?: string }, C>
     (data[this.key] as unknown as T[]) = (data[this.key] as unknown as T[]).filter((x) => x.id !== id);
     this.persist();
   }
+
+  /**
+   * Generic bulk removal: exactly the listed rows disappear and nothing else —
+   * the same contract as `delete`, applied to many ids in ONE write. Ids that
+   * do not exist are ignored; a selection that matches nothing writes nothing
+   * (no store version bump, no cross-tab event).
+   */
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const data = this.db();
+    const doomed = new Set(ids);
+    const list = data[this.key] as unknown as T[];
+    const kept = list.filter((x) => !doomed.has(x.id));
+    if (kept.length === list.length) return;
+    (data[this.key] as unknown as T[]) = kept;
+    this.persist();
+  }
 }
 
 /**
@@ -226,6 +243,24 @@ class LocalProjectMilestones implements ProjectMilestoneRepository {
     const data = this.db();
     data.tasks = data.tasks.map((t) => (t.projectMilestoneId === id ? { ...t, projectMilestoneId: undefined } : t));
     data.projectMilestones = data.projectMilestones.filter((m) => m.id !== id);
+    this.persist();
+  }
+
+  /**
+   * Bulk version of `delete` — the same referential behaviour in ONE write:
+   * tasks that used any of the listed milestones are detached (kept!), the
+   * milestone rows disappear, nothing else changes. A selection that matches
+   * no stored milestone writes nothing.
+   */
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const data = this.db();
+    const doomed = new Set(ids);
+    if (!data.projectMilestones.some((m) => doomed.has(m.id))) return;
+    data.tasks = data.tasks.map((t) =>
+      t.projectMilestoneId && doomed.has(t.projectMilestoneId) ? { ...t, projectMilestoneId: undefined } : t,
+    );
+    data.projectMilestones = data.projectMilestones.filter((m) => !doomed.has(m.id));
     this.persist();
   }
 
@@ -481,6 +516,98 @@ export class LocalRepository implements AppRepository {
             : session.durationSeconds,
       }),
     );
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Bulk deletion (Phase 6) — see ./repository.ts for the contracts.    */
+  /* Every aggregate is ONE current() → mutate → ONE write(): the store   */
+  /* flips from "all rows present" to "all rows removed" atomically, so a  */
+  /* second tab can never observe, and never re-persist, half a deletion.  */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Removes exactly the listed tasks plus the rows that belong to them alone:
+   * their subtasks and their recorded timer sessions (mirroring the provider's
+   * single-delete cascade). Surviving tasks that pointed at a deleted task as
+   * their parent lose only that link — the same `SET NULL` the Supabase
+   * foreign key performs. Projects, milestones and goals are never touched.
+   */
+  async deleteTasks(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const data = this.current();
+    const doomed = new Set(ids);
+    if (!data.tasks.some((t) => doomed.has(t.id))) return;
+    data.tasks = data.tasks
+      .filter((t) => !doomed.has(t.id))
+      .map((t) => (t.parentTaskId && doomed.has(t.parentTaskId) ? { ...t, parentTaskId: undefined } : t));
+    data.subtasks = data.subtasks.filter((s) => !doomed.has(s.parentTaskId));
+    data.timerSessions = data.timerSessions.filter((s) => !doomed.has(s.taskId));
+    this.write();
+  }
+
+  /**
+   * Removes the listed milestones, detaching their tasks first — the batched
+   * form of the single milestone delete, in the same single write.
+   */
+  async deleteProjectMilestones(ids: string[]): Promise<void> {
+    await this.projectMilestones.deleteMany(ids);
+  }
+
+  /**
+   * Removes the listed projects and their milestones. Their tasks SURVIVE and
+   * are detached (project link and milestone link both cleared in the same
+   * write); goals are never touched. This mirrors what the Supabase foreign
+   * keys do for one project delete — `ON DELETE CASCADE` for milestones,
+   * `ON DELETE SET NULL` for the task links — batched and atomic locally.
+   */
+  async deleteProjects(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const data = this.current();
+    const doomed = new Set(ids);
+    if (!data.projects.some((p) => doomed.has(p.id))) return;
+    const doomedMilestones = new Set(
+      data.projectMilestones.filter((m) => doomed.has(m.projectId)).map((m) => m.id),
+    );
+    data.tasks = data.tasks.map((t) => {
+      const losesProject = t.projectId !== undefined && doomed.has(t.projectId);
+      const losesMilestone = t.projectMilestoneId !== undefined && doomedMilestones.has(t.projectMilestoneId);
+      if (!losesProject && !losesMilestone) return t;
+      return {
+        ...t,
+        projectId: losesProject ? undefined : t.projectId,
+        projectMilestoneId: losesMilestone ? undefined : t.projectMilestoneId,
+      };
+    });
+    if (doomedMilestones.size > 0) {
+      data.projectMilestones = data.projectMilestones.filter((m) => !doomed.has(m.projectId));
+    }
+    data.projects = data.projects.filter((p) => !doomed.has(p.id));
+    // The Supabase schema also nulls monthly_priorities.project_id; clear it
+    // here so a bulk delete leaves no dangling reference in storage.
+    data.monthlyPriorities = data.monthlyPriorities.map((m) =>
+      m.projectId && doomed.has(m.projectId) ? { ...m, projectId: undefined } : m,
+    );
+    this.write();
+  }
+
+  /**
+   * Removes the listed goal rows only — projects and tasks survive, losing
+   * their goal link in the same write (the `SET NULL` the Supabase foreign
+   * keys apply automatically; matching it here keeps the local store free of
+   * dangling references after a bulk delete).
+   */
+  async deleteGoals(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const data = this.current();
+    const doomed = new Set(ids);
+    if (!data.goals.some((g) => doomed.has(g.id))) return;
+    data.goals = data.goals.filter((g) => !doomed.has(g.id));
+    data.projects = data.projects.map((p) => (p.goalId && doomed.has(p.goalId) ? { ...p, goalId: undefined } : p));
+    data.tasks = data.tasks.map((t) => (t.goalId && doomed.has(t.goalId) ? { ...t, goalId: undefined } : t));
+    data.monthlyPriorities = data.monthlyPriorities.map((m) =>
+      m.goalId && doomed.has(m.goalId) ? { ...m, goalId: undefined } : m,
+    );
+    this.write();
   }
 
   supportsProjectMilestones(): Promise<boolean> {

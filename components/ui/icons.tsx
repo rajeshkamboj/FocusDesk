@@ -347,3 +347,60 @@ export function IconLink(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * A speaking mark and an “ancient world” mark for the Curiosity sections that
+ * are about language and mythology. Same 24px grid and 1.7px stroke as the
+ * rest of the set so they never read as a different visual family.
+ */
+export function IconSpeech(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20.5 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4.5 2.6L4.8 17A7.5 7.5 0 0 1 13 4a7.5 7.5 0 0 1 7.5 7.5z" />
+      <path d="M9 12h.01M12.5 12h.01M16 12h.01" />
+    </svg>
+  );
+}
+
+export function IconMyth(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 21h18" />
+      <path d="M5 21V10.5L12 5l7 5.5V21" />
+      <path d="M9.5 21v-5.5h5V21" />
+      <path d="M12 2v3" />
+    </svg>
+  );
+}
+
+export function IconChemistry(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 3h6M10 3v6.2L5.3 17.6A2 2 0 0 0 7 20.6h10a2 2 0 0 0 1.7-3L14 9.2V3" />
+      <path d="M7.4 14h9.2" />
+    </svg>
+  );
+}
+
+export function IconPhysics(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="2.2" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(120 12 12)" />
+    </svg>
+  );
+}
+
+export function IconBiology(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 3c0 5 10 6 10 9s-10 4-10 9" />
+      <path d="M17 3c0 5-10 6-10 9s10 4 10 9" />
+      <path d="M8.4 12h7.2" />
+      <path d="M8 6.6h8M8 17.4h8" />
+    </svg>
+  );
+}
+

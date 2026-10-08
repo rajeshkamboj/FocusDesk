@@ -158,12 +158,17 @@ TZ=America/New_York npx tsx scripts/verify-focused-time.tsx
 npm run build && npx tsx scripts/verify-priority-input.tsx
 ```
 
-`scripts/verify-mobile-layout.tsx` is a headless layout audit. It reads the compiled Tailwind stylesheet out of `.next/`, resolves every class on every rendered element for a given viewport width (honouring the `sm:`/`md:`/`lg:` media blocks and stylesheet source order), and runs a CSS intrinsic-sizing pass — `min` and `max-content` per element, combined with the real flex/grid rules — over every screen in both its empty and populated state. It fails if any page forces the document wider than 320 / 360 / 390 / 430px, and prints the chain of elements that explains the excess. It also asserts the things that must stay true: no global `overflow-x: hidden`, the Tasks filter strip scrolls inside itself rather than scrolling the page, the empty state is not vertically centred, and the desktop widths and paddings are unchanged. Run a build first:
+`scripts/verify-mobile-layout.tsx` is a headless layout audit. It reads the compiled Tailwind stylesheet out of `.next/`, resolves every class on every rendered element for a given viewport width (honouring the `sm:`/`md:`/`lg:` media blocks and stylesheet source order), and runs a CSS intrinsic-sizing pass — `min` and `max-content` per element, combined with the real flex/grid rules — over every screen in both its empty and populated state — including Curiosity, which is rendered with a real briefing for the current date so all four daily categories are measured. It fails if any page forces the document wider than 320 / 360 / 390 / 430px, and prints the chain of elements that explains the excess. It also asserts the things that must stay true: no global `overflow-x: hidden`, the Tasks filter strip scrolls inside itself rather than scrolling the page, the empty state is not vertically centred, and the desktop widths and paddings are unchanged. Run a build first:
 ```bash
 npm run build && npx tsx scripts/verify-mobile-layout.tsx
 WIDTHS=300,320 npx tsx scripts/verify-mobile-layout.tsx   # probe other widths
 ```
 Text is measured from a per-character advance table, not a real font, so text-derived numbers are estimates — it is precise about declared widths, padding, gaps and the flex/grid rules, which is where layout overflow actually comes from.
+
+`scripts/verify-daily-content.tsx` checks the Curiosity briefing's editorial content. Over 366 consecutive dates it asserts that the daily selections are deterministic for a date and different from the next day, that each Speak Better lesson carries three to five confusable words with English and Hindi meanings (the Hindi must be Devanagari, not transliteration), that every mythology claim is labelled with its evidence layer (A textual / B traditional / C analysis / D inference) and that each character records where traditions differ, that the chemistry, physics and biology concepts each carry all six parts, that the rotations actually vary across the year, and that the real page still renders all nine original cards with the new sections in order:
+```bash
+npx tsx scripts/verify-daily-content.tsx
+```
 
 `scripts/verify-review-stats.ts` checks the Review date semantics in isolation — completed work is dated by `completedAt` (when the work actually happened), planned work by `scheduledDate` (when it was meant to happen). No DOM needed, and it is worth running in more than one timezone since completion is matched on the **local** calendar day:
 ```bash

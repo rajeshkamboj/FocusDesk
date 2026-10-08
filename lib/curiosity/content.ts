@@ -4,6 +4,11 @@ import type {
   HistoryEvent,
   LiteratureItem,
 } from './types';
+import { speakBetterLessons } from './content/speak-better';
+import { mythCharacters } from './content/mythology';
+import { chemistryConcepts } from './content/chemistry';
+import { physicsConcepts } from './content/physics';
+import { biologyConcepts } from './content/biology';
 
 const books = [
   {
@@ -381,9 +386,32 @@ const brainSharpeners: BrainSharpener[] = [
 /* Daily Editorial Aggregation                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The four older editorial collections cycle at 3 / 3 / 3 / 8 / 6, so the mix
+ * they produce repeats every 24 days. The newer daily categories are offset
+ * from one another on purpose: each stays individually deterministic for a
+ * given date, but they do not all advance in lockstep, so the briefing does not
+ * return to the same combination of everything at once.
+ */
+const SPEAK_BETTER_OFFSET = 5;
+const MYTHOLOGY_OFFSET = 2;
+const CHEMISTRY_OFFSET = 7;
+const PHYSICS_OFFSET = 11;
+const BIOLOGY_OFFSET = 3;
+
 export function dailyEditorial(date: string): Pick<
   CuriosityBriefing,
-  'book' | 'oneThing' | 'learning' | 'history' | 'literature' | 'sharpener'
+  | 'book'
+  | 'oneThing'
+  | 'learning'
+  | 'history'
+  | 'literature'
+  | 'sharpener'
+  | 'speakBetter'
+  | 'mythology'
+  | 'chemistry'
+  | 'physics'
+  | 'biology'
 > {
   const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
   const safeDay = Number.isFinite(day) ? Math.abs(day) : 0;
@@ -395,5 +423,10 @@ export function dailyEditorial(date: string): Pick<
     history: historyEvents.find((event) => event.date === new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }) && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible') ?? null,
     literature: literatureWorks[safeDay % literatureWorks.length],
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
+    speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],
+    mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
+    chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
+    physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],
+    biology: biologyConcepts[(safeDay + BIOLOGY_OFFSET) % biologyConcepts.length],
   };
 }

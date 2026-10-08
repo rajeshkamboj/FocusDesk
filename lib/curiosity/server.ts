@@ -128,4 +128,7 @@ async function buildBriefing(date: string): Promise<CuriosityBriefing> {
 
 // Refresh during the day so the briefing can pick up newly published stories,
 // while still avoiding a feed request for every page view.
-export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v7', date], { revalidate: 3_600, tags: [`curiosity:v7:${date}`] })();
+// The cache key carries a version: a briefing cached under an older key would
+// render without the newer daily sections for up to an hour, so the key must
+// be bumped whenever the briefing shape or the editorial corpus changes.
+export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v10', date], { revalidate: 3_600, tags: [`curiosity:v10:${date}`] })();

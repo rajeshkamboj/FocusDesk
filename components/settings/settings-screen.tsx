@@ -221,8 +221,10 @@ export function SettingsScreen() {
               <Badge tone="neutral">This browser does not support notifications</Badge>
             )}
             <p className="w-full text-[11.5px] leading-relaxed text-ink-3">
-              Reminders are delivered while Pace is open. True background notifications will arrive together with
-              Supabase sync — this is a future-ready feature, not one that pretends to work today.
+              Reminders fire while FocusDesk is open, minimized, or in a background tab, and catch up after sleep,
+              wake, or a restart. Fully closing the browser cannot be guaranteed on the web without a push server —
+              missed reminders are delivered the next time you open FocusDesk. Allow notifications above; blocking
+              them in the browser silently skips delivery.
             </p>
           </div>
         </section>

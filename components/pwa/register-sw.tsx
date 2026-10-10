@@ -7,7 +7,7 @@ export function RegisterSW() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       const register = () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {
           /* offline support unavailable — the app still works online */
         });
       };

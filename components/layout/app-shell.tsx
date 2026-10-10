@@ -11,7 +11,7 @@ import { QuickAdd } from './quick-add';
 import { TimerDock } from './timer-dock';
 import { FocusMode } from './focus-mode';
 import { RegisterSW } from '@/components/pwa/register-sw';
-import { useNotificationScheduler } from '@/lib/notifications';
+import { useNotificationNavigation, useNotificationScheduler } from '@/lib/notifications';
 import { applyTheme, watchSystemTheme } from '@/lib/theme';
 
 const LAST_SECTION_KEY = 'pace.lastSection';
@@ -20,6 +20,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { ready, data } = useData();
   useNotificationScheduler();
+  useNotificationNavigation();
 
   useEffect(() => {
     if (pathname && pathname !== '/') {

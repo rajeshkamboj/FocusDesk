@@ -146,6 +146,65 @@ what remains. There is no undo — a JSON export (Settings → Data) is the esca
 ## PWA installation
 Open the deployed site in Chrome or Edge and click **Install** in the address bar. To launch it when Windows starts, press `Win + R`, type `shell:startup`, and put the installed app's shortcut there.
 
+## Background reminders
+
+FocusDesk is a **Next.js PWA**, not an Electron desktop app. Reminders are scheduled on-device from the existing task/priority data — there is no push server, no VAPID keys, and no extra backend to configure. Supabase, when used, is still only a data store.
+
+### Architecture
+
+1. **Schedule (pure).** `lib/reminder-schedule.ts` turns current tasks, daily priorities and Settings → Notifications into a list of events. Times are unchanged: morning priority at **08:00 local**, deadline scan at **09:00 local** (due today / due tomorrow), evening review at **20:00 local**, and each task's own reminder timestamp. Fire keys are the same shape as before (`morning-YYYY-MM-DD`, `evening-YYYY-MM-DD`, `task-<id>-<iso>`, `deadline-<id>-<dueDate>`).
+2. **Delivery while a FocusDesk document exists** (foreground, minimized, or a background tab). `useNotificationScheduler` in `lib/notifications.ts` runs on an exact timeout (capped at 60s) and again on `visibilitychange`, `focus`, `pageshow`, `online`, Page Lifecycle `resume`, and timezone-offset changes. Notifications are shown with `ServiceWorkerRegistration.showNotification` when a worker is available, otherwise the page `Notification` constructor.
+3. **Service worker.** `public/sw.js` shows the OS notification, claims the fire key in IndexedDB, and on click **focuses an existing client** and posts `FOCUSDESK_NAVIGATE` so the app can `router.push` to the task (`/tasks?focus=<id>`), Today, or Review **without unloading** the document (an unload would pause running timers). If no client exists, it `openWindow`s.
+4. **Fired-key store.** IndexedDB `pace.notifications.v1` is shared by the page and the worker so two tabs, a restart, and a SW catch-up cannot deliver the same key twice. The previous `localStorage` set (`pace.notifications.fired.v1`) is imported once and still mirrored, so existing keys survive the migration.
+5. **Fully closed browser.** There is no OS alarm API for a website. If the experimental **Notification Triggers** (`TimestampTrigger`) API is present, future events are armed as triggered notifications. **Periodic Background Sync** (Chrome, typically installed PWAs, coarse interval) wakes the worker to catch up from the snapshot. Otherwise a reminder whose time passed while FocusDesk was fully exited is delivered the next time the app is opened.
+
+### Supported states and platforms
+
+| State | What happens |
+|---|---|
+| App focused in a tab | Notification at the scheduled time (or immediately if already overdue and unfired). |
+| Minimized or unfocused tab / installed PWA still in memory | Same schedule; the service worker shows the OS notification. Chromium may throttle timers to ~1 minute — acceptable because the checker also uses a 60s cap and catch-up on focus. |
+| Machine slept through the time, then woke with the app still running | Catch-up on `visibilitychange` / `resume` / the next check. Same-day morning/evening/deadline reminders still fire once (the old 60-minute window is no longer an upper bound, so a nap cannot swallow them). Yesterday's daily reminders are not resurrected. Overdue **task** reminders still fire until they have been delivered. |
+| App restarted | Persisted fire keys are restored; already-delivered reminders stay quiet; overdue unfired ones deliver once. |
+| App fully closed (no browser process) | **Not guaranteed** on the web. Delivered only if Notification Triggers or Periodic Background Sync ran, otherwise on next launch. |
+| Notification permission denied or unsupported | Scheduler is a no-op. Settings shows the blocked state; nothing throws. |
+
+Desktop Chromium (Chrome/Edge) and installed PWAs are the intended hosts. Safari/iOS has tighter background limits: notifications while the document is gone generally require a real push service, which this phase does not add. Firefox supports the Notification API while the page exists; Periodic Background Sync and Notification Triggers are Chromium-oriented.
+
+### Permissions / setup
+
+1. Settings → Notifications: enable the kinds you want (all on by default).
+2. Click **Enable browser notifications** and allow them. If the browser reports *Blocked*, unblock FocusDesk in site settings — the app cannot override that.
+3. Optional: install the PWA (better chance of Periodic Background Sync / surviving minimize).
+4. No `.env`, Vercel, or Supabase changes are required for reminders.
+
+Clicking a notification focuses FocusDesk and navigates to the associated task, Today (morning priority), or Review (evening). Task ids and timestamps are validated before anything is scheduled or opened.
+
+### Tests performed (actual results)
+
+| Check | Result |
+|---|---|
+| `npx tsx scripts/verify-background-reminders.ts` | Passed (UTC / offset 0) |
+| `TZ=Asia/Kolkata npx tsx scripts/verify-background-reminders.ts` | Passed (offset −330) |
+| `TZ=America/New_York npx tsx scripts/verify-background-reminders.ts` | Passed (offset 240) |
+| `npx tsx scripts/verify-review-stats.ts` | Passed |
+| `npx tsx scripts/verify-workflow.tsx` | Passed |
+| `npx tsc --noEmit` | Passed |
+| `npm run lint` | Passed, 0 errors |
+| `npm run build` | Passed (Next.js 16.3.7 production build) |
+
+The reminder suite actually asserted: due-at-08:00/09:00/20:00 local; task reminder at its ISO instant; same due set for a hidden document; sleep-through-the-hour still due later that local day; overdue task reminder due on “restart”; persisted fire keys not re-delivered; two concurrent delivery paths claim a key once; permission denial delivers nothing; completed/archived/invalid records skipped; snapshot versioning and timezone-offset filtering; `public/sw.js` contains click / `openWindow` / periodic sync / IndexedDB claim / path checks.
+
+**Not claimed:** a real OS notification while a browser window was minimized, a machine sleep cycle, or a fully closed browser. This sandbox has no notification-capable browser attached to those scenarios. Those rows above are the scheduler/SW contract tests, not live OS deliveries.
+
+### Remaining limitations
+
+- A website cannot register a true OS alarm. Fully-exited delivery is best-effort and Chromium-specific.
+- No web-push backend is configured in this repository on purpose (local-first, no extra service).
+- iOS Safari will not deliver while the PWA is fully closed without Apple Push.
+- Two different mechanisms never both *complete* a delivery (IndexedDB claim + notification `tag`), but a platform that shows a triggered notification without waking JS could theoretically display one that the next launch would also consider due — claim-on-show and `getNotifications()` on startup close that gap when the notification is still in the tray.
+- Timezone changes drop stale hour-based events from a SW snapshot until the page rewrites it; absolute task reminder instants are kept.
+
 ## Workflow check
 `scripts/verify-workflow.tsx` runs the full workflow headlessly (priority → tasks → complete → move to tomorrow → postponement count → deadline → weekly stats → next week's priority → persistence):
 ```bash
@@ -225,8 +284,15 @@ npx tsx scripts/verify-learnings-backup.ts path/to/pace-export.json
 
 Install the optional tools in one command — a later `npm i --no-save` removes packages installed by an earlier one: `npm i --no-save jsdom tsx @electric-sql/pglite`.
 
+`scripts/verify-background-reminders.ts` checks the reminder scheduler in isolation (local hours, overdue catch-up after a “restart”, sleep-through-the-hour, duplicate suppression across two delivery paths, permission-denial no-op, invalid ids/timestamps, snapshot versioning, timezone-offset filtering, and that `public/sw.js` still contains click / sync / claim / navigate). Daily hours are **local**, so run it in more than one timezone:
+```bash
+npx tsx scripts/verify-background-reminders.ts
+TZ=Asia/Kolkata     npx tsx scripts/verify-background-reminders.ts
+TZ=America/New_York npx tsx scripts/verify-background-reminders.ts
+```
+
 ## Known limitations (v1)
-- Reminders fire only while the app is open. Background push needs a backend.
+- Fully closing the browser still cannot guarantee on-time reminders on the web; see *Background reminders* above. Missed ones fire on the next launch.
 - Supabase mode has no auth or sync conflict handling yet, so it's single-user only.
 - Another tab's changes are merged safely on write, but a tab shows them only after a reload — there is no live cross-tab UI refresh.
 - Recurrence is in the data model but has no UI yet.

@@ -19,7 +19,7 @@ async function main() {
   const { WellbeingReview } = await import('../components/review/wellbeing-review');
   const { CalendarScreen } = await import('../components/calendar/calendar-screen');
   const { todayISO, addDays, addMonths, calendarGridStart, startOfWeek, endOfWeek, isoWeekKey, monthKey, monthName, formatFocusedTime } = await import('../lib/dates');
-  const { weeklyReviewStats, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst, monthlyWellbeingTotals } = await import('../lib/selectors');
+  const { weeklyReviewStats, focusedSecondsByDay, monthlyReviewStats, dailyReviewStats, focusedSeconds, projectFocusedSeconds, projectProgress, tasksOnDate, subtasksForTask, uncompletedTasksFirst, monthlyWellbeingTotals } = await import('../lib/selectors');
   const { checkpointTimingPatch, elapsedActiveSeconds, interruptedTimerPatch, isTimerPaused, isTimerRunning, runningTimerTasks } = await import('../lib/timer');
 
   let ctx: ReturnType<typeof useData> | null = null;
@@ -827,8 +827,12 @@ async function main() {
   ok(dayStats.focusedSeconds === focusedSeconds(dayStats.completed),
      'Daily review total equals the sum of its completed tasks (same value, same field)');
   const weekStats = weeklyReviewStats(c().data, startOfWeek(today), endOfWeek(today));
-  ok(weekStats.focusedSeconds === focusedSeconds(weekStats.completed) && weekStats.projectsWorkedOn.some((p) => p.project.id === project.id && p.focusedSeconds >= 78 * 60 - 1),
-     'Weekly review total and per-project focused time come from the same tasks');
+  const liveIds = new Set(c().data.tasks.filter((task) => !task.archived).map((task) => task.id));
+  const recordedWeek = [...focusedSecondsByDay(c().data.timerSessions, liveIds)]
+    .filter(([date]) => date >= startOfWeek(today) && date <= endOfWeek(today))
+    .reduce((sum, [, seconds]) => sum + seconds, 0);
+  ok(weekStats.focusedSeconds === recordedWeek && weekStats.focusedTime.byProject.reduce((sum, entry) => sum + entry.seconds, 0) === recordedWeek,
+     'Weekly review total and per-project focused time reconcile to saved sessions inside the week');
   const monthStats = monthlyReviewStats(c().data, today.slice(0, 7));
   ok(monthStats.focusedSeconds === focusedSeconds(monthStats.completed),
      'Monthly review total equals the sum of its completed tasks');

@@ -12,11 +12,12 @@ import { BulkActionBar, BulkDeleteDialog, SelectionCheckbox, pluralCount, useBul
 import { isTimerRunning } from '@/lib/timer';
 import { TaskRow } from './task-row';
 import { TaskFormModal } from './task-form-modal';
+import { useLocalDate } from '@/lib/use-local-date';
 import { todayISO, addDays, isoWeekKey } from '@/lib/dates';
-import { compareTasks, dailyPriorityTimerTaskId } from '@/lib/selectors';
+import { compareTasks, dailyPriorityTimerTaskId, overdueTasks, repeatedlyPostponedTasks } from '@/lib/selectors';
 import type { TaskSort } from '@/lib/selectors';
 
-type FilterId = 'all' | 'today' | 'upcoming' | 'unscheduled' | 'someday' | 'completed' | 'cancelled';
+type FilterId = 'all' | 'today' | 'upcoming' | 'unscheduled' | 'someday' | 'completed' | 'cancelled' | 'overdue' | 'postponed';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -26,6 +27,8 @@ const FILTERS = [
   { id: 'someday', label: 'Someday' },
   { id: 'completed', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'postponed', label: 'Postponed 3×+' },
 ];
 
 export function TasksScreen() {
@@ -44,7 +47,7 @@ export function TasksScreen() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const today = todayISO();
+  const today = useLocalDate(todayISO());
   const tomorrow = addDays(today, 1);
 
   const filtered = useMemo(() => {
@@ -61,6 +64,8 @@ export function TasksScreen() {
     else if (filter === 'someday') list = list.filter((t) => t.status === 'someday');
     else if (filter === 'completed') list = list.filter((t) => t.status === 'completed');
     else if (filter === 'cancelled') list = list.filter((t) => t.status === 'cancelled');
+    else if (filter === 'overdue') list = overdueTasks(list, today);
+    else if (filter === 'postponed') list = repeatedlyPostponedTasks(list);
     // 'all' keeps every status visible.
 
     if (projectFilter) list = list.filter((t) => t.projectId === projectFilter);
@@ -248,6 +253,12 @@ export function TasksScreen() {
           </div>
         </div>
       </div>
+
+      {filter === 'overdue' ? (
+        <p className="mb-3 text-xs text-ink-3">Open tasks scheduled before today — independent of their deadlines. Someday tasks are excluded.</p>
+      ) : filter === 'postponed' ? (
+        <p className="mb-3 text-xs text-ink-3">Open tasks postponed at least three times. Someday tasks are excluded.</p>
+      ) : null}
 
       {selectMode ? (
         <BulkActionBar>

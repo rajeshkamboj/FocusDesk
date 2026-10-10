@@ -630,6 +630,13 @@ export interface PeriodFocusedTime {
   /** Each dimension is exclusive; its rows (including unassigned) sum to seconds. */
   byProject: { project?: Project; seconds: number }[];
   byGoal: { goal?: Goal; seconds: number }[];
+  /**
+   * Tasks credited in this period whose `projectId` points at a project that no
+   * longer exists. Their time is real and is already reported in the
+   * unassigned row — this count exists only so that row's label can say so
+   * instead of silently mixing "never assigned" with "project deleted".
+   */
+  orphanedTaskCount: number;
   /** Earliest available saved run, NOT the migration date or a guarantee of coverage. */
   firstAvailableSessionDate?: ISODate;
 }
@@ -674,11 +681,13 @@ export function focusedTimeInRange(
   }
   const projectSeconds = new Map<string | undefined, number>();
   const goalSeconds = new Map<string | undefined, number>();
+  let orphanedTaskCount = 0;
   for (const [taskId, seconds] of byTask) {
     const task = tasks.get(taskId)!;
     const project = task.projectId ? projects.get(task.projectId) : undefined;
     const goal = (task.goalId ? goals.get(task.goalId) : undefined)
       ?? (project?.goalId ? goals.get(project.goalId) : undefined);
+    if (task.projectId && !project) orphanedTaskCount += 1;
     projectSeconds.set(project?.id, (projectSeconds.get(project?.id) ?? 0) + seconds);
     goalSeconds.set(goal?.id, (goalSeconds.get(goal?.id) ?? 0) + seconds);
   }
@@ -690,6 +699,7 @@ export function focusedTimeInRange(
       .sort((a, b) => b.seconds - a.seconds || (a.project?.name ?? '').localeCompare(b.project?.name ?? '')),
     byGoal: [...goalSeconds].map(([id, seconds]) => ({ goal: id ? goals.get(id) : undefined, seconds }))
       .sort((a, b) => b.seconds - a.seconds || (a.goal?.name ?? '').localeCompare(b.goal?.name ?? '')),
+    orphanedTaskCount,
     firstAvailableSessionDate,
   };
 }

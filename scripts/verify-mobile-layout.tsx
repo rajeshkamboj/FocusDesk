@@ -630,6 +630,51 @@ async function main() {
       startedAt: combineDateTime(startOfWeek(today), '09:00'),
       endedAt: combineDateTime(startOfWeek(today), '09:30'), durationSeconds: 1800,
     });
+    // The Review charts only render once there is recorded time, and only then
+    // are they measured at 320px. Spread runs across five days of the week and
+    // add a long project name, unlinked work and a task whose project is gone —
+    // the three things a project bar has to lay out.
+    const chartDays = [0, 1, 2, 4, 6].map((offset) => addDays(startOfWeek(today), offset));
+    snapshot.projects.push({
+      id: 'mobile-chart-project', name: 'Quarterly Infrastructure Modernisation Programme Two',
+      status: 'active', createdAt: combineDateTime(addDays(today, -20), '09:00'),
+    });
+    snapshot.tasks.push({
+      id: 'mobile-chart-linked', title: 'Timed work inside the second long-named project',
+      status: 'planned', priority: 'medium', projectId: 'mobile-chart-project',
+      createdAt: combineDateTime(addDays(today, -20), '09:00'), tags: [], postponementCount: 0, archived: false,
+    }, {
+      id: 'mobile-chart-loose', title: 'Timed work with no project at all',
+      status: 'planned', priority: 'medium', createdAt: combineDateTime(addDays(today, -20), '09:00'),
+      tags: [], postponementCount: 0, archived: false,
+    }, {
+      id: 'mobile-chart-orphan', title: 'Timed work whose project was deleted',
+      status: 'planned', priority: 'medium', projectId: 'mobile-deleted-project',
+      createdAt: combineDateTime(addDays(today, -20), '09:00'), tags: [], postponementCount: 0, archived: false,
+    });
+    snapshot.timerSessions.push(
+      ...chartDays.map((date, index) => ({
+        id: `mobile-chart-session-${index}`, taskId: focusTask.id,
+        startedAt: combineDateTime(date, '09:00'),
+        endedAt: combineDateTime(date, index === 0 ? '10:20' : '09:30'),
+        durationSeconds: index === 0 ? 4800 : 1800,
+      })),
+      {
+        id: 'mobile-chart-linked-run', taskId: 'mobile-chart-linked',
+        startedAt: combineDateTime(chartDays[1], '14:00'),
+        endedAt: combineDateTime(chartDays[1], '14:45'), durationSeconds: 2700,
+      },
+      {
+        id: 'mobile-chart-loose-run', taskId: 'mobile-chart-loose',
+        startedAt: combineDateTime(chartDays[2], '11:00'),
+        endedAt: combineDateTime(chartDays[2], '11:12'), durationSeconds: 720,
+      },
+      {
+        id: 'mobile-chart-orphan-run', taskId: 'mobile-chart-orphan',
+        startedAt: combineDateTime(chartDays[4], '15:00'),
+        endedAt: combineDateTime(chartDays[4], '15:07'), durationSeconds: 420,
+      },
+    );
     snapshot.settings.general.automaticCarryForward = false;
     await c().actions.importData(snapshot);
   });
@@ -652,6 +697,35 @@ async function main() {
     await act(async () => { (btn as HTMLButtonElement).click(); });
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     clips.push(...audit(`Review · ${tab}`));
+    // The charts are only worth measuring if they are actually on screen, so
+    // name that as its own check rather than letting an empty panel pass.
+    const dayBars = host.querySelectorAll('[data-focus-by-day-chart] [data-focus-bar]').length;
+    const projectBars = host.querySelectorAll('[data-focus-by-project-chart] [data-focus-bar]').length;
+    if (tab === 'Weekly') {
+      ok(dayBars === 7, `Review · Weekly renders all seven day bars (${dayBars}) — so the audit above measured them`);
+      ok(projectBars >= 3, `Review · Weekly renders the project bars (${projectBars}) — including "No project"`);
+      // The page-level audit proves nothing overflows; it cannot prove a bar
+      // label is legible inside its own column, so measure one column directly.
+      // Where the budget comes from: a 320px phone gives the Review page 280px
+      // after its px-5 gutters (20px a side), the card spends 16px a side on
+      // p-4, and six 4px gaps sit between the seven columns. Two more pixels
+      // are held back so labels never touch their neighbour.
+      const chart = host.querySelector('[data-focus-by-day-chart]');
+      if (chart) {
+        const budget = (320 - 2 * 20 - 2 * 16 - 6 * 4) / 7;
+        const widest = Math.max(
+          ...Array.from(chart.querySelectorAll('[data-focus-bar]')).map(
+            (column) => measure(column, { vw: 320, fontSize: ROOT_FONT, bold: false, clipping: [] }).min,
+          ),
+        );
+        ok(
+          widest <= budget - 2,
+          `A day-chart column needs ${widest.toFixed(0)}px of the ${budget.toFixed(0)}px a 320px phone gives it — the label fits on one line with room to spare`,
+        );
+      }
+    } else {
+      ok(projectBars >= 3, `Review · Monthly renders the project bars (${projectBars}) — so the audit above measured them`);
+    }
   }
 
   /* -- The specific components called out in the brief --------------- */

@@ -172,6 +172,25 @@ export function formatFocusedTime(seconds?: number | null): string {
   return formatDuration(total / 60);
 }
 
+/**
+ * Short form of `formatFocusedTime` for labels that must sit inside a narrow
+ * column — a chart bar on a 320px phone, where "1h 20m" is wider than the bar
+ * itself: "0", "<1m", "45m", "1h20", "2h".
+ *
+ * Nothing is rounded differently: it is the same minutes the full phrasing
+ * shows, with the words taken out. The exact seconds-level value belongs in
+ * the element's accessible name, never in this label.
+ */
+export function compactFocusedTime(seconds?: number | null): string {
+  if (seconds == null || Number.isNaN(seconds)) return '';
+  const total = Math.max(0, Math.floor(seconds));
+  if (total < 60) return total === 0 ? '0' : '<1m';
+  const h = Math.floor(total / 3600);
+  const m = Math.round((total % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
+}
+
 /** Format an ISO timestamp as local "HH:MM". */
 export function formatTime(iso: string): string {
   const d = new Date(iso);

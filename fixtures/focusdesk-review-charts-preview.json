@@ -1,0 +1,264 @@
+{
+  "tasks": [
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "chart-done",
+      "title": "Completed work — 10h lifetime, 3h 25m recorded this week",
+      "status": "completed",
+      "priority": "high",
+      "projectId": "p-focus",
+      "scheduledDate": "2026-10-05",
+      "completedAt": "2026-10-05T04:50:00.000Z",
+      "actualDurationSeconds": 36000
+    },
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "chart-open",
+      "title": "Unfinished work — one run crosses midnight",
+      "status": "in_progress",
+      "priority": "medium",
+      "projectId": "p-focus",
+      "scheduledDate": "2026-10-05",
+      "actualDurationSeconds": 2400,
+      "pausedAt": "2026-10-05T18:50:00.000Z"
+    },
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "chart-second",
+      "title": "Second project work",
+      "status": "planned",
+      "priority": "medium",
+      "projectId": "p-ops",
+      "scheduledDate": "2026-10-08"
+    },
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "chart-loose",
+      "title": "Unassigned work — no project at all",
+      "status": "planned",
+      "priority": "low"
+    },
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "chart-orphan",
+      "title": "Work whose project was deleted",
+      "status": "planned",
+      "priority": "medium",
+      "projectId": "p-deleted"
+    },
+    {
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": true,
+      "id": "chart-archived",
+      "title": "Archived work — excluded from every chart",
+      "status": "planned",
+      "priority": "low",
+      "projectId": "p-focus"
+    }
+  ],
+  "subtasks": [],
+  "projects": [
+    {
+      "id": "p-focus",
+      "name": "Project with recorded focus",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "goalId": "g-ship"
+    },
+    {
+      "id": "p-ops",
+      "name": "Operations and Maintenance Programme — a deliberately long project name",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    },
+    {
+      "id": "p-empty",
+      "name": "Project with no recorded time this week",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    }
+  ],
+  "goals": [
+    {
+      "id": "g-ship",
+      "name": "Ship FocusDesk",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    }
+  ],
+  "inbox": [],
+  "ideas": [],
+  "learnings": [],
+  "projectMilestones": [],
+  "dailyPriorities": [
+    {
+      "id": "dp-1",
+      "date": "2026-10-10",
+      "title": "Check the charts on a phone",
+      "completed": false,
+      "postponementCount": 0
+    }
+  ],
+  "weeklyPriorities": [
+    {
+      "id": "wp-1",
+      "week": "2026-W41",
+      "title": "Finish the Review charts",
+      "primary": true,
+      "completed": false
+    }
+  ],
+  "monthlyPriorities": [
+    {
+      "id": "mp-1",
+      "month": "2026-10",
+      "title": "Ship Review visual analytics",
+      "goalId": "g-ship",
+      "completed": false
+    }
+  ],
+  "taskHistory": [],
+  "wellbeingDays": [],
+  "timerSessions": [
+    {
+      "id": "run-mon-morning",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-05T03:30:00.000Z",
+      "endedAt": "2026-10-05T04:50:00.000Z",
+      "durationSeconds": 4800
+    },
+    {
+      "id": "run-mon-afternoon",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-05T08:30:00.000Z",
+      "endedAt": "2026-10-05T09:15:00.000Z",
+      "durationSeconds": 2700
+    },
+    {
+      "id": "run-mon-evening",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-05T17:30:00.000Z",
+      "endedAt": "2026-10-05T18:00:00.000Z",
+      "durationSeconds": 1800
+    },
+    {
+      "id": "run-crosses-midnight",
+      "taskId": "chart-open",
+      "startedAt": "2026-10-05T18:10:00.000Z",
+      "endedAt": "2026-10-05T18:50:00.000Z",
+      "durationSeconds": 2400
+    },
+    {
+      "id": "run-mon-from-sunday",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-04T17:30:00.000Z",
+      "endedAt": "2026-10-04T19:00:00.000Z",
+      "durationSeconds": 5400
+    },
+    {
+      "id": "run-tue-second",
+      "taskId": "chart-second",
+      "startedAt": "2026-10-06T05:30:00.000Z",
+      "endedAt": "2026-10-06T06:00:00.000Z",
+      "durationSeconds": 1800
+    },
+    {
+      "id": "run-tue-odd-seconds",
+      "taskId": "chart-loose",
+      "startedAt": "2026-10-06T07:30:00.000Z",
+      "endedAt": "2026-10-06T07:31:00.000Z",
+      "durationSeconds": 95
+    },
+    {
+      "id": "run-wed-before-pause",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-07T04:30:00.000Z",
+      "endedAt": "2026-10-07T04:40:00.000Z",
+      "durationSeconds": 600
+    },
+    {
+      "id": "run-wed-after-resume",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-07T05:00:00.000Z",
+      "endedAt": "2026-10-07T05:10:00.000Z",
+      "durationSeconds": 600
+    },
+    {
+      "id": "run-thu-second",
+      "taskId": "chart-second",
+      "startedAt": "2026-10-08T10:30:00.000Z",
+      "endedAt": "2026-10-08T10:50:00.000Z",
+      "durationSeconds": 1200
+    },
+    {
+      "id": "run-thu-orphan",
+      "taskId": "chart-orphan",
+      "startedAt": "2026-10-08T11:30:00.000Z",
+      "endedAt": "2026-10-08T11:37:00.000Z",
+      "durationSeconds": 420
+    },
+    {
+      "id": "run-fri-loose",
+      "taskId": "chart-loose",
+      "startedAt": "2026-10-09T09:30:00.000Z",
+      "endedAt": "2026-10-09T09:36:00.000Z",
+      "durationSeconds": 400
+    },
+    {
+      "id": "run-sat-zero-length",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-10T03:30:00.000Z",
+      "endedAt": "2026-10-10T03:30:00.000Z",
+      "durationSeconds": 0
+    },
+    {
+      "id": "run-sat-archived",
+      "taskId": "chart-archived",
+      "startedAt": "2026-10-10T04:30:00.000Z",
+      "endedAt": "2026-10-10T05:30:00.000Z",
+      "durationSeconds": 3600
+    },
+    {
+      "id": "run-sun-to-monday",
+      "taskId": "chart-done",
+      "startedAt": "2026-10-11T18:00:00.000Z",
+      "endedAt": "2026-10-11T19:00:00.000Z",
+      "durationSeconds": 3600
+    }
+  ],
+  "settings": {
+    "general": {
+      "displayName": "Review charts preview",
+      "startOnToday": true,
+      "confirmTaskDeletion": true,
+      "automaticCarryForward": false,
+      "defaultTaskDuration": 30
+    },
+    "notifications": {
+      "morningPriorityReminder": false,
+      "taskReminders": false,
+      "deadlineReminders": false,
+      "eveningReviewReminder": false
+    },
+    "appearance": {
+      "theme": "system"
+    }
+  }
+}

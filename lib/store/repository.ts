@@ -215,20 +215,21 @@ export interface AppRepository {
 
   /**
    * Create the records of a validated FocusDesk project plan
-   * (Goal → Project → ProjectMilestone → Task). See lib/project-plan.ts.
+   * (Goal → Project → ProjectMilestone → Task → child Task). See lib/project-plan.ts.
    *
    * The opposite of `importData` in every way that matters:
    *
    *  - **Additive.** It only ever inserts. No existing goal, project, task,
-   *    project milestone or learning is read, updated or deleted — the plan's
+   *    project milestone or learning is updated or deleted — the plan's
    *    temporary ids are replaced by freshly generated ones, so it cannot even
    *    address an existing record.
    *  - **All or nothing.** The plan is expected to be validated already; the
    *    repository re-checks its references, then writes. Local storage does it
    *    in one write. Supabase has no cross-table transaction over PostgREST,
-   *    so it inserts parents-first in whole-table batches and, if any request
-   *    fails, deletes exactly the rows this import created before reporting
-   *    the failure — the caller is never left guessing what landed.
+   *    so it inserts parents-first in batches per task depth and, if any request
+   *    fails, compensates only this import's attempted fresh IDs, descendants
+   *    first. A cleanup failure is reported explicitly and surviving ancestors
+   *    are retained — this is not server-side transactional atomicity.
    *
    * Records are written as the authenticated user, through the same paths as
    * every other write, so Row Level Security applies unchanged.
@@ -247,11 +248,11 @@ export interface AppRepository {
    * modified); the rest are created after the project's existing milestones,
    * in the imported order. Every task is new and bound to the target project.
    *
-   * Same guarantees as `importProjectPlan`: the import is validated before the
-   * first write and is all or nothing (local storage: one write; Supabase:
-   * parents-first batches with a compensation delete of exactly what this
-   * import created), and records are written as the signed-in user, so Row
-   * Level Security applies unchanged.
+   * Same guarantees as `importProjectPlan`: validated before the first write;
+   * atomic locally (one write), compensated on Supabase (parents-first batches,
+   * reverse-depth deletion of this import's attempted fresh IDs, explicit
+   * cleanup-failure reporting). Records are written as the signed-in user,
+   * so Row Level Security applies unchanged.
    */
   importProjectPlanIntoExistingProject(
     resolved: ResolvedExistingProjectImport,

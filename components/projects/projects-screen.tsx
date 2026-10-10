@@ -374,7 +374,7 @@ export function ProjectsScreen() {
                         }
                       />
                     ) : tasks.length > 0 ? (
-                      <TaskList tasks={tasks} />
+                      <TaskList tasks={tasks} hierarchical />
                     ) : (
                       <p className="text-[13px] text-ink-3">No tasks in this project yet.</p>
                     )}

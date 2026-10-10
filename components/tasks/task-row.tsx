@@ -86,6 +86,7 @@ export function TaskRow({
   const milestone = project && task.projectMilestoneId
     ? data.projectMilestones.find((m) => m.id === task.projectMilestoneId && m.projectId === project.id)
     : undefined;
+  const parentTask = task.parentTaskId ? data.tasks.find((t) => t.id === task.parentTaskId && t.projectId === task.projectId) : undefined;
   const done = task.status === 'completed';
   const cancelled = task.status === 'cancelled';
   const overdue = task.dueDate !== undefined && task.dueDate < todayISO() && !done && !cancelled;
@@ -169,6 +170,7 @@ export function TaskRow({
 
       {(showDate ||
         project ||
+        parentTask ||
         task.estimatedDuration ||
         dueLabel ||
         completionLabel ||
@@ -182,6 +184,7 @@ export function TaskRow({
               {milestone ? <span className="font-normal text-ink-3"> · {milestone.name}</span> : null}
             </span>
           ) : null}
+          {parentTask ? <span className="break-words">Subtask of: {parentTask.title}</span> : null}
           {showDate && task.scheduledDate && !done ? <span>{relativeDay(task.scheduledDate)}</span> : null}
           {showDate && !task.scheduledDate && task.status !== 'someday' && !done ? <span>Unscheduled</span> : null}
           {workingLabel !== null ? (

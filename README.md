@@ -39,6 +39,27 @@ Your Calendar brings scheduled tasks, deadlines, priorities, and focused time in
 - **Keep your data in reach.** Browser storage works out of the box. Optional Supabase storage and JSON export/import are available when you want them.
 - **Choose your reminders.** Browser notifications can surface priorities, deadlines, task reminders, and review prompts. Delivery depends on browser support and whether the app is running in the background.
 
+## Project plan import
+
+In **Settings → Data → Import Project Plan**, paste or upload a
+`focusdesk-project-plan` **version 1** JSON file and review it before confirming.
+Create new projects, or add milestones/tasks to one existing project with exact
+normalized milestone-name reuse. Existing records are never overwritten.
+
+Tasks can include recursive **`subtasks`**: full, independently editable/timed
+tasks persisted through `parentTaskId`, not just checklist text. Both import
+previews show the hierarchy and top-level/subtask/total counts; Projects shows
+parent-child task indentation. Limits are 2,000 total tasks (including children),
+20 task levels, 100 projects, 500 milestones and 5 MiB of UTF-8 JSON. Existing v1
+plans without subtasks remain supported.
+
+See the [format, examples, safety and verification notes](docs/focusdesk-project-plan-v1.md)
+and the [nested example fixture](fixtures/focusdesk-project-plan-v1.json).
+No new migration was added: the checked-in task parent column is reused. Verify
+live schema/FK/RLS using the deployment checks in the format doc. Supabase
+milestone plans still require migration 008; imports use authenticated,
+user-scoped writes with compensating rollback, not a cross-table transaction.
+
 ## Get started
 
 ```bash

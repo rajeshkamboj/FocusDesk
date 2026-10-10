@@ -1099,8 +1099,8 @@ export class SupabaseRepository implements AppRepository {
    *
    *  1. every record is built and re-checked *before* the first request;
    *  2. inserts go parents-first — goals → projects → project milestones →
-   *     tasks — in whole batches, one request each, so a foreign key always
-   *     has its target and a failed request inserted nothing at all;
+   *     tasks by hierarchy depth — in whole batches, so a foreign key always
+   *     has its target (a rejected database batch is atomic);
    *  3. if any request fails, the rows this import did create are deleted in
    *     reverse order and the failure is reported.
    *
@@ -1120,7 +1120,9 @@ export class SupabaseRepository implements AppRepository {
       throw new ProjectPlanError(`Import refused — nothing was created. This plan contains project milestones. ${NOT_MIGRATED_MESSAGE}`);
     }
 
-    /** Tables this import has written to, with the ids that really landed. */
+    await this.requirePlanTaskParents(tasks);
+
+    /** Attempted insert batches of freshly minted IDs, in write order. */
     const written: { table: string; ids: string[] }[] = [];
     const insert = (table: string, rows: Row[], ids: string[]) => this.insertImportRows(written, table, rows, ids);
 
@@ -1136,15 +1138,14 @@ export class SupabaseRepository implements AppRepository {
       }
       // Same guard as every other task write: the column is left out entirely
       // when migration 008 is not there yet.
-      const taskRows = await Promise.all(tasks.map((t) => this.prepareTaskRow(taskMap.toRow(t))));
-      await insert('tasks', taskRows, tasks.map((t) => t.id));
+      await this.insertPlanTasks(written, tasks);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       const left = await this.undoProjectPlanImport(written);
       throw new ProjectPlanError(
         left.length === 0
           ? `Import failed — nothing was kept. ${reason}`
-          : `Import failed, and ${left.length} of its records could not be removed again (${left.join(', ')}). ${reason}`,
+          : `Import failed, and cleanup could not finish for ${left.join(', ')}. Some records created by this import may remain; their parents were kept to preserve the hierarchy. ${reason}`,
       );
     }
 
@@ -1157,24 +1158,25 @@ export class SupabaseRepository implements AppRepository {
    * instead of claiming a clean rollback.
    */
   private async undoProjectPlanImport(written: { table: string; ids: string[] }[]): Promise<string[]> {
-    const failed: string[] = [];
-    for (const entry of [...written].reverse()) {
-      for (let start = 0; start < entry.ids.length; start += PLAN_INSERT_BATCH) {
-        try {
-          await this.http.deleteMany(entry.table, entry.ids.slice(start, start + PLAN_INSERT_BATCH));
-        } catch (error) {
-          console.error(`Could not undo the project-plan insert into ${entry.table}`, error);
-          failed.push(entry.table);
-          break;
-        }
+    const reverse = [...written].reverse();
+    for (const [index, entry] of reverse.entries()) {
+      try {
+        await this.http.deleteMany(entry.table, entry.ids);
+      } catch (error) {
+        console.error(`Could not undo the project-plan insert into ${entry.table}`, error);
+        // Keep its ancestors if a descendant could not be removed. Continuing
+        // would SET NULL on surviving children and tear apart their hierarchy.
+        // Report every table still affected, never pretend this was atomic.
+        return [...new Set(reverse.slice(index).map((batch) => batch.table))];
       }
     }
-    return [...new Set(failed)];
+    return [];
   }
 
   /**
-   * Insert whole batches, parents first, recording exactly what landed so a
-   * rollback can remove it. Shared by both plan imports.
+   * Insert whole batches, parents first, tracking fresh attempted IDs so a
+   * rollback also covers an ambiguous/lost response after a commit.
+   * Shared by both plan imports.
    */
   private async insertImportRows(
     written: { table: string; ids: string[] }[],
@@ -1184,12 +1186,42 @@ export class SupabaseRepository implements AppRepository {
   ): Promise<void> {
     for (let start = 0; start < rows.length; start += PLAN_INSERT_BATCH) {
       const end = start + PLAN_INSERT_BATCH;
+      // Record fresh IDs BEFORE sending: a network failure can lose the
+      // response after PostgreSQL committed. Deleting an uncommitted fresh
+      // ID is a harmless no-op; omitting a committed one would leak a task.
+      // Keep each depth/batch distinct for children-first compensation.
+      written.push({ table, ids: ids.slice(start, end) });
       await this.http.post(table, rows.slice(start, end));
-      // Recorded only once the request succeeded: a rejected batch inserted
-      // nothing, so `written` is exactly what a rollback has to remove.
-      const entry = written.find((w) => w.table === table) ?? { table, ids: [] };
-      if (!written.includes(entry)) written.push(entry);
-      entry.ids.push(...ids.slice(start, end));
+    }
+  }
+
+  /** Refuse an unavailable parent column before creating even a goal/project. */
+  private async requirePlanTaskParents(tasks: Task[]): Promise<void> {
+    if (!tasks.some((task) => task.parentTaskId !== undefined)) return;
+    if (!(await this.http.hasColumns('tasks', 'parent_task_id'))) {
+      throw new ProjectPlanError('Import refused — nothing was created. This plan contains subtasks, but tasks.parent_task_id is missing. Check the base tasks schema in supabase/schema.sql before importing; subtasks cannot be silently discarded.');
+    }
+  }
+
+  /**
+   * Persist one depth at a time: all parents have succeeded in an earlier
+   * request before any child is inserted, even across the 200-row boundary.
+   * IDs are already real, freshly minted and checked by the shared builder.
+   * No upserts and no references to pre-existing tasks are possible.
+   */
+  private async insertPlanTasks(written: { table: string; ids: string[] }[], tasks: Task[]): Promise<void> {
+    const depths = new Map<string, number>();
+    const levels: Task[][] = [];
+    for (const task of tasks) {
+      const parentDepth = task.parentTaskId === undefined ? -1 : depths.get(task.parentTaskId);
+      if (parentDepth === undefined) throw new ProjectPlanError('A subtask has no imported parent before it.');
+      const depth = parentDepth + 1;
+      depths.set(task.id, depth);
+      (levels[depth] ??= []).push(task);
+    }
+    for (const level of levels) {
+      const rows = await Promise.all(level.map((task) => this.prepareTaskRow(taskMap.toRow(task))));
+      await this.insertImportRows(written, 'tasks', rows, level.map((task) => task.id));
     }
   }
 
@@ -1239,7 +1271,9 @@ export class SupabaseRepository implements AppRepository {
       now: () => new Date().toISOString(),
     }, existingMilestones);
 
-    /** Tables this import has written to, with the ids that really landed. */
+    await this.requirePlanTaskParents(tasks);
+
+    /** Attempted insert batches of freshly minted IDs, in write order. */
     const written: { table: string; ids: string[] }[] = [];
     const insert = (table: string, rows: Row[], ids: string[]) => this.insertImportRows(written, table, rows, ids);
 
@@ -1253,15 +1287,14 @@ export class SupabaseRepository implements AppRepository {
       }
       // Same guard as every other task write: the column is left out entirely
       // when migration 008 is not there yet.
-      const taskRows = await Promise.all(tasks.map((t) => this.prepareTaskRow(taskMap.toRow(t))));
-      await insert('tasks', taskRows, tasks.map((t) => t.id));
+      await this.insertPlanTasks(written, tasks);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       const left = await this.undoProjectPlanImport(written);
       throw new ProjectPlanError(
         left.length === 0
           ? `Import failed — nothing was kept. ${reason}`
-          : `Import failed, and ${left.length} of its records could not be removed again (${left.join(', ')}). ${reason}`,
+          : `Import failed, and cleanup could not finish for ${left.join(', ')}. Some records created by this import may remain; their parents were kept to preserve the hierarchy. ${reason}`,
       );
     }
 

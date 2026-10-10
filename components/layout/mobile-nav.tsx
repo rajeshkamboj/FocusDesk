@@ -24,7 +24,7 @@ export function MobileNav() {
   return (
     <>
       {moreOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-40 lg:hidden print:hidden">
           <button className="absolute inset-0 animate-fade-in bg-ink/30" aria-label="Close menu" onClick={() => setMoreOpen(false)} />
           <div className="animate-rise-in absolute bottom-0 left-0 right-0 rounded-t-2xl border-t border-line bg-surface pb-8 pt-3 shadow-pop">
             <div className="mb-2 flex items-center justify-between px-5">
@@ -57,7 +57,7 @@ export function MobileNav() {
         </div>
       ) : null}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden print:hidden">
         <div className="flex h-16 items-center justify-around px-2">
           {MOBILE_NAV_ITEMS.map((item) => {
             const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);

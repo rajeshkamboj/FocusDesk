@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { UIProvider } from '@/components/ui/ui-provider';
 import { Toaster } from '@/components/ui/toaster';
+import { PrintHeader } from './print-header';
 import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { QuickAdd } from './quick-add';
@@ -51,7 +52,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         dead space under every short page) and too little on a device with a
         home indicator, where the bar grows past 96px and clipped the last row.
       */}
-      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-[248px]">
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-[248px] print:p-0">
+        <PrintHeader />
         {!ready ? (
           <div className="flex min-h-dvh items-center justify-center">
             <div className="h-6 w-6 animate-pulse rounded-full border-2 border-line-strong border-t-accent" />

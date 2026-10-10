@@ -15,7 +15,9 @@ export function PageHeader({
         <h1 className="text-[26px] font-semibold tracking-tight text-ink">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm leading-relaxed text-ink-2">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex items-center gap-2 print:hidden">{actions}</div>
+      ) : null}
     </div>
   );
 }

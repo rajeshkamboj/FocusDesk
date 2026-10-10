@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/icons/icon.svg" alt="Pace app icon" width="72" />
+  <img src="public/icons/icon.png" alt="FocusDesk app icon" width="72" />
   <h1>Pace</h1>
   <p><strong>A calmer way to make meaningful progress.</strong></p>
   <p>Choose what matters today, give it your attention, and end the day with an honest picture of what moved forward.</p>
@@ -36,6 +36,7 @@ Your Calendar brings scheduled tasks, deadlines, priorities, and focused time in
 
 - **Start with a blank slate.** Your priorities, tasks, projects, and goals are yours to define—nothing is pre-filled.
 - **Work your way.** Use Pace on desktop or mobile, switch between light and dark themes, and install it as a progressive web app.
+- **Take it to paper.** Print Today or any review from the app. Two-sided printing is supported through binding-aware page margins, so duplex output never catches text in the gutter.
 - **Keep your data in reach.** Browser storage works out of the box. Optional Supabase storage and JSON export/import are available when you want them.
 - **Choose your reminders.** Browser notifications can surface priorities, deadlines, task reminders, and review prompts. Delivery depends on browser support and whether the app is running in the background.
 

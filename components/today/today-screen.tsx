@@ -7,7 +7,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
-import { IconChevronDown, IconPlus, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
+import { IconChevronDown, IconPlus, IconPrinter, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
 import { TaskSection, TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { ExecutionWarnings } from './execution-warnings';
@@ -98,12 +98,21 @@ export function TodayScreen() {
           </div>
           <div className="w-full min-w-0 sm:justify-self-end">
             <ProgressSegments done={done} total={total} />
-            {totalMinutes > 0 ? (
-              <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-3">
-                <IconClock width={12} height={12} />
-                {formatDuration(totalMinutes)} of work planned
-              </p>
-            ) : null}
+            <div className="mt-2 flex items-center justify-between gap-3 sm:justify-end">
+              {totalMinutes > 0 ? (
+                <p className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
+                  <IconClock width={12} height={12} />
+                  {formatDuration(totalMinutes)} of work planned
+                </p>
+              ) : null}
+              {/* Prints the whole page; the @page binding margins in
+                  app/globals.css keep the gutter clear when the user
+                  picks "Print on both sides" in the dialog. */}
+              <Button variant="ghost" size="sm" onClick={() => window.print()} aria-label="Print today's plan">
+                <IconPrinter width={14} height={14} />
+                Print
+              </Button>
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useData } from '@/components/data/data-provider';
@@ -10,7 +11,7 @@ export function Sidebar() {
   const { data, ready } = useData();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface lg:flex print:hidden">
       <div className="flex items-center gap-2.5 px-6 pb-2 pt-6">
         <BrandMark />
         <div>
@@ -64,17 +65,22 @@ export function Sidebar() {
   );
 }
 
+/**
+ * The app's identity mark — the same master icon as the favicon, PWA install
+ * icon and taskbar icon, so the brand is one image everywhere (see
+ * scripts/generate-icons.mjs). Served at 192px and drawn at `size` px, which
+ * is 2x-crisp on retina screens and sharp at 30px on standard ones.
+ */
 export function BrandMark({ size = 30 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <rect width="32" height="32" rx="9" fill="var(--accent)" />
-      <path
-        d="M9 20.5c2.5 1.8 5 1.8 7 0s4.5-1.8 7 0"
-        stroke="white"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
-      <circle cx="16" cy="12" r="3.2" stroke="white" strokeWidth="2.2" />
-    </svg>
+    <Image
+      src="/icons/icon-192.png"
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden
+      className="shrink-0 select-none"
+      draggable={false}
+    />
   );
 }

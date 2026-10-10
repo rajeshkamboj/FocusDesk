@@ -43,7 +43,7 @@ export function QuickAdd() {
   };
 
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div className="fixed inset-0 z-[60] print:hidden">
       <button className="absolute inset-0 animate-fade-in bg-ink/30 backdrop-blur-[2px]" aria-label="Close" onClick={closeQuickAdd} />
       <div className="animate-rise-in relative mx-auto mt-[18vh] w-[92%] max-w-lg rounded-2xl border border-line bg-surface shadow-pop">
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-2.5 text-ink-3">

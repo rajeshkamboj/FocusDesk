@@ -252,3 +252,140 @@ button {
     background-color: color-mix(in srgb, var(--danger) 10%, transparent);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Print                                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * FocusDesk print support — two cooperating pieces:
+ *
+ * 1. `@page` rules (always active, print media only).
+ *    Paper size, orientation and the print-dialog options (including
+ *    "Print on both sides") stay with the user — the browser hands
+ *    those to the OS dialog. What the app declares is the margins,
+ *    tuned for duplex (two-sided) output:
+ *
+ *      - the base rule reserves a wider LEFT margin (16mm) — the
+ *        binding gutter for long-edge binding, the default
+ *        "print on both sides" mode;
+ *      - the CSS Paged Media `:left` / `:right` page pseudo-classes
+ *        move that gutter to the correct side per page on browsers
+ *        that honour them (odd/recto pages bind on the left,
+ *        even/verso pages on the right). On browsers that ignore
+ *        them, every page keeps the safe wider left margin — the
+ *        text never lands in the binding.
+ *
+ * 2. `@media print` rules — strip the interactive chrome (the
+ *    components carry `print:hidden`; the shell also zeroes the
+ *    main padding here), force the light palette, and keep content
+ *    blocks whole where they fit.
+ */
+
+@page {
+  margin: 13mm 13mm 15mm 16mm; /* top right bottom left — left = binding gutter */
+}
+
+@page :left {
+  margin-left: 13mm;
+  margin-right: 16mm; /* verso page: gutter on the right */
+}
+
+@page :right {
+  margin-right: 13mm;
+  margin-left: 16mm; /* recto page: gutter on the left */
+}
+
+@media print {
+  /*
+   * Force the light palette no matter which theme is on screen.
+   * Every component reads these tokens, so redefining them covers
+   * the whole app — and it fixes the classic dark-mode trap, where
+   * light-on-dark text prints as invisible light text on white
+   * paper once the background graphics are off.
+   */
+  :root,
+  [data-theme="dark"] {
+    --background: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f4f0;
+    --surface-3: #ebebe5;
+    --line: #d9d9d2;
+    --line-strong: #b9b9b0;
+
+    --ink: #171814;
+    --ink-2: #3f4139;
+    --ink-3: #6d7065;
+
+    --accent: #1e6b52;
+    --accent-hover: #175741;
+    --accent-soft: #e2efe9;
+    --accent-ink: #144837;
+
+    --danger: #a63d2e;
+    --danger-soft: #f6e8e3;
+    --warning: #8d6a1d;
+    --warning-soft: #f4ecd9;
+
+    --shadow-card: none;
+    --shadow-pop: none;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #171814 !important;
+  }
+
+  /*
+   * Keep intentional color (progress segments, chart bars, badges,
+   * priority dots) when the user enables "Background graphics" in
+   * the dialog; the forced tokens above mean that switch only
+   * decides whether accents are inked, never whether text is
+   * readable.
+   */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /*
+   * Pagination hygiene. `break-inside: avoid` is advisory: a block
+   * taller than a page is still split — it only keeps blocks that
+   * fit on one page from straddling the fold. Rows, list items and
+   * table rows are the natural atomic units here.
+   */
+  section,
+  article,
+  li,
+  tr,
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  [role="heading"] {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p {
+    orphans: 2;
+    widows: 2;
+  }
+
+  /* No link affordances on paper. */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}

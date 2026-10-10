@@ -36,7 +36,7 @@ export function Modal({
   const width = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center print:hidden">
       <button
         aria-label="Close dialog"
         className="absolute inset-0 animate-fade-in bg-ink/25 backdrop-blur-[2px]"

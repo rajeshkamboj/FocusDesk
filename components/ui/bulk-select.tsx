@@ -90,7 +90,7 @@ export function SelectionCheckbox({
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={label}
       onClick={onChange}
-      className={`flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+      className={`flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 print:hidden ${
         checked
           ? 'border-accent bg-accent text-white'
           : indeterminate
@@ -122,7 +122,7 @@ export function BulkActionBar({ children }: { children: ReactNode }) {
     <div
       role="toolbar"
       aria-label="Bulk actions"
-      className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-2.5 shadow-card"
+      className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-2.5 shadow-card print:hidden"
     >
       {children}
     </div>

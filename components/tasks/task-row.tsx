@@ -37,7 +37,7 @@ function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange
     <button
       onClick={onChange}
       aria-label={label}
-      className={`mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all duration-150 ${
+      className={`mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all duration-150 print:hidden ${
         checked
           ? 'border-accent bg-accent text-white'
           : 'border-line-strong bg-surface hover:border-accent hover:bg-accent-soft'
@@ -148,7 +148,7 @@ export function TaskRow({
   const taskSummary = (
     <>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight}`}>
+        <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight} ${done ? 'print:line-through' : ''}`}>
           {task.title}
         </span>
         {hasDetails ? (
@@ -156,7 +156,7 @@ export function TaskRow({
             width={12}
             height={12}
             aria-hidden="true"
-            className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+            className={`shrink-0 text-ink-3 transition-transform duration-150 print:hidden ${expanded ? 'rotate-90' : ''}`}
           />
         ) : null}
         {task.status === 'in_progress' && !done && !paused ? <Badge tone="accent">In progress</Badge> : null}
@@ -308,7 +308,7 @@ export function TaskRow({
         </div>
 
         {!done && !cancelled ? (
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5 print:hidden">
             {running ? (
               <>
                 <Button
@@ -375,7 +375,7 @@ export function TaskRow({
             <button
               onClick={toggle}
               aria-label="Task actions"
-              className="rounded-lg p-1.5 text-ink-3 opacity-0 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+              className="rounded-lg p-1.5 text-ink-3 opacity-0 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 print:hidden"
             >
               <IconMore width={17} height={17} />
             </button>

@@ -14,7 +14,12 @@ export const metadata: Metadata = {
     'A calm personal execution system: decide what matters today, move the important things forward, and review honestly.',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icons/icon.svg',
+    // Generated from assets/icon-master.png by `npm run icons` — never
+    // edit the files in public/icons by hand.
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon.png', sizes: '512x512', type: 'image/png' },
+    ],
     apple: '/icons/apple-touch-icon.png',
   },
   appleWebApp: {

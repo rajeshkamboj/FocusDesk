@@ -49,7 +49,7 @@ export function FocusMode() {
   const toggleLabel = running ? 'Pause' : paused ? 'Resume' : 'Start';
 
   return (
-    <div className="fixed inset-0 z-[80] flex animate-fade-in flex-col items-center justify-center bg-background">
+    <div className="fixed inset-0 z-[80] flex animate-fade-in flex-col items-center justify-center bg-background print:hidden">
       <button
         onClick={stopFocus}
         aria-label="Exit focus mode"

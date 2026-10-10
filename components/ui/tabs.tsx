@@ -35,7 +35,7 @@ export function Tabs({
      * buttons keep their full padding and 13px type — the row scrolls rather
      * than the labels getting squeezed.
      */
-    <div className={`scroll-strip max-w-full min-w-0 ${className}`}>
+    <div className={`scroll-strip max-w-full min-w-0 print:hidden ${className}`}>
       <div className="inline-flex w-max items-center gap-1 rounded-xl border border-line bg-surface-2 p-1">
         {items.map((item) => (
           <button

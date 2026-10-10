@@ -27,7 +27,10 @@ const sizes: Record<Size, string> = {
 export function Button({ variant = 'secondary', size = 'md', className = '', ...props }: ButtonProps) {
   return (
     <button
-      className={`inline-flex select-none items-center justify-center font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-45 ${variants[variant]} ${sizes[size]} ${className}`}
+      /* `print:hidden` — every Button in this app is an action, and
+         actions have no place on paper (the print buttons included:
+         once the dialog is open, the page behind it is the output). */
+      className={`inline-flex select-none items-center justify-center font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-45 print:hidden ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     />
   );

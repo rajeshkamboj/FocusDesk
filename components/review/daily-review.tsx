@@ -56,7 +56,7 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
       <div className="flex items-center gap-2">
         <button
           onClick={() => onDateChange(addDays(date, -1))}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-line text-ink-2 transition-colors hover:border-line-strong hover:text-ink"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-line text-ink-2 transition-colors hover:border-line-strong hover:text-ink print:hidden"
           aria-label="Previous day"
         >
           <IconChevronLeft width={17} height={17} />
@@ -69,7 +69,7 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
         </div>
         <button
           onClick={() => onDateChange(addDays(date, 1))}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-line text-ink-2 transition-colors hover:border-line-strong hover:text-ink"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-line text-ink-2 transition-colors hover:border-line-strong hover:text-ink print:hidden"
           aria-label="Next day"
         >
           <IconChevronRight width={17} height={17} />

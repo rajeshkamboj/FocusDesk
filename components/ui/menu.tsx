@@ -38,7 +38,7 @@ export function Menu({
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
       {open ? (
         <div
-          className={`animate-scale-in absolute top-full z-40 mt-1.5 min-w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop ${
+          className={`animate-scale-in absolute top-full z-40 mt-1.5 min-w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop print:hidden ${
             align === 'right' ? 'right-0' : 'left-0'
           }`}
         >

@@ -182,6 +182,11 @@ TZ=America/New_York npx tsx scripts/verify-review-stats.ts
 npm i --no-save jsdom tsx && npx tsx scripts/verify-multi-tab.tsx
 ```
 
+`scripts/verify-timer-navigation.tsx` checks **Active timer → task navigation**. Clicking a timer in the Active Timer Dock opens `/tasks?focus=<task id>` (a client-side navigation — never a page load, which would fire `pagehide` and pause every running timer). The Tasks view clears **only** the filters/search that would hide that task (and says which), scrolls it to the centre, moves focus to it and flashes it red for ~1.8 s; the one-shot `focus` parameter is then removed from the URL. Today's priority timer still opens Today; earlier days' priority timers open their task in Tasks. The script drives the real dock and Tasks screen through a far-down target, conflicting filters (sort, selection and non-conflicting filters kept), repeat clicks, every one of several concurrent running/paused timers, missing/deleted/archived targets, a cold deep link and the mobile/reduced-motion flow — asserting after each that every timer's state (status, pause marker, accumulated time and running origin) is unchanged in memory and in storage and that no unload event fired. `fixtures/focusdesk-timer-navigation-preview.json` is an inert sample (62 tasks, 6 paused timers) for the isolated preview only — import it via Settings → Data → Import (JSON), which replaces preview-local data:
+```bash
+npm i --no-save jsdom tsx && npx tsx scripts/verify-timer-navigation.tsx
+```
+
 `scripts/verify-learnings-project-milestones.tsx` checks the Phase 3 work end to end: old `milestones` data and exports loading as Learnings (record-for-record, partial dates untouched), new exports, idempotent local migration, the Supabase repository against a fake PostgREST both **before** migration 008 (no request ever names the new table/column in a write) and after it, the project/milestone/task invariant, milestone deletion, the task form's milestone selector, the project view and the `/milestones` redirect:
 ```bash
 npm i --no-save jsdom tsx && npx tsx scripts/verify-learnings-project-milestones.tsx

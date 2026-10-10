@@ -142,8 +142,15 @@ async function main() {
   let idC!: string;
   await run(async () => { idC = (await c().actions.addTask({ title: 'Write review' })).id; });
   await run(() => c().actions.startTask(idC));
+  const timerFields = (id: string) => {
+    const t = get(id);
+    return JSON.stringify([t.status, t.startedAt, t.pausedAt, t.actualDurationSeconds]);
+  };
+  const beforeNav = timerFields(idC);
   await click(`button[title="Write review"]`);
-  ok(pushed.at(-1) === '/tasks', 'Clicking a normal task row navigates to /tasks');
+  ok(pushed.at(-1) === `/tasks?focus=${encodeURIComponent(idC)}`,
+     'Clicking a normal task row navigates to that task in /tasks, by stable id (/tasks?focus=<id>)');
+  ok(timerFields(idC) === beforeNav && isTimerRunning(get(idC)), 'Navigating leaves the timer exactly as it was (still running)');
 
   await run(() => c().actions.pauseTask(idC));
   let priorityId!: string;
@@ -152,7 +159,19 @@ async function main() {
   ok(isTimerRunning(get(dailyPriorityTimerTaskId(priorityId))) && dockText().includes('Ship the release'),
      'A daily priority timer appears in the dock like any other timer task');
   await click(`button[title="Ship the release"]`);
-  ok(pushed.at(-1) === '/today', 'Clicking a priority timer row navigates to /today');
+  ok(pushed.at(-1) === '/today', "Clicking today's priority timer row still navigates to /today");
+
+  /* An earlier day's priority timer is listed in Tasks, not on Today. */
+  const { addDays, todayISO } = await import('../lib/dates');
+  let oldPriorityId!: string;
+  await run(async () => { oldPriorityId = (await c().actions.setDailyPriority('Old priority', addDays(todayISO(), -2))).id; });
+  await run(async () => { await c().actions.startDailyPriorityTimer(oldPriorityId); });
+  const oldTimerId = dailyPriorityTimerTaskId(oldPriorityId);
+  ok(isTimerRunning(get(oldTimerId)), "An earlier day's priority timer runs alongside the others");
+  await click(`button[title="Old priority"]`);
+  ok(pushed.at(-1) === `/tasks?focus=${encodeURIComponent(oldTimerId)}`,
+     "Clicking an earlier day's priority timer navigates to its task in /tasks");
+  await run(async () => { await c().actions.cancelTask(oldTimerId); });  // leave the later counts as they were
 
   /* ------------------------------------------------------------------ */
   /* Collapse / expand with a remembered preference                      */

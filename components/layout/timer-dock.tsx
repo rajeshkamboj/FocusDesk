@@ -4,9 +4,10 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useData } from '@/components/data/data-provider';
 import { IconClock, IconMinus, IconPause, IconPlay, IconPopOut } from '@/components/ui/icons';
-import { formatStopwatch } from '@/lib/dates';
-import { isDailyPriorityTimerTaskId } from '@/lib/selectors';
+import { formatStopwatch, todayISO } from '@/lib/dates';
+import { activeTimerHref } from '@/lib/task-focus';
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
+import { useLocalDate } from '@/lib/use-local-date';
 import { useNow } from '@/components/tasks/use-now';
 import { TimerPipView, useTimerPip } from './timer-pip';
 import type { Task } from '@/lib/types';
@@ -49,6 +50,7 @@ export function TimerDock() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [busy, setBusy] = useState(false);
+  const today = useLocalDate(todayISO());
 
   // The authoritative membership rule: a task appears here exactly while its
   // persisted timer is running or paused — never before Start, never after
@@ -96,10 +98,14 @@ export function TimerDock() {
   // timer untouched, exactly like every other Start/Resume path.
   const resume = (task: Task) => runTimerAction(() => actions.resumeTask(task.id));
 
-  // A daily priority's timer lives on an app-owned Task shown on Today;
-  // ordinary tasks live on the Tasks screen.
+  // Navigation only — this never starts, stops, pauses or edits a timer.
+  // Today's priority timer lives on its Today card; every other timer (incl.
+  // earlier days' priorities) goes to that exact task, by stable id, in the
+  // Tasks view, which scrolls to it and flashes it (see lib/task-focus).
+  // It must stay a client-side router.push: a full page load would fire
+  // pagehide/beforeunload, which pauses every running timer.
   const goToTask = (task: Task) => {
-    router.push(isDailyPriorityTimerTaskId(task.id) ? '/today' : '/tasks');
+    router.push(activeTimerHref(task.id, data.dailyPriorities, today), { scroll: false });
   };
 
   return (

@@ -1,0 +1,791 @@
+{
+  "tasks": [
+    {
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-00",
+      "title": "Filler task 01",
+      "scheduledDate": "2026-10-10",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-01",
+      "title": "Filler task 02",
+      "scheduledDate": "2026-10-11"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-02",
+      "title": "Filler task 03",
+      "scheduledDate": "2026-10-12"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-03",
+      "title": "Filler task 04",
+      "scheduledDate": "2026-10-13",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-04",
+      "title": "Filler task 05",
+      "scheduledDate": "2026-10-14"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-05",
+      "title": "Filler task 06",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-06",
+      "title": "Filler task 07",
+      "scheduledDate": "2026-10-16",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-07",
+      "title": "Filler task 08",
+      "scheduledDate": "2026-10-17"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-08",
+      "title": "Filler task 09",
+      "scheduledDate": "2026-10-18"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-09",
+      "title": "Filler task 10",
+      "scheduledDate": "2026-10-19",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-10",
+      "title": "Filler task 11",
+      "scheduledDate": "2026-10-20"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-11",
+      "title": "Filler task 12",
+      "scheduledDate": "2026-10-21"
+    },
+    {
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-12",
+      "title": "Filler task 13",
+      "scheduledDate": "2026-10-10",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-13",
+      "title": "Filler task 14",
+      "scheduledDate": "2026-10-11"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-14",
+      "title": "Filler task 15",
+      "scheduledDate": "2026-10-12"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-15",
+      "title": "Filler task 16",
+      "scheduledDate": "2026-10-13",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-16",
+      "title": "Filler task 17",
+      "scheduledDate": "2026-10-14"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-17",
+      "title": "Filler task 18",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-18",
+      "title": "Filler task 19",
+      "scheduledDate": "2026-10-16",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-19",
+      "title": "Filler task 20",
+      "scheduledDate": "2026-10-17"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-20",
+      "title": "Filler task 21",
+      "scheduledDate": "2026-10-18"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-21",
+      "title": "Filler task 22",
+      "scheduledDate": "2026-10-19",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-22",
+      "title": "Filler task 23",
+      "scheduledDate": "2026-10-20"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-23",
+      "title": "Filler task 24",
+      "scheduledDate": "2026-10-21"
+    },
+    {
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-24",
+      "title": "Filler task 25",
+      "scheduledDate": "2026-10-10",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-25",
+      "title": "Filler task 26",
+      "scheduledDate": "2026-10-11"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-26",
+      "title": "Filler task 27",
+      "scheduledDate": "2026-10-12"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-27",
+      "title": "Filler task 28",
+      "scheduledDate": "2026-10-13",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-28",
+      "title": "Filler task 29",
+      "scheduledDate": "2026-10-14"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-29",
+      "title": "Filler task 30",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-30",
+      "title": "Filler task 31",
+      "scheduledDate": "2026-10-16",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-31",
+      "title": "Filler task 32",
+      "scheduledDate": "2026-10-17"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-32",
+      "title": "Filler task 33",
+      "scheduledDate": "2026-10-18"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-33",
+      "title": "Filler task 34",
+      "scheduledDate": "2026-10-19",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-34",
+      "title": "Filler task 35",
+      "scheduledDate": "2026-10-20"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-35",
+      "title": "Filler task 36",
+      "scheduledDate": "2026-10-21"
+    },
+    {
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-36",
+      "title": "Filler task 37",
+      "scheduledDate": "2026-10-10",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-37",
+      "title": "Filler task 38",
+      "scheduledDate": "2026-10-11"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-38",
+      "title": "Filler task 39",
+      "scheduledDate": "2026-10-12"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-39",
+      "title": "Filler task 40",
+      "scheduledDate": "2026-10-13",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-40",
+      "title": "Filler task 41",
+      "scheduledDate": "2026-10-14"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-41",
+      "title": "Filler task 42",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-42",
+      "title": "Filler task 43",
+      "scheduledDate": "2026-10-16",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-43",
+      "title": "Filler task 44",
+      "scheduledDate": "2026-10-17"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-44",
+      "title": "Filler task 45",
+      "scheduledDate": "2026-10-18"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-45",
+      "title": "Filler task 46",
+      "scheduledDate": "2026-10-19",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-46",
+      "title": "Filler task 47",
+      "scheduledDate": "2026-10-20"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-47",
+      "title": "Filler task 48",
+      "scheduledDate": "2026-10-21"
+    },
+    {
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-48",
+      "title": "Filler task 49",
+      "scheduledDate": "2026-10-10",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-49",
+      "title": "Filler task 50",
+      "scheduledDate": "2026-10-11"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-50",
+      "title": "Filler task 51",
+      "scheduledDate": "2026-10-12"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-51",
+      "title": "Filler task 52",
+      "scheduledDate": "2026-10-13",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-52",
+      "title": "Filler task 53",
+      "scheduledDate": "2026-10-14"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-53",
+      "title": "Filler task 54",
+      "scheduledDate": "2026-10-15"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-54",
+      "title": "Filler task 55",
+      "scheduledDate": "2026-10-16",
+      "projectId": "nav-project-home"
+    },
+    {
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "id": "nav-filler-55",
+      "title": "Filler task 56",
+      "scheduledDate": "2026-10-17"
+    },
+    {
+      "status": "in_progress",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 1500,
+      "id": "nav-write-chapter",
+      "title": "Write chapter",
+      "scheduledDate": "2026-10-30"
+    },
+    {
+      "status": "in_progress",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 720,
+      "id": "nav-code-review",
+      "title": "Code review",
+      "scheduledDate": "2026-11-04",
+      "goalId": "nav-goal-career"
+    },
+    {
+      "status": "in_progress",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [
+        "reading"
+      ],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 2400,
+      "id": "nav-read-book",
+      "title": "Read book",
+      "scheduledDate": "2026-11-09"
+    },
+    {
+      "status": "in_progress",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 480,
+      "id": "nav-quarterly-report",
+      "title": "Quarterly report — far down the list",
+      "scheduledDate": "2026-11-28",
+      "projectId": "nav-project-work"
+    },
+    {
+      "status": "in_progress",
+      "priority": "high",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 900,
+      "id": "daily-priority-timer:nav-priority-old",
+      "title": "Earlier day’s priority"
+    },
+    {
+      "status": "in_progress",
+      "priority": "high",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "pausedAt": "2026-10-10T04:00:00.000Z",
+      "actualDurationSeconds": 300,
+      "id": "daily-priority-timer:nav-priority-today",
+      "title": "Today’s priority"
+    }
+  ],
+  "subtasks": [],
+  "projects": [
+    {
+      "id": "nav-project-home",
+      "name": "Home",
+      "goalId": "nav-goal-health",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    },
+    {
+      "id": "nav-project-work",
+      "name": "Work",
+      "goalId": "nav-goal-career",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    }
+  ],
+  "goals": [
+    {
+      "id": "nav-goal-health",
+      "name": "Health",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    },
+    {
+      "id": "nav-goal-career",
+      "name": "Career",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    }
+  ],
+  "inbox": [],
+  "ideas": [],
+  "learnings": [],
+  "projectMilestones": [],
+  "dailyPriorities": [
+    {
+      "id": "nav-priority-old",
+      "date": "2026-10-07",
+      "title": "Earlier day’s priority",
+      "completed": false
+    },
+    {
+      "id": "nav-priority-today",
+      "date": "2026-10-10",
+      "title": "Today’s priority",
+      "completed": false
+    }
+  ],
+  "weeklyPriorities": [],
+  "monthlyPriorities": [],
+  "taskHistory": [],
+  "wellbeingDays": [],
+  "timerSessions": [],
+  "settings": {
+    "general": {
+      "displayName": "Timer navigation preview",
+      "startOnToday": true,
+      "confirmTaskDeletion": true,
+      "automaticCarryForward": false,
+      "defaultTaskDuration": 30
+    },
+    "notifications": {
+      "morningPriorityReminder": false,
+      "taskReminders": false,
+      "deadlineReminders": false,
+      "eveningReviewReminder": false
+    },
+    "appearance": {
+      "theme": "system"
+    }
+  }
+}

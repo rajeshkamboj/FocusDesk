@@ -97,6 +97,26 @@ export function uncompletedTasksFirst(tasks: Task[]): Task[] {
   return [...uncompleted, ...completed];
 }
 
+/**
+ * Project task order: active tasks keep their order and position; completed
+ * tasks follow, most recently completed first (by the stored `completedAt`).
+ * Completed tasks with a missing or invalid `completedAt` go after those with
+ * a valid one. Ties fall back to createdAt (newest first), then id.
+ */
+export function projectTasksInOrder(tasks: Task[]): Task[] {
+  const completedMs = (task: Task): number => (task.completedAt ? Date.parse(task.completedAt) : NaN);
+  const completed = tasks.filter(isCompletedTask).sort((a, b) => {
+    const at = completedMs(a);
+    const bt = completedMs(b);
+    const aValid = !Number.isNaN(at);
+    const bValid = !Number.isNaN(bt);
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    if (aValid && at !== bt) return bt - at;
+    return b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
+  });
+  return [...tasks.filter((task) => !isCompletedTask(task)), ...completed];
+}
+
 /** Subtasks belonging to one task, in stable creation/manual order. */
 export function subtasksForTask(subtasks: Subtask[], parentTaskId: string): Subtask[] {
   return subtasks

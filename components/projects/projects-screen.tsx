@@ -16,7 +16,7 @@ import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { formatFocusedTime, formatShortDate, todayISO } from '@/lib/dates';
 import { projectMilestonesFor } from '@/lib/project-milestones';
-import { compareDatedEntities, projectFocusedSeconds, projectProgress } from '@/lib/selectors';
+import { compareDatedEntities, projectFocusedSeconds, projectProgress, projectTasksInOrder } from '@/lib/selectors';
 import type { EntityDateSort } from '@/lib/selectors';
 import type { Project, ProjectMilestone, ProjectStatus } from '@/lib/types';
 import { ProjectMilestoneFormModal, ProjectMilestoneSections } from './project-milestones';
@@ -242,7 +242,7 @@ export function ProjectsScreen() {
             const prog = projectProgress(data.tasks, project.id);
             const focused = projectFocusedSeconds(data.tasks, project.id);
             const goal = project.goalId ? data.goals.find((g) => g.id === project.goalId) : undefined;
-            const tasks = data.tasks.filter((t) => t.projectId === project.id && t.status !== 'cancelled');
+            const tasks = projectTasksInOrder(data.tasks.filter((t) => t.projectId === project.id && t.status !== 'cancelled'));
             const openTasks = tasks.filter((t) => t.status !== 'completed');
             const milestones = projectMilestonesEnabled ? projectMilestonesFor(data.projectMilestones, project.id) : [];
             const isExpanded = expanded === project.id;

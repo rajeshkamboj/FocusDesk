@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/card';
@@ -14,25 +15,58 @@ import { TaskRow } from './task-row';
 import { TaskFormModal } from './task-form-modal';
 import { useLocalDate } from '@/lib/use-local-date';
 import { todayISO, addDays, isoWeekKey } from '@/lib/dates';
-import { compareTasks, dailyPriorityTimerTaskId, overdueTasks, repeatedlyPostponedTasks } from '@/lib/selectors';
+import { compareTasks, dailyPriorityTimerTaskId } from '@/lib/selectors';
 import type { TaskSort } from '@/lib/selectors';
+import {
+  CLEARED_TASK_FILTERS,
+  TASK_FILTERS,
+  conflictingTaskFilters,
+  filterTasks,
+  isListableTask,
+  type TaskFilterContext,
+  type TaskFilterId,
+  type TaskFilterState,
+} from '@/lib/task-filters';
+import { TASK_FLASH_MS, TASK_FOCUS_PARAM, clearedFiltersMessage, findTaskRowElement } from '@/lib/task-focus';
 
-type FilterId = 'all' | 'today' | 'upcoming' | 'unscheduled' | 'someday' | 'completed' | 'cancelled' | 'overdue' | 'postponed';
+type FilterId = TaskFilterId;
 
-const FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'today', label: 'Today' },
-  { id: 'upcoming', label: 'Upcoming' },
-  { id: 'unscheduled', label: 'Unscheduled' },
-  { id: 'someday', label: 'Someday' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'cancelled', label: 'Cancelled' },
-  { id: 'overdue', label: 'Overdue' },
-  { id: 'postponed', label: 'Postponed 3×+' },
-];
+const FILTERS = TASK_FILTERS;
+
+/**
+ * A pending "show this task" request from `/tasks?focus=<id>` (see
+ * lib/task-focus). `seq` makes every request distinct, so clicking the same
+ * timer twice scrolls and flashes twice.
+ */
+interface FocusRequest {
+  seq: number;
+  /** The task to scroll to; null when the target could not be shown. */
+  taskId: string | null;
+  /** Toast for the user (filters cleared / task unavailable), if any. */
+  message: string | null;
+  /** Polite screen-reader announcement of the outcome. */
+  announcement: string;
+}
+
+/** How many animation frames to wait for a target row before giving up. */
+const MAX_LOCATE_FRAMES = 30;
+
+/** Remove the one-shot focus parameter without a navigation or a reload. */
+function stripFocusParam() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(TASK_FOCUS_PARAM)) return;
+    url.searchParams.delete(TASK_FOCUS_PARAM);
+    // Next's router observes replaceState and syncs useSearchParams; this is
+    // the documented way to edit the URL in place (no navigation, no unload).
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    /* URL unavailable — the request is still handled, only the URL keeps the param */
+  }
+}
 
 export function TasksScreen() {
-  const { data, actions } = useData();
+  const { ready, data, actions, notify } = useData();
   const [filter, setFilter] = useState<FilterId>('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [goalFilter, setGoalFilter] = useState('');
@@ -50,35 +84,113 @@ export function TasksScreen() {
   const today = useLocalDate(todayISO());
   const tomorrow = addDays(today, 1);
 
-  const filtered = useMemo(() => {
-    // Today's priority already has its own card. Older priority timer Tasks are
-    // left visible here so an unfinished session can still be resumed later.
-    const priorityTimerTaskIds = new Set(
-      data.dailyPriorities.filter((p) => p.date === today).map((p) => dailyPriorityTimerTaskId(p.id)),
-    );
-    let list = data.tasks.filter((t) => !t.archived && !priorityTimerTaskIds.has(t.id));
+  // Today's priority already has its own card. Older priority timer Tasks are
+  // left visible here so an unfinished session can still be resumed later.
+  const filterContext = useMemo<TaskFilterContext>(
+    () => ({
+      today,
+      projects: data.projects,
+      hiddenTaskIds: new Set(
+        data.dailyPriorities.filter((p) => p.date === today).map((p) => dailyPriorityTimerTaskId(p.id)),
+      ),
+    }),
+    [data.dailyPriorities, data.projects, today],
+  );
 
-    if (filter === 'today') list = list.filter((t) => t.scheduledDate === today && t.status !== 'completed' && t.status !== 'cancelled');
-    else if (filter === 'upcoming') list = list.filter((t) => t.scheduledDate !== undefined && t.scheduledDate > today && t.status !== 'completed' && t.status !== 'cancelled');
-    else if (filter === 'unscheduled') list = list.filter((t) => t.scheduledDate === undefined && t.status !== 'someday' && t.status !== 'completed' && t.status !== 'cancelled');
-    else if (filter === 'someday') list = list.filter((t) => t.status === 'someday');
-    else if (filter === 'completed') list = list.filter((t) => t.status === 'completed');
-    else if (filter === 'cancelled') list = list.filter((t) => t.status === 'cancelled');
-    else if (filter === 'overdue') list = overdueTasks(list, today);
-    else if (filter === 'postponed') list = repeatedlyPostponedTasks(list);
-    // 'all' keeps every status visible.
+  const filtered = useMemo(
+    () => filterTasks(data.tasks, { filter, projectFilter, goalFilter, query }, filterContext),
+    [data.tasks, filter, projectFilter, goalFilter, query, filterContext],
+  );
 
-    if (projectFilter) list = list.filter((t) => t.projectId === projectFilter);
-    if (goalFilter) list = list.filter((t) => t.goalId === goalFilter || (t.projectId && data.projects.find((p) => p.id === t.projectId)?.goalId === goalFilter));
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      list = list.filter(
-        (t) => t.title.toLowerCase().includes(q) || (t.notes ?? '').toLowerCase().includes(q) || t.tags.some((tag) => tag.toLowerCase().includes(q)),
-      );
+  /* ---- Navigation to one task: /tasks?focus=<id> (Active Timer Dock) ---- */
+
+  // Pure view navigation: nothing below reads or writes a timer field. The
+  // request is consumed while rendering (React's "adjust state when an input
+  // changes" pattern), so the cleared filters and the request land in the very
+  // same commit — the target row is in the DOM when the effect below runs.
+  const searchParams = useSearchParams();
+  const focusParam = searchParams?.get(TASK_FOCUS_PARAM) ?? null;
+  const [seenFocusParam, setSeenFocusParam] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const [flash, setFlash] = useState<{ taskId: string; seq: number } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const handledSeqRef = useRef(0);
+
+  // Wait for data before resolving, so a slow load never reads as "not found".
+  if (ready && focusParam !== seenFocusParam) {
+    setSeenFocusParam(focusParam);
+    if (focusParam !== null) {
+      const seq = (focusRequest?.seq ?? 0) + 1;
+      const target = data.tasks.find((t) => t.id === focusParam);
+      if (!target || !isListableTask(target, filterContext)) {
+        const unavailable = 'That task is no longer in your task list';
+        setFocusRequest({ seq, taskId: null, message: unavailable, announcement: `${unavailable}.` });
+      } else {
+        const current: TaskFilterState = { filter, projectFilter, goalFilter, query };
+        // Clear only what hides the target; sort, selection, select mode and
+        // every non-conflicting filter are left exactly as they were.
+        const conflicts = conflictingTaskFilters(target, current, filterContext);
+        if (conflicts.includes('filter')) setFilter(CLEARED_TASK_FILTERS.filter);
+        if (conflicts.includes('projectFilter')) setProjectFilter(CLEARED_TASK_FILTERS.projectFilter);
+        if (conflicts.includes('goalFilter')) setGoalFilter(CLEARED_TASK_FILTERS.goalFilter);
+        if (conflicts.includes('query')) setQuery(CLEARED_TASK_FILTERS.query);
+        const message = clearedFiltersMessage(conflicts, current);
+        setFocusRequest({
+          seq,
+          taskId: target.id,
+          message,
+          announcement: `Showing task “${target.title}”.${message ? ` ${message}.` : ''}`,
+        });
+      }
     }
+  }
 
-    return list;
-  }, [data.tasks, data.dailyPriorities, data.projects, filter, projectFilter, goalFilter, query, today]);
+  useEffect(() => {
+    if (!focusRequest) return;
+    // One-shot side effects, guarded so a StrictMode effect replay can't
+    // toast twice. Stripping the param makes a reload/Back not replay the
+    // flash, and lets the same timer be clicked again.
+    if (handledSeqRef.current !== focusRequest.seq) {
+      handledSeqRef.current = focusRequest.seq;
+      stripFocusParam();
+      if (focusRequest.message) notify(focusRequest.message);
+    }
+    const taskId = focusRequest.taskId;
+    if (!taskId) return;
+
+    // The row is normally already in the DOM (same commit as the request).
+    // If rendering is delayed, keep looking once per frame, for a bounded
+    // number of frames — no fixed sleeps.
+    let frame = 0;
+    let attempts = 0;
+    const locate = () => {
+      const row = findTaskRowElement(listRef.current ?? document, taskId);
+      if (row) {
+        const reduceMotion =
+          typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        row.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+        // Move focus for keyboard and screen-reader users without a second jump.
+        row.focus({ preventScroll: true });
+        setFlash({ taskId, seq: focusRequest.seq });
+        return;
+      }
+      attempts += 1;
+      if (attempts >= MAX_LOCATE_FRAMES) {
+        notify('Could not find that task in the list');
+        return;
+      }
+      frame = window.requestAnimationFrame(locate);
+    };
+    frame = window.requestAnimationFrame(locate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusRequest, notify]);
+
+  // The red flash removes itself after its animation.
+  useEffect(() => {
+    if (!flash) return;
+    const id = window.setTimeout(() => setFlash(null), TASK_FLASH_MS);
+    return () => window.clearTimeout(id);
+  }, [flash]);
 
   const groups = useMemo(() => {
     const active = filtered.filter((task) => task.status !== 'completed').sort((a, b) => compareTasks(a, b, sort));
@@ -302,7 +414,7 @@ export function TasksScreen() {
           }
         />
       ) : (
-        <div className="space-y-7">
+        <div ref={listRef} className="space-y-7">
           {groups.map((group) => (
             <section key={group.key}>
               <div className="mb-1 flex items-baseline justify-between px-1">
@@ -314,6 +426,7 @@ export function TasksScreen() {
                   <TaskRow
                     key={task.id}
                     task={task}
+                    flashKey={flash?.taskId === task.id ? flash.seq : undefined}
                     selection={
                       selectMode
                         ? { selected: selection.has(task.id), onToggle: () => selection.toggle(task.id) }
@@ -330,6 +443,10 @@ export function TasksScreen() {
       <p className="mt-8 text-center text-[11px] text-ink-3 sm:mt-10">
         Week {isoWeekKey(today).split('-W')[1]} · {filtered.length} task{filtered.length === 1 ? '' : 's'} in view ·{' '}
         {data.tasks.filter((t) => t.scheduledDate === tomorrow && t.status !== 'completed').length} planned for tomorrow
+      </p>
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {focusRequest?.announcement ?? ''}
       </p>
 
       <TaskFormModal open={addOpen} onClose={() => setAddOpen(false)} />

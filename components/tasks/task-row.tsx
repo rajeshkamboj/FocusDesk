@@ -56,11 +56,18 @@ export function TaskRow({
   task,
   showDate = true,
   selection,
+  flashKey,
 }: {
   task: Task;
   showDate?: boolean;
   /** Present only while the screen's bulk-select mode is on. */
   selection?: RowSelection;
+  /**
+   * Set while this row is the target of a "show this task" navigation (see
+   * lib/task-focus). Each new value replays the brief red flash; undefined
+   * shows none. Purely visual — it never touches the task or its timer.
+   */
+  flashKey?: number;
 }) {
   const { data, actions } = useData();
   const [editOpen, setEditOpen] = useState(false);
@@ -215,7 +222,17 @@ export function TaskRow({
 
   return (
     <>
-      <div className={`group flex items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}>
+      <div
+        data-task-id={task.id}
+        // Focusable only programmatically, so navigation can move focus here.
+        tabIndex={-1}
+        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
+      >
+        {flashKey !== undefined ? (
+          // Keyed by the request so a repeat navigation restarts the animation.
+          // A box-shadow overlay: no layout shift, never intercepts clicks.
+          <span key={flashKey} aria-hidden="true" data-task-flash="" className="task-flash pointer-events-none absolute inset-0 rounded-xl" />
+        ) : null}
         {selection ? (
           <SelectionCheckbox
             checked={selection.selected}

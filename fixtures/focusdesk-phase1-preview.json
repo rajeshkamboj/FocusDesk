@@ -1,0 +1,237 @@
+{
+  "tasks": [
+    {
+      "id": "preview-done",
+      "title": "Completed task: 40 min this week, 10h lifetime",
+      "status": "completed",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "projectId": "preview-progress",
+      "scheduledDate": "2026-10-05",
+      "completedAt": "2026-10-05T11:30:00.000Z",
+      "actualDurationSeconds": 36000
+    },
+    {
+      "id": "preview-open",
+      "title": "Unfinished task: 20 min crossing midnight",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "projectId": "preview-progress",
+      "actualDurationSeconds": 1200
+    },
+    {
+      "id": "preview-dual",
+      "title": "Overdue schedule AND deadline — listed once",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 3,
+      "archived": false,
+      "scheduledDate": "2026-10-08",
+      "dueDate": "2026-10-09"
+    },
+    {
+      "id": "preview-schedule",
+      "title": "Overdue schedule, deadline still future",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 4,
+      "archived": false,
+      "scheduledDate": "2026-10-09",
+      "dueDate": "2026-11-01"
+    },
+    {
+      "id": "preview-deadline",
+      "title": "Deadline only overdue",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "dueDate": "2026-10-09"
+    },
+    {
+      "id": "preview-stall",
+      "title": "Open task in stalled project",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "projectId": "preview-stalled"
+    },
+    {
+      "id": "preview-held",
+      "title": "On hold: record 15 min, suppress warnings",
+      "status": "planned",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "projectId": "preview-held",
+      "scheduledDate": "2026-10-08",
+      "dueDate": "2026-10-09",
+      "actualDurationSeconds": 900
+    },
+    {
+      "id": "preview-parked",
+      "title": "Someday: record 5 min, suppress warnings",
+      "status": "someday",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 8,
+      "archived": false,
+      "projectId": "preview-parked",
+      "goalId": "preview-goal-1",
+      "scheduledDate": "2026-10-08",
+      "dueDate": "2026-10-09",
+      "actualDurationSeconds": 300
+    },
+    {
+      "id": "preview-legacy",
+      "title": "Legacy completed task: no session dates available",
+      "status": "completed",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "scheduledDate": "2026-10-05",
+      "completedAt": "2026-10-05T12:30:00.000Z",
+      "actualDurationSeconds": 36000
+    },
+    {
+      "id": "preview-today",
+      "title": "Today task — complete or start timer",
+      "status": "today",
+      "priority": "medium",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "tags": [],
+      "postponementCount": 0,
+      "archived": false,
+      "scheduledDate": "2026-10-10"
+    }
+  ],
+  "subtasks": [],
+  "projects": [
+    {
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "id": "preview-progress",
+      "name": "Project with recorded focus",
+      "goalId": "preview-goal-0"
+    },
+    {
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "id": "preview-stalled",
+      "name": "Stalled project — review me",
+      "goalId": "preview-goal-0"
+    },
+    {
+      "status": "on_hold",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "id": "preview-held",
+      "name": "On hold — no warning",
+      "goalId": "preview-goal-0"
+    },
+    {
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z",
+      "id": "preview-parked",
+      "name": "Only Someday — no warning"
+    }
+  ],
+  "goals": [
+    {
+      "id": "preview-goal-0",
+      "name": "Important work",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    },
+    {
+      "id": "preview-goal-1",
+      "name": "Personal",
+      "status": "active",
+      "createdAt": "2026-09-01T03:30:00.000Z"
+    }
+  ],
+  "inbox": [],
+  "ideas": [],
+  "learnings": [],
+  "projectMilestones": [],
+  "dailyPriorities": [],
+  "weeklyPriorities": [],
+  "monthlyPriorities": [],
+  "taskHistory": [],
+  "wellbeingDays": [],
+  "timerSessions": [
+    {
+      "id": "preview-run-1",
+      "taskId": "preview-done",
+      "startedAt": "2026-10-04T18:20:00.000Z",
+      "endedAt": "2026-10-04T18:40:00.000Z",
+      "durationSeconds": 1200
+    },
+    {
+      "id": "preview-run-2",
+      "taskId": "preview-done",
+      "startedAt": "2026-10-05T03:30:00.000Z",
+      "endedAt": "2026-10-05T04:00:00.000Z",
+      "durationSeconds": 1800
+    },
+    {
+      "id": "preview-run-3",
+      "taskId": "preview-open",
+      "startedAt": "2026-10-06T18:20:00.000Z",
+      "endedAt": "2026-10-06T18:40:00.000Z",
+      "durationSeconds": 1200
+    },
+    {
+      "id": "preview-run-4",
+      "taskId": "preview-held",
+      "startedAt": "2026-10-08T03:30:00.000Z",
+      "endedAt": "2026-10-08T03:45:00.000Z",
+      "durationSeconds": 900
+    },
+    {
+      "id": "preview-run-5",
+      "taskId": "preview-parked",
+      "startedAt": "2026-10-09T03:30:00.000Z",
+      "endedAt": "2026-10-09T03:35:00.000Z",
+      "durationSeconds": 300
+    }
+  ],
+  "settings": {
+    "general": {
+      "displayName": "Phase 1 preview",
+      "startOnToday": true,
+      "confirmTaskDeletion": true,
+      "automaticCarryForward": false,
+      "defaultTaskDuration": 30
+    },
+    "notifications": {
+      "morningPriorityReminder": false,
+      "taskReminders": false,
+      "deadlineReminders": false,
+      "eveningReviewReminder": false
+    },
+    "appearance": {
+      "theme": "system"
+    }
+  }
+}

@@ -607,6 +607,34 @@ async function main() {
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
 
+  // Phase 1: exercise populated warning and focused-time layouts too, not
+  // just the empty panels. This is isolated browser storage, never production.
+  const { addDays, combineDateTime, startOfWeek, todayISO } = await import('../lib/dates');
+  await act(async () => {
+    const snapshot = await c().actions.exportData();
+    const today = todayISO();
+    const stalled = {
+      id: 'mobile-stalled', name: 'Review-a-stalled-project-with-an-unbreakable-name-xxxxxxxxxxxxxxxx',
+      status: 'active' as const, createdAt: combineDateTime(addDays(today, -20), '09:00'),
+    };
+    snapshot.projects.push(stalled);
+    snapshot.tasks.push({
+      id: 'mobile-overdue', title: 'Overdue-scheduled-task-with-a-very-long-title-xxxxxxxxxxxxxxxx',
+      status: 'planned', priority: 'medium', createdAt: stalled.createdAt, projectId: stalled.id,
+      scheduledDate: addDays(today, -2), dueDate: addDays(today, -1),
+      tags: [], postponementCount: 3, archived: false,
+    });
+    const focusTask = snapshot.tasks.find((task) => task.projectId && task.projectId !== stalled.id)!;
+    snapshot.timerSessions.push({
+      id: 'mobile-focused-session', taskId: focusTask.id,
+      startedAt: combineDateTime(startOfWeek(today), '09:00'),
+      endedAt: combineDateTime(startOfWeek(today), '09:30'), durationSeconds: 1800,
+    });
+    snapshot.settings.general.automaticCarryForward = false;
+    await c().actions.importData(snapshot);
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+
   const clips: string[] = [];
   for (const name of Object.keys(screens) as (keyof typeof screens)[]) {
     await show(name);
@@ -635,7 +663,8 @@ async function main() {
   ok(stripEl !== null, 'The filter row is a contained scroll strip, not a page-wide row');
   if (stripEl) {
     const chips = Array.from(stripEl.querySelectorAll('button'));
-    ok(chips.length === 7, `All seven filters are present (${chips.map((b) => b.textContent).join(' / ')})`);
+    const expectedFilters = ['All', 'Today', 'Upcoming', 'Unscheduled', 'Someday', 'Completed', 'Cancelled', 'Overdue', 'Postponed 3×+'];
+    ok(chips.map((b) => b.textContent?.trim()).join('|') === expectedFilters.join('|'), `All existing and Phase 1 filters are present (${chips.map((b) => b.textContent).join(' / ')})`);
     const pill = stripEl.firstElementChild!;
     const pillSize = measure(pill, { vw: 320, fontSize: ROOT_FONT, bold: false, clipping: [] });
     ok(pillSize.pref > 430,
@@ -649,7 +678,7 @@ async function main() {
     ok(active !== undefined, 'The active filter stays visually distinct inside the strip');
   }
 
-  const selects = Array.from(main.querySelectorAll('select'));
+  const selects = Array.from(main.querySelectorAll('select')).filter((select) => select.getAttribute('aria-label') !== 'Sort tasks');
   ok(selects.length === 2, 'Search / All projects / All goals all render');
   for (const s of selects) {
     const wrapper = s.parentElement!.parentElement!;
@@ -733,10 +762,12 @@ async function main() {
 
   const dsearchWrap = (dmain.querySelector('input[placeholder^="Search"]') as HTMLElement).parentElement!;
   ok(lengthPx(styleOf(dsearchWrap, 1280).width, 16) === 208, 'Search keeps its original 208px (w-52) desktop width');
-  for (const sel of Array.from(dmain.querySelectorAll('select'))) {
+  for (const sel of Array.from(dmain.querySelectorAll('select')).filter((select) => select.getAttribute('aria-label') !== 'Sort tasks')) {
     const wrap = sel.parentElement!.parentElement!;
     ok(lengthPx(styleOf(wrap, 1280).width, 16) === 160, 'Scope select keeps its original 160px (w-40) desktop width');
   }
+  const sortWrap = dmain.querySelector('select[aria-label="Sort tasks"]')!.parentElement!.parentElement!;
+  ok(lengthPx(styleOf(sortWrap, 1280).width, 16) === 224, 'Sort keeps its existing 224px (w-56) desktop width');
   const dsel = styleOf(dmain.querySelector('.grid.min-w-0')!, 1280);
   ok(dsel.display === 'flex', 'The mobile two-up grid becomes a plain flex row again from sm up');
 

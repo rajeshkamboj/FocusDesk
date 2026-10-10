@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button';
 import { IconChevronDown, IconPlus, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
 import { TaskSection, TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
+import { ExecutionWarnings } from './execution-warnings';
 import { PriorityCard } from './priority-card';
 import { WellbeingCard } from './wellbeing-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
-import { isOpenTask, tasksWithApproachingDeadline } from '@/lib/selectors';
+import { isOpenTask, overdueTasks, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
 
 export function TodayScreen() {
@@ -71,8 +72,14 @@ export function TodayScreen() {
   const total = todays.length;
   const totalMinutes = openTasks.reduce((sum, t) => sum + (t.estimatedDuration ?? 0), 0);
 
-  const approaching = tasksWithApproachingDeadline(data.tasks).filter(
-    (t) => t.scheduledDate !== today && isOpenTask(t),
+  // A slipped task appears once: in ExecutionWarnings, with an explicit
+  // "deadline also overdue" note if both dates slipped. Deadline-only
+  // warnings stay here. On-hold projects and Someday tasks are not nudged.
+  const overdueScheduleIds = new Set(overdueTasks(data.tasks, today).map((task) => task.id));
+  const onHoldProjectIds = new Set(data.projects.filter((project) => project.status === 'on_hold').map((project) => project.id));
+  const approaching = tasksWithApproachingDeadline(data.tasks, 3, today).filter(
+    (task) => task.scheduledDate !== today && !overdueScheduleIds.has(task.id)
+      && (!task.projectId || !onHoldProjectIds.has(task.projectId)),
   );
 
   const dayName = weekdayName(today);
@@ -104,14 +111,15 @@ export function TodayScreen() {
           <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-line bg-warning-soft/60 px-4 py-3">
             <IconFlag width={15} height={15} className="mt-0.5 shrink-0 text-warning" />
             <p className="text-[12.5px] leading-relaxed text-ink-2">
-              {approaching.length === 1 ? 'A deadline is approaching: ' : `${approaching.length} deadlines are approaching: `}
+              {approaching.length === 1 ? 'A deadline needs attention: ' : `${approaching.length} deadlines need attention: `}
               {approaching
                 .slice(0, 3)
-                .map((t) => `“${t.title}” (${daysBetween(today, t.dueDate!) === 0 ? 'today' : `in ${daysBetween(today, t.dueDate!)} days`})`)
+                .map((t) => `“${t.title}” (${daysBetween(today, t.dueDate!) < 0 ? `${-daysBetween(today, t.dueDate!)} days overdue` : daysBetween(today, t.dueDate!) === 0 ? 'due today' : `in ${daysBetween(today, t.dueDate!)} days`})`)
                 .join(', ')}
             </p>
           </div>
         ) : null}
+        <ExecutionWarnings data={data} date={today} />
       </header>
 
       {/* Priority, well-being, tasks and review all sit on the same master grid.

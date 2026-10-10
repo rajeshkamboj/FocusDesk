@@ -10,6 +10,7 @@ import type {
   MonthKey,
   MonthlyPriority,
   Project,
+  Goal,
   Subtask,
   Task,
   TaskStatus,
@@ -385,6 +386,66 @@ export function overdueTasks(tasks: Task[], date: ISODate = todayISO()): Task[] 
   );
 }
 
+/** Open tasks repeatedly deferred; completed, cancelled, Someday and archived work stay out. */
+export function repeatedlyPostponedTasks(tasks: Task[]): Task[] {
+  return tasks.filter((task) => isOpenTask(task) && task.postponementCount >= 3);
+}
+
+export interface StalledProject {
+  project: Project;
+  /** Last recorded completion/focus day, or creation day when no activity exists. */
+  since: ISODate;
+  inactiveDays: number;
+  hasRecordedActivity: boolean;
+}
+
+/**
+ * A conservative review prompt, not a claim that no work happened outside
+ * FocusDesk. Only active projects with open work qualify. Someday, cancelled
+ * and archived tasks do not provide either work or activity for this warning.
+ * A running timer in the project suppresses the warning, even before its
+ * first durable checkpoint. Dates and the 14-day boundary are local days.
+ */
+export function stalledProjects(
+  data: Pick<AppData, 'projects' | 'tasks' | 'timerSessions'>,
+  date: ISODate = todayISO(),
+): StalledProject[] {
+  const eligibleTasks = data.tasks.filter((task) => !task.archived && task.status !== 'someday' && task.status !== 'cancelled');
+  const sessionsByTask = new Map<string, TimerSession[]>();
+  for (const session of data.timerSessions) {
+    if (!Number.isFinite(session.durationSeconds) || session.durationSeconds <= 0) continue;
+    const sessions = sessionsByTask.get(session.taskId) ?? [];
+    sessions.push(session);
+    sessionsByTask.set(session.taskId, sessions);
+  }
+  const result: StalledProject[] = [];
+  for (const project of data.projects) {
+    if (project.status !== 'active') continue;
+    const tasks = eligibleTasks.filter((task) => task.projectId === project.id);
+    if (!tasks.some(isOpenTask) || tasks.some(isTimerRunning)) continue;
+    const created = new Date(project.createdAt);
+    if (Number.isNaN(created.getTime())) continue; // never invent a baseline
+    let since = toISODate(created);
+    let hasRecordedActivity = false;
+    const recordActivity = (timestamp?: string) => {
+      if (!timestamp) return;
+      const at = new Date(timestamp);
+      if (Number.isNaN(at.getTime())) return;
+      const day = toISODate(at);
+      if (day > date) return; // invalid future activity cannot hide a stall
+      hasRecordedActivity = true;
+      if (day > since) since = day;
+    };
+    for (const task of tasks) {
+      if (task.status === 'completed') recordActivity(task.completedAt);
+      for (const session of sessionsByTask.get(task.id) ?? []) recordActivity(session.endedAt);
+    }
+    const inactiveDays = daysBetween(since, date);
+    if (inactiveDays >= 14) result.push({ project, since, inactiveDays, hasRecordedActivity });
+  }
+  return result.sort((a, b) => b.inactiveDays - a.inactiveDays || a.project.name.localeCompare(b.project.name));
+}
+
 /** Open tasks whose deadline is within `days` days (including overdue). */
 export function tasksWithApproachingDeadline(tasks: Task[], days = 3, date: ISODate = todayISO()): Task[] {
   return tasks.filter((t) => {
@@ -562,6 +623,77 @@ export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats
   };
 }
 
+export interface PeriodFocusedTime {
+  seconds: number;
+  byDay: { date: ISODate; seconds: number }[];
+  byTask: { task: Task; seconds: number }[];
+  /** Each dimension is exclusive; its rows (including unassigned) sum to seconds. */
+  byProject: { project?: Project; seconds: number }[];
+  byGoal: { goal?: Goal; seconds: number }[];
+  /** Earliest available saved run, NOT the migration date or a guarantee of coverage. */
+  firstAvailableSessionDate?: ISODate;
+}
+
+/**
+ * Recorded focused time inside an inclusive local date range. Reuses the
+ * Calendar's session splitting, never completion dates or lifetime totals.
+ * Only saved checkpoints are counted; paused gaps and uncheckpointed live
+ * time are not inferred. Like Calendar, archived/deleted tasks are excluded.
+ * On-hold projects and Someday tasks still retain their genuinely recorded
+ * time (those exclusions belong to warnings, not time accounting).
+ *
+ * Relationships are CURRENT, not historical snapshots. A valid direct task
+ * goal takes precedence over its project's goal to avoid counting time twice;
+ * a missing direct goal falls back to the project goal. Unlinked work,
+ * including daily-priority timer tasks, remains visible as unassigned.
+ */
+export function focusedTimeInRange(
+  data: Pick<AppData, 'tasks' | 'projects' | 'goals' | 'timerSessions'>,
+  from: ISODate,
+  to: ISODate,
+): PeriodFocusedTime {
+  const tasks = liveTaskMap(data.tasks);
+  const projects = new Map(data.projects.map((project) => [project.id, project]));
+  const goals = new Map(data.goals.map((goal) => [goal.id, goal]));
+  const days = new Map<ISODate, number>();
+  for (let day = from; day <= to; day = addDays(day, 1)) days.set(day, 0);
+  const byTask = new Map<string, number>();
+  let firstAvailableSessionDate: ISODate | undefined;
+  for (const session of data.timerSessions) {
+    if (!Number.isFinite(session.durationSeconds) || session.durationSeconds <= 0 || Number.isNaN(Date.parse(session.startedAt))) continue;
+    const firstDay = toISODate(new Date(session.startedAt));
+    if (!firstAvailableSessionDate || firstDay < firstAvailableSessionDate) firstAvailableSessionDate = firstDay;
+    if (!tasks.has(session.taskId)) continue;
+    let seconds = 0;
+    for (const [day, slice] of sessionSecondsByDay(session)) {
+      if (!days.has(day)) continue;
+      days.set(day, days.get(day)! + slice);
+      seconds += slice;
+    }
+    if (seconds > 0) byTask.set(session.taskId, (byTask.get(session.taskId) ?? 0) + seconds);
+  }
+  const projectSeconds = new Map<string | undefined, number>();
+  const goalSeconds = new Map<string | undefined, number>();
+  for (const [taskId, seconds] of byTask) {
+    const task = tasks.get(taskId)!;
+    const project = task.projectId ? projects.get(task.projectId) : undefined;
+    const goal = (task.goalId ? goals.get(task.goalId) : undefined)
+      ?? (project?.goalId ? goals.get(project.goalId) : undefined);
+    projectSeconds.set(project?.id, (projectSeconds.get(project?.id) ?? 0) + seconds);
+    goalSeconds.set(goal?.id, (goalSeconds.get(goal?.id) ?? 0) + seconds);
+  }
+  return {
+    seconds: [...byTask.values()].reduce((sum, seconds) => sum + seconds, 0),
+    byDay: [...days].map(([date, seconds]) => ({ date, seconds })),
+    byTask: [...byTask].map(([id, seconds]) => ({ task: tasks.get(id)!, seconds })),
+    byProject: [...projectSeconds].map(([id, seconds]) => ({ project: id ? projects.get(id) : undefined, seconds }))
+      .sort((a, b) => b.seconds - a.seconds || (a.project?.name ?? '').localeCompare(b.project?.name ?? '')),
+    byGoal: [...goalSeconds].map(([id, seconds]) => ({ goal: id ? goals.get(id) : undefined, seconds }))
+      .sort((a, b) => b.seconds - a.seconds || (a.goal?.name ?? '').localeCompare(b.goal?.name ?? '')),
+    firstAvailableSessionDate,
+  };
+}
+
 export interface WeeklyReviewStats {
   completed: Task[];
   cancelled: Task[];
@@ -569,7 +701,8 @@ export interface WeeklyReviewStats {
   completedDailyPriorities: number;
   totalDailyPriorities: number;
   projectsWorkedOn: { project: Project; completed: number; focusedSeconds: number }[];
-  /** Focused time (seconds) invested in the week's completed tasks. */
+  focusedTime: PeriodFocusedTime;
+  /** Saved session seconds recorded inside the selected week, including unfinished work. */
   focusedSeconds: number;
 }
 
@@ -590,11 +723,11 @@ export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): We
   const dayPriorities = data.dailyPriorities.filter((p) => p.date >= from && p.date <= to);
 
   const byProject = new Map<string, number>();
-  const focusedByProject = new Map<string, number>();
+  const focusedTime = focusedTimeInRange(data, from, to);
+  const focusedByProject = new Map(focusedTime.byProject.map(({ project, seconds }) => [project?.id, seconds]));
   for (const t of completed) {
     if (!t.projectId) continue;
     byProject.set(t.projectId, (byProject.get(t.projectId) ?? 0) + 1);
-    focusedByProject.set(t.projectId, (focusedByProject.get(t.projectId) ?? 0) + (t.actualDurationSeconds ?? 0));
   }
   const projectsWorkedOn = data.projects
     .filter((p) => byProject.has(p.id))
@@ -611,7 +744,8 @@ export function weeklyReviewStats(data: AppData, from: ISODate, to: ISODate): We
     completedDailyPriorities: dayPriorities.filter((p) => p.completed).length,
     totalDailyPriorities: dayPriorities.length,
     projectsWorkedOn,
-    focusedSeconds: focusedSeconds(completed),
+    focusedSeconds: focusedTime.seconds,
+    focusedTime,
   };
 }
 

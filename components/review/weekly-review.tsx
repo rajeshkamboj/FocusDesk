@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm';
 import { ProgressBar } from '@/components/ui/card';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconFlame, IconPlus, IconTrash } from '@/components/ui/icons';
-import { addDays, endOfWeek, formatFocusedTime, formatShortDate, isoWeekKey, startOfWeek, todayISO } from '@/lib/dates';
+import { addDays, endOfWeek, formatFocusedTime, formatShortDate, isoWeekKey, startOfWeek, todayISO, weekdayName } from '@/lib/dates';
 import { weeklyReviewStats } from '@/lib/selectors';
 import type { WeeklyPriority } from '@/lib/types';
 
@@ -32,6 +32,7 @@ export function WeeklyReview() {
   const others = priorities.filter((p) => !p.primary);
 
   const stats = useMemo(() => weeklyReviewStats(data, weekStart, weekEnd), [data, weekStart, weekEnd]);
+  const timeByTask = new Map(stats.focusedTime.byTask.map(({ task, seconds }) => [task.id, seconds]));
 
   return (
     <div className="space-y-6">
@@ -153,20 +154,15 @@ export function WeeklyReview() {
               <div className="mt-5">
                 <p className="text-[13px] font-medium text-ink">
                   Completed work
-                  {stats.focusedSeconds > 0 ? (
-                    <span className="ml-2 text-[11.5px] font-normal tabular-nums text-ink-3">
-                      {formatFocusedTime(stats.focusedSeconds)} focused
-                    </span>
-                  ) : null}
                 </p>
                 <ul className="mt-2 space-y-1.5">
                   {stats.completed.slice(0, 8).map((t) => (
                     <li key={t.id} className="flex items-center gap-2 text-[13px] text-ink-2">
                       <IconCheck width={13} height={13} className="shrink-0 text-accent" />
                       <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                      {t.actualDurationSeconds != null ? (
-                        <span className="shrink-0 tabular-nums text-[11.5px] text-ink-3" title="Focused time">
-                          {formatFocusedTime(t.actualDurationSeconds)}
+                      {timeByTask.has(t.id) ? (
+                        <span className="shrink-0 tabular-nums text-[11.5px] text-ink-3" title="Recorded focused time this week">
+                          {formatFocusedTime(timeByTask.get(t.id))}
                         </span>
                       ) : null}
                     </li>
@@ -192,7 +188,7 @@ export function WeeklyReview() {
                       />
                       <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
                         {completed} done
-                        {focusedSeconds > 0 ? ` · ${formatFocusedTime(focusedSeconds)}` : ''}
+                        {focusedSeconds > 0 ? ` · ${formatFocusedTime(focusedSeconds)} recorded this week` : ''}
                       </span>
                     </div>
                   ))}
@@ -206,6 +202,55 @@ export function WeeklyReview() {
           </p>
         )}
       </section>
+
+      {!isFutureWeek ? (
+        <section aria-labelledby="weekly-focused-heading" className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="weekly-focused-heading" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Recorded focused time this week</h2>
+            <span data-weekly-focused-total className="text-lg font-semibold tabular-nums text-ink">{timeLabel(stats.focusedTime.seconds)}</span>
+          </div>
+          <div className="mt-4 grid gap-5 sm:grid-cols-2">
+            <div>
+              <h3 className="text-xs font-medium text-ink">By day</h3>
+              <dl className="mt-2 space-y-1.5">
+                {stats.focusedTime.byDay.map(({ date, seconds }) => (
+                  <TimeRow key={date} label={`${weekdayName(date).slice(0, 3)} · ${formatShortDate(date).split(', ')[1]}`} seconds={seconds} />
+                ))}
+              </dl>
+            </div>
+            <div className="min-w-0 space-y-4">
+              <div>
+                <h3 className="text-xs font-medium text-ink">By project</h3>
+                <dl className="mt-2 space-y-1.5">
+                  {stats.focusedTime.byProject.map(({ project, seconds }) => (
+                    <TimeRow key={project ? `project:${project.id}` : 'unassigned'} label={project?.name ?? 'No project'} seconds={seconds} />
+                  ))}
+                </dl>
+              </div>
+              <div>
+                <h3 className="text-xs font-medium text-ink">By goal</h3>
+                <dl className="mt-2 space-y-1.5">
+                  {stats.focusedTime.byGoal.map(({ goal, seconds }) => (
+                    <TimeRow key={goal ? `goal:${goal.id}` : 'unassigned'} label={goal?.name ?? 'No goal'} seconds={seconds} />
+                  ))}
+                </dl>
+              </div>
+            </div>
+          </div>
+          {stats.focusedTime.seconds === 0 ? <p className="mt-3 text-xs text-ink-3">No saved focused time in this week. This does not mean no work was done.</p> : null}
+          <div className="mt-4 space-y-1.5 text-[11px] leading-relaxed text-ink-3">
+            <p>Saved timer sessions, including unfinished work; paused time excluded. Daily history before migration 006 cannot be reconstructed from task lifetime totals and is not included.</p>
+            <details>
+              <summary className="cursor-pointer rounded py-2 text-xs font-medium text-ink-2">How this time is counted</summary>
+              <div className="mt-1 space-y-1.5">
+                <p>A running timer updates this total at its next checkpoint or pause. Archived/deleted tasks are excluded. Concurrent timers add their recorded seconds, not unique elapsed time.</p>
+                <p>Attributed using current task/project/goal links, not historical links. A task’s direct goal takes precedence over its project’s goal. Each breakdown sums to the same total; project and goal totals are not added together.</p>
+                <p>{stats.focusedTime.firstAvailableSessionDate ? `First available saved session: ${formatShortDate(stats.focusedTime.firstAvailableSessionDate)} ${stats.focusedTime.firstAvailableSessionDate.slice(0, 4)}. This is not a migration date or proof of complete history.` : 'No saved session history is available.'}</p>
+              </div>
+            </details>
+          </div>
+        </section>
+      ) : null}
 
       <ConfirmDialog
         open={deleting !== undefined}
@@ -264,6 +309,19 @@ function Stat({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-xl border border-line bg-surface-2/50 px-3.5 py-3">
       <p className="text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-3">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-ink">{value}</p>
+    </div>
+  );
+}
+
+function timeLabel(seconds: number): string {
+  return seconds === 0 ? '0 min recorded' : formatFocusedTime(seconds);
+}
+
+function TimeRow({ label, seconds }: { label: string; seconds: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-xs">
+      <dt className="min-w-0 break-words text-ink-2">{label}</dt>
+      <dd className="shrink-0 tabular-nums text-ink">{timeLabel(seconds)}</dd>
     </div>
   );
 }

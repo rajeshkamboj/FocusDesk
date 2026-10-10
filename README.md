@@ -16,6 +16,12 @@ The Calendar shows **focused time** per day (with an optional per-task breakdown
 
 It is attributed from **timer sessions**: one record per continuous run of the timer, between a Start/Resume and the next Pause/Finish. A task's `actualDurationSeconds` stays what it always was — its lifetime total — so a task worked 45 min on Monday and 30 min on Tuesday reports 45 m and 30 m on the right days instead of 1 h 15 m on both. A run that crosses midnight is stored as the single run it was and split across the two local calendar days when read, so nothing is double counted. Paused time is never part of a run, and closing the app stops a run at the same durable checkpoint the task itself recovers to.
 
+### Review charts
+
+**Review → Weekly** charts the same session data: a bar per day (including days with nothing recorded, drawn as an empty slot with `0`) and horizontal bars by project inside the selected week. **Review → Monthly** shows the project bars for the displayed month. Both are plain elements — no chart library — and both read the same numbers the Review already prints, so a chart can never disagree with the summary above it. Every bar carries its own printed value, so nothing is conveyed by colour alone, and each column also exposes the full weekday, date and seconds-exact value to screen readers.
+
+Time with no project is shown as a real **"No project"** row rather than dropped, and the chart says when that row includes work whose project has since been deleted. Monthly states plainly that its session-based figure is *not* the same as the "Focused time" stat above it, which counts each month-completed task's whole lifetime total. Uncheckpointed live time is deliberately not inferred, so the charts stay consistent with the Review totals they sit beside. See `docs/review-visual-analytics.md`.
+
 ## Local setup
 ```bash
 npm install

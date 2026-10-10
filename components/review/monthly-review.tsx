@@ -9,9 +9,10 @@ import { ProgressBar } from '@/components/ui/card';
 import { Select } from '@/components/ui/form';
 import { IconChevronLeft, IconChevronRight, IconPlus, IconTrash } from '@/components/ui/icons';
 import { TaskRow } from '@/components/tasks/task-row';
-import { formatFocusedTime, monthKey, monthName, todayISO } from '@/lib/dates';
-import { monthlyPriorityProgress, monthlyReviewStats } from '@/lib/selectors';
+import { endOfMonth, formatFocusedTime, monthKey, monthName, startOfMonth, todayISO } from '@/lib/dates';
+import { focusedTimeInRange, monthlyPriorityProgress, monthlyReviewStats } from '@/lib/selectors';
 import type { MonthlyPriority } from '@/lib/types';
+import { FocusByProjectChart } from './focus-by-project-chart';
 
 /**
  * Monthly planning: priorities you choose, optionally linked to a goal or
@@ -27,8 +28,18 @@ export function MonthlyReview() {
 
   const month = monthKey(anchor);
   const isCurrentMonth = month === monthKey(todayISO());
+  const isFutureMonth = month > monthKey(todayISO());
   const priorities = data.monthlyPriorities.filter((p) => p.month === month);
   const stats = useMemo(() => monthlyReviewStats(data, month), [data, month]);
+  const monthStart = startOfMonth(anchor);
+  const monthEnd = endOfMonth(anchor);
+  // Session-based time for the displayed month — the same source the Weekly
+  // tab charts, and deliberately a *different* figure from `stats.focusedSeconds`
+  // above, which counts whole lifetime totals of tasks completed in the month.
+  const focusedTime = useMemo(
+    () => focusedTimeInRange(data, monthStart, monthEnd),
+    [data, monthStart, monthEnd],
+  );
 
   const shiftMonth = (delta: number) => {
     const d = new Date();
@@ -231,6 +242,64 @@ export function MonthlyReview() {
         ) : null}
       </section>
 
+      {/* Recorded focused time — saved timer sessions inside the displayed
+          month, attributed to current projects. Kept out of the way entirely
+          for a month that has not started: there is nothing to record yet. */}
+      {!isFutureMonth ? (
+        <section
+          aria-labelledby="monthly-focused-heading"
+          className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-6"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2
+              id="monthly-focused-heading"
+              className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3"
+            >
+              Recorded focused time this month
+            </h2>
+            <span
+              data-monthly-focused-total
+              className="text-lg font-semibold tabular-nums text-ink"
+            >
+              {monthlyTimeLabel(focusedTime.seconds)}
+            </span>
+          </div>
+
+          <h3 className="mt-4 text-xs font-medium text-ink">By project</h3>
+          <FocusByProjectChart
+            rows={focusedTime.byProject}
+            total={focusedTime.seconds}
+            orphanedTaskCount={focusedTime.orphanedTaskCount}
+            className="mt-2"
+          />
+
+          {focusedTime.seconds === 0 ? (
+            <p className="mt-3 text-xs text-ink-3">
+              No saved focused time in this month. This does not mean no work was done.
+            </p>
+          ) : null}
+
+          <div className="mt-4 space-y-1.5 text-[11px] leading-relaxed text-ink-3">
+            <p>
+              Saved timer sessions, including unfinished work; paused time excluded. Daily history
+              before migration 006 cannot be reconstructed from task lifetime totals and is not
+              included.
+            </p>
+            <p>
+              This is not the same figure as &ldquo;Focused time&rdquo; above, which counts each
+              month-completed task&rsquo;s whole recorded time — including time spent in earlier
+              months.
+            </p>
+            {focusedTime.firstAvailableSessionDate ? (
+              <p>
+                First available saved session: {focusedTime.firstAvailableSessionDate}. This is not a
+                migration date or proof of complete history.
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <ConfirmDialog
         open={deleting !== undefined}
         title="Remove monthly priority?"
@@ -245,6 +314,10 @@ export function MonthlyReview() {
       />
     </div>
   );
+}
+
+function monthlyTimeLabel(seconds: number): string {
+  return seconds === 0 ? '0 min recorded' : formatFocusedTime(seconds);
 }
 
 function Stat({ label, value }: { label: string; value: number | string }) {

@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm';
 import { ProgressBar } from '@/components/ui/card';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconFlame, IconPlus, IconTrash } from '@/components/ui/icons';
-import { addDays, endOfWeek, formatFocusedTime, formatShortDate, isoWeekKey, startOfWeek, todayISO, weekdayName } from '@/lib/dates';
+import { addDays, endOfWeek, formatFocusedTime, formatShortDate, isoWeekKey, startOfWeek, todayISO } from '@/lib/dates';
 import { weeklyReviewStats } from '@/lib/selectors';
 import type { WeeklyPriority } from '@/lib/types';
+import { FocusByDayChart } from './focus-by-day-chart';
+import { FocusByProjectChart } from './focus-by-project-chart';
 
 /**
  * "This week" — one primary priority, optional secondary priorities, and an
@@ -210,22 +212,26 @@ export function WeeklyReview() {
             <span data-weekly-focused-total className="text-lg font-semibold tabular-nums text-ink">{timeLabel(stats.focusedTime.seconds)}</span>
           </div>
           <div className="mt-4 grid gap-5 sm:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <h3 className="text-xs font-medium text-ink">By day</h3>
-              <dl className="mt-2 space-y-1.5">
-                {stats.focusedTime.byDay.map(({ date, seconds }) => (
-                  <TimeRow key={date} label={`${weekdayName(date).slice(0, 3)} · ${formatShortDate(date).split(', ')[1]}`} seconds={seconds} />
-                ))}
-              </dl>
+              {/* Bars replace the old text rows rather than sitting beside
+                  them: one representation of the same seven numbers, with the
+                  exact value printed on every column. */}
+              <FocusByDayChart
+                days={stats.focusedTime.byDay}
+                total={stats.focusedTime.seconds}
+                className="mt-2.5"
+              />
             </div>
             <div className="min-w-0 space-y-4">
               <div>
                 <h3 className="text-xs font-medium text-ink">By project</h3>
-                <dl className="mt-2 space-y-1.5">
-                  {stats.focusedTime.byProject.map(({ project, seconds }) => (
-                    <TimeRow key={project ? `project:${project.id}` : 'unassigned'} label={project?.name ?? 'No project'} seconds={seconds} />
-                  ))}
-                </dl>
+                <FocusByProjectChart
+                  rows={stats.focusedTime.byProject}
+                  total={stats.focusedTime.seconds}
+                  orphanedTaskCount={stats.focusedTime.orphanedTaskCount}
+                  className="mt-2"
+                />
               </div>
               <div>
                 <h3 className="text-xs font-medium text-ink">By goal</h3>

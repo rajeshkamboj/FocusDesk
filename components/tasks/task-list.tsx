@@ -3,10 +3,27 @@
 import type { ReactNode } from 'react';
 import type { Task } from '@/lib/types';
 import { uncompletedTasksFirst } from '@/lib/selectors';
+import { taskHierarchyRows } from '@/lib/task-hierarchy';
 import { TaskRow } from './task-row';
 
-export function TaskList({ tasks, showDates = true }: { tasks: Task[]; showDates?: boolean }) {
+export function TaskList({ tasks, showDates = true, hierarchical = false }: { tasks: Task[]; showDates?: boolean; hierarchical?: boolean }) {
   const orderedTasks = uncompletedTasksFirst(tasks);
+  if (hierarchical) {
+    return (
+      <div aria-label="Task hierarchy" className="space-y-0.5">
+        {taskHierarchyRows(orderedTasks).map(({ task, depth }) => (
+          <div key={task.id} data-task-depth={depth} style={{ paddingLeft: `min(${depth * 12}px, 20%)` }}>
+            {/* Keep deep trees usable on a phone without clipping task menus.
+                The level and immediate-parent label disambiguate capped indentation. */}
+            {depth >= 5 ? <p className="px-3 text-[10px] text-ink-3">Task level {depth + 1}</p> : null}
+            <div className={depth > 0 ? 'border-l border-line' : undefined}>
+              <TaskRow task={task} showDate={showDates} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0.5">

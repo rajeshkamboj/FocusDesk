@@ -45,9 +45,11 @@ import { Tabs } from '@/components/ui/tabs';
 import { IconCheck, IconUpload } from '@/components/ui/icons';
 import {
   PROJECT_PLAN_GOAL_STATUSES,
+  PROJECT_PLAN_LIMITS,
   PROJECT_PLAN_PROJECT_STATUSES,
   PROJECT_PLAN_TASK_PRIORITIES,
   PROJECT_PLAN_TASK_STATUSES,
+  countPreviewTasks,
   existingProjectImportPreview,
   findProjectPlanNameClashes,
   resolveExistingProjectImport,
@@ -64,8 +66,10 @@ import {
   type ResolvedExistingProjectImport,
 } from '@/lib/project-plan';
 
-/** Rows the hierarchy renders before it says "and N more". */
+/** Initial rows for large plans; every remaining row can be revealed before confirmation. */
 const MAX_TREE_ROWS = 300;
+const TREE_INDENT = 14;
+const TREE_LABEL_WIDTH = 220;
 
 type ImportOutcome =
   | { mode: 'create-new-project'; created: ProjectPlanImportResult }
@@ -131,6 +135,12 @@ export function ProjectPlanImportModal({ open, onClose }: { open: boolean; onClo
     review.ok && !importing && (mode === 'create-new-project' ? total > 0 : targetProject !== undefined && addsSomething);
 
   const readFile = (file: File) => {
+    if (file.size > PROJECT_PLAN_LIMITS.bytes) {
+      setResult(null);
+      setText('');
+      setFailure('A project plan may be at most 5 MiB of UTF-8 JSON. Split the plan and import it in parts.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setResult(null);
@@ -142,7 +152,7 @@ export function ProjectPlanImportModal({ open, onClose }: { open: boolean; onClo
   };
 
   const run = async () => {
-    if (importing) return;
+    if (!canImport) return;
     if (mode === 'create-new-project') {
       if (!review.ok || !review.plan) return;
       setImporting(true);
@@ -151,7 +161,7 @@ export function ProjectPlanImportModal({ open, onClose }: { open: boolean; onClo
         setResult({ mode, created: await actions.importProjectPlan(review.plan) });
         setText('');
       } catch (error) {
-        // A failed import kept nothing — say so, with the reason.
+        // The repository reports the failure and whether compensation completed.
         setFailure(error instanceof Error ? error.message : 'The import failed.');
       } finally {
         setImporting(false);
@@ -165,7 +175,7 @@ export function ProjectPlanImportModal({ open, onClose }: { open: boolean; onClo
       setResult({ mode, created: await actions.importProjectPlanIntoExistingProject(resolved), resolved });
       setText('');
     } catch (error) {
-      // A failed import kept nothing — say so, with the reason.
+      // The repository reports the failure and whether compensation completed.
       setFailure(error instanceof Error ? error.message : 'The import failed.');
     } finally {
       setImporting(false);
@@ -416,6 +426,7 @@ function PlanPreview({
           <Count label={counts.projectMilestones === 1 ? 'Project Milestone' : 'Project Milestones'} value={counts.projectMilestones} />
           <Count label={counts.tasks === 1 ? 'Task' : 'Tasks'} value={counts.tasks} />
         </div>
+        <TaskCounts parentTasks={counts.parentTasks} subtasks={counts.subtasks} total={counts.tasks} />
       </div>
 
       {clashes.length > 0 ? (
@@ -455,6 +466,15 @@ function Count({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** Parent means a top-level task; unbranched roots are included. */
+function TaskCounts({ parentTasks, subtasks, total }: { parentTasks: number; subtasks: number; total: number }) {
+  return (
+    <p aria-label="Task counts" className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
+      {plural(parentTasks, 'top-level task')} · {plural(subtasks, 'subtask')} · {plural(total, 'total task')}
+    </p>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The hierarchy                                                       */
 /* ------------------------------------------------------------------ */
@@ -465,6 +485,7 @@ interface PreviewNode {
   kind: NodeKind;
   label: string;
   meta?: string;
+  description?: string;
   children: PreviewNode[];
 }
 
@@ -477,16 +498,19 @@ interface TreeRow extends PreviewNode {
 const taskMeta = (task: PreviewTask): string | undefined => {
   const parts: string[] = [];
   if (task.dueDate) parts.push(`due ${task.dueDate}`);
-  else if (task.scheduledDate) parts.push(`scheduled ${task.scheduledDate}`);
+  if (task.scheduledDate) parts.push(`scheduled ${task.scheduledDate}`);
+  if (task.estimatedDuration) parts.push(`${task.estimatedDuration} min estimated`);
   if (task.status !== 'created') parts.push(PROJECT_PLAN_TASK_STATUSES[task.status]);
   if (task.priority !== 'medium') parts.push(`${PROJECT_PLAN_TASK_PRIORITIES[task.priority]} priority`);
   return parts.length > 0 ? parts.join(' · ') : undefined;
 };
 
-const taskNode = (task: PreviewTask): PreviewNode => ({ kind: 'task', label: task.title, meta: taskMeta(task), children: [] });
+const taskNode = (task: PreviewTask): PreviewNode => ({
+  kind: 'task', label: task.title, meta: taskMeta(task), description: task.description, children: task.subtasks.map(taskNode),
+});
 
 const projectNode = (project: PreviewProject): PreviewNode => {
-  const tasks = project.tasks.length + project.milestones.reduce((total, m) => total + m.tasks.length, 0);
+  const tasks = countPreviewTasks(project.tasks) + project.milestones.reduce((total, m) => total + countPreviewTasks(m.tasks), 0);
   return {
     kind: 'project',
     label: project.name,
@@ -503,7 +527,7 @@ const projectNode = (project: PreviewProject): PreviewNode => {
         label: milestone.name,
         meta: [
           milestone.targetDate ? `target ${milestone.targetDate}` : undefined,
-          `${milestone.tasks.length} ${milestone.tasks.length === 1 ? 'task' : 'tasks'}`,
+          plural(countPreviewTasks(milestone.tasks), 'task'),
         ]
           .filter(Boolean)
           .join(' · '),
@@ -533,7 +557,7 @@ function previewNodes(preview: ProjectPlanPreview): PreviewNode[] {
     roots.push({
       kind: 'section',
       label: 'Tasks without a project',
-      meta: `${preview.tasks.length}`,
+      meta: `${countPreviewTasks(preview.tasks)}`,
       children: preview.tasks.map(taskNode),
     });
   }
@@ -544,11 +568,11 @@ const countNodes = (nodes: PreviewNode[]): number =>
   nodes.reduce((total, node) => total + 1 + countNodes(node.children), 0);
 
 /** Depth-first rows with the connector each one needs, capped for huge plans. */
-function treeRows(nodes: PreviewNode[]): { rows: TreeRow[]; hidden: number } {
+function treeRows(nodes: PreviewNode[], limit: number): { rows: TreeRow[]; hidden: number } {
   const rows: TreeRow[] = [];
   const walk = (list: PreviewNode[], depth: number, prefix: string) => {
     list.forEach((node, index) => {
-      if (rows.length >= MAX_TREE_ROWS) return;
+      if (rows.length >= limit) return;
       const last = index === list.length - 1;
       rows.push({
         ...node,
@@ -572,33 +596,50 @@ const KIND_STYLE: Record<NodeKind, string> = {
 };
 
 function PlanTree({ preview }: { preview: ProjectPlanPreview }) {
-  const { rows, hidden } = useMemo(() => treeRows(previewNodes(preview)), [preview]);
+  const nodes = useMemo(() => previewNodes(preview), [preview]);
+  return <HierarchyTree nodes={nodes} />;
+}
+
+/** Same tree in both import modes; large plans are never permanently truncated. */
+function HierarchyTree({ nodes }: { nodes: PreviewNode[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const { rows, hidden } = useMemo(() => treeRows(nodes, showAll ? Infinity : MAX_TREE_ROWS), [nodes, showAll]);
   return (
     <div className="rounded-xl border border-line bg-surface px-4 py-3">
       <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-3">What will be created</p>
-      <ul className="space-y-[3px]">
-        {rows.map((row) => (
-          <li
-            key={row.key}
-            className="flex min-w-0 items-baseline gap-1.5"
-            style={{ paddingLeft: row.depth * 14 }}
-          >
-            {row.connector ? (
-              <span aria-hidden className="shrink-0 font-mono text-[11px] leading-snug text-ink-3">
-                {row.connector}
+      <div className="max-h-96 overflow-auto">
+        {/* Deep branches scroll inside the preview, keeping real text width on phones. */}
+        <ul
+          aria-label="Imported task hierarchy"
+          className="space-y-[3px]"
+          style={{ minWidth: TREE_LABEL_WIDTH + Math.max(0, ...rows.map((row) => row.depth)) * TREE_INDENT }}
+        >
+          {rows.map((row) => (
+            <li
+              key={row.key}
+              className="flex min-w-0 items-baseline gap-1.5"
+              style={{ paddingLeft: row.depth * TREE_INDENT }}
+            >
+              {row.connector ? (
+                <span aria-hidden className="shrink-0 font-mono text-[11px] leading-snug text-ink-3">
+                  {row.connector}
+                </span>
+              ) : null}
+              <span className="min-w-0 text-[12.5px] leading-snug">
+                <span className={`break-words ${KIND_STYLE[row.kind]}`}>{row.label}</span>
+                {row.meta ? <span className="break-words text-ink-3"> · {row.meta}</span> : null}
+                {row.description ? <span className="block whitespace-pre-line break-words text-[11.5px] text-ink-3">{row.description}</span> : null}
               </span>
-            ) : null}
-            <span className="min-w-0 text-[12.5px] leading-snug">
-              <span className={`break-words ${KIND_STYLE[row.kind]}`}>{row.label}</span>
-              {row.meta ? <span className="break-words text-ink-3"> · {row.meta}</span> : null}
-            </span>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      </div>
       {hidden > 0 ? (
-        <p className="mt-2 text-[11.5px] text-ink-3">
-          …and {hidden} more {hidden === 1 ? 'record' : 'records'} — the counts above are the whole plan.
-        </p>
+        <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
+          Show all {rows.length + hidden} records ({hidden} more)
+        </Button>
+      ) : showAll && rows.length > MAX_TREE_ROWS ? (
+        <Button variant="ghost" size="sm" onClick={() => setShowAll(false)}>Show fewer records</Button>
       ) : null}
     </div>
   );
@@ -619,6 +660,22 @@ function ExistingProjectPreview({
 }) {
   const { counts, existing } = preview;
   const addsNothing = counts.newMilestones + counts.newTasks === 0;
+  const nodes = useMemo<PreviewNode[]>(() => [{
+    kind: 'project',
+    label: preview.targetProject.name,
+    meta: 'existing project — unchanged',
+    children: [
+      ...preview.milestones.map(({ mapping, tasks }) => ({
+        kind: 'milestone' as const,
+        label: mapping.name,
+        meta: `${mapping.decision === 'use-existing' ? 'reuse existing' : 'create new'} · ${plural(countPreviewTasks(tasks), 'task')}`,
+        description: mapping.decision === 'create-new' ? mapping.description : undefined,
+        children: tasks.map(taskNode),
+      })),
+      ...preview.projectLevelTasks.map(taskNode),
+      ...preview.rootTasks.map(taskNode),
+    ],
+  }], [preview]);
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
@@ -670,7 +727,7 @@ function ExistingProjectPreview({
                     </p>
                     <p className="text-[11px] text-ink-3">
                       {mapping.targetDate ? `target ${mapping.targetDate} · ` : ''}
-                      {plural(tasks.length, 'task')}
+                      {plural(countPreviewTasks(tasks), 'task')}
                     </p>
                   </div>
                   <Select
@@ -705,20 +762,24 @@ function ExistingProjectPreview({
           <Count label={counts.newMilestones === 1 ? 'New milestone' : 'New milestones'} value={counts.newMilestones} />
           <Count label={counts.reusedMilestones === 1 ? 'Milestone reused' : 'Milestones reused'} value={counts.reusedMilestones} />
         </div>
+        <TaskCounts parentTasks={counts.parentTasks} subtasks={counts.subtasks} total={counts.newTasks} />
         <ul className="mt-2.5 space-y-0.5 text-[12px] text-ink-2">
           {counts.milestoneTasks > 0 ? <li>· {plural(counts.milestoneTasks, 'task')} under a milestone (existing or new)</li> : null}
           {counts.projectLevelTasks > 0 ? <li>· {plural(counts.projectLevelTasks, 'project-level task')} — no milestone</li> : null}
           {counts.rootTasks > 0 ? (
             <li>
-              · {plural(counts.rootTasks, 'root task')} → project-level {counts.rootTasks === 1 ? 'task' : 'tasks'} of{' '}
+              · {counts.subtasks > 0 ? `${plural(counts.rootTasks, 'task')} from root task branches (including subtasks)` : plural(counts.rootTasks, 'root task')} → project-level {counts.rootTasks === 1 ? 'task' : 'tasks'} of{' '}
               {preview.targetProject.name}
             </li>
           ) : null}
         </ul>
         <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
           Every task is created new — even when an existing task has the same title. No existing task is modified.
+          {counts.subtasks > 0 ? ' Section counts include descendants; the top-level/subtask counts above separate them.' : ''}
         </p>
       </div>
+
+      <HierarchyTree nodes={nodes} />
 
       <div className="rounded-xl border border-line bg-surface px-4 py-3">
         <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-3">Existing data</p>
@@ -826,6 +887,7 @@ function ImportResult({ result, onClose }: { result: ProjectPlanImportResult; on
         />
         <Count label={result.tasks.length === 1 ? 'Task created' : 'Tasks created'} value={result.tasks.length} />
       </div>
+      <TaskCounts parentTasks={result.tasks.filter((t) => !t.parentTaskId).length} subtasks={result.tasks.filter((t) => t.parentTaskId).length} total={result.tasks.length} />
 
       {result.projects.length > 0 ? (
         <div className="rounded-xl border border-line bg-surface px-4 py-3">
@@ -902,6 +964,7 @@ function ExistingImportResult({
         />
         <Count label={result.tasks.length === 1 ? 'Task added' : 'Tasks added'} value={result.tasks.length} />
       </div>
+      <TaskCounts parentTasks={result.tasks.filter((t) => !t.parentTaskId).length} subtasks={result.tasks.filter((t) => t.parentTaskId).length} total={result.tasks.length} />
 
       <div className="rounded-xl border border-line bg-surface px-4 py-3">
         <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-3">New in {targetName}</p>
@@ -918,7 +981,7 @@ function ExistingImportResult({
               </li>
             );
           })}
-          {projectLevel.map((task) => (
+          {projectLevel.filter((task) => !task.parentTaskId).map((task) => (
             <li key={task.id} className="min-w-0 text-[12.5px] leading-snug text-ink-2">
               <span className="break-words">+ {task.title}</span>
               <span className="break-words text-ink-3"> · project-level task, no milestone</span>

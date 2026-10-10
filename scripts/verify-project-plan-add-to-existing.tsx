@@ -441,7 +441,7 @@ async function main() {
       'Resolve: the plan’s project and goal are kept as source metadata only');
     ok(resolved.planName === 'PatientScure Development Plan', 'Resolve: the plan name is kept for the preview');
     ok(resolved.positionBase === 4, 'Resolve: positionBase is the first position after the existing milestones (max 3 + 1)');
-    ok(JSON.stringify(resolved.counts) === JSON.stringify({ newMilestones: 2, reusedMilestones: 3, milestoneTasks: 7, projectLevelTasks: 1, rootTasks: 1, newTasks: 9 }),
+    ok(JSON.stringify(resolved.counts) === JSON.stringify({ newMilestones: 2, reusedMilestones: 3, milestoneTasks: 7, projectLevelTasks: 1, rootTasks: 1, newTasks: 9, parentTasks: 9, subtasks: 0 }),
       'Resolve: the counts are 2 new + 3 reused milestones, 7 milestone tasks, 1 project-level, 1 root, 9 new tasks');
     ok(resolved.existing.milestones === 4 && resolved.existing.tasks === 12, 'Resolve: the existing-data summary counts the target’s own records');
     const preview = existingProjectImportPreview(resolved);
@@ -782,8 +782,8 @@ async function main() {
          target_date: '2026-10-01', position: 0, created_at: '2026-09-04T09:00:00.000Z',
        }), '24: the milestones this import created were rolled back, and the existing ones are byte-identical');
     const deletes = server.log.filter((r) => r.method === 'DELETE');
-    ok(deletes.length === 1 && deletes[0].table === PROJECT_MILESTONES_TABLE
-       && deletes[0].query.get('user_id') === `eq.${USER}` && (deletes[0].query.get('id') ?? '').startsWith('in.'),
+    ok(deletes.length === 2 && deletes.map((r) => r.table).join() === `tasks,${PROJECT_MILESTONES_TABLE}`
+       && deletes.every((r) => r.query.get('user_id') === `eq.${USER}` && (r.query.get('id') ?? '').startsWith('in.')),
       '24: the rollback deleted only this import’s own rows, by id and scoped to the user');
     ok(JSON.stringify(server.tables.get('milestones')!.rows) === snapshot.learnings
        && JSON.stringify(server.tables.get('tasks')!.rows) === snapshot.tasks
@@ -1065,7 +1065,7 @@ async function main() {
     const addMethod = supa.slice(supa.indexOf('async importProjectPlanIntoExistingProject'));
     ok(!/insert\('goals'|insert\('projects'/.test(addMethod),
       'Supabase writes an add-to-existing import as project milestones → tasks only — never a goal or a project');
-    ok(/await insert\('goals'[\s\S]*await insert\('projects'[\s\S]*PROJECT_MILESTONES_TABLE[\s\S]*await insert\('tasks'/.test(supa),
+    ok(/await insert\('goals'[\s\S]*await insert\('projects'[\s\S]*PROJECT_MILESTONES_TABLE[\s\S]*await this\.insertPlanTasks/.test(supa),
       'Phase 4’s parents-first goals → projects → project milestones → tasks sequence is untouched');
     ok(read('supabase/migrations/008_project_milestones.sql').length > 0 && readdirSync(join(process.cwd(), 'supabase', 'migrations')).length === 7,
       '24: no new migration was added and migration 008 is still there (7 files, 002–008)');

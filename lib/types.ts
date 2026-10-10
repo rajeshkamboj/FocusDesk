@@ -52,6 +52,7 @@ export interface Task {
    */
   projectMilestoneId?: ID;
   goalId?: ID;
+  /** Parent full Task ID; child tasks are independently editable/timed. Parent deletion clears this link. */
   parentTaskId?: ID;
   createdAt: ISODateTime;
   /** When the user plans to work on the task. */

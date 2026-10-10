@@ -41,6 +41,7 @@ import {
   nextProjectMilestonePosition,
   resolveTaskMilestone,
 } from '@/lib/project-milestones';
+import { assertTaskHierarchyChange } from '@/lib/task-hierarchy';
 import type {
   ExistingProjectPlanImportResult,
   ProjectPlanImportResult,
@@ -531,12 +532,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const removeTaskState = useCallback((id: string) => {
     dataRef.current = {
       ...dataRef.current,
-      tasks: dataRef.current.tasks.filter((t) => t.id !== id),
+      tasks: dataRef.current.tasks.filter((t) => t.id !== id)
+        .map((t) => t.parentTaskId === id ? { ...t, parentTaskId: undefined } : t),
       subtasks: dataRef.current.subtasks.filter((subtask) => subtask.parentTaskId !== id),
     };
     setData((d) => ({
       ...d,
-      tasks: d.tasks.filter((t) => t.id !== id),
+      tasks: d.tasks.filter((t) => t.id !== id)
+        .map((t) => t.parentTaskId === id ? { ...t, parentTaskId: undefined } : t),
       subtasks: d.subtasks.filter((subtask) => subtask.parentTaskId !== id),
     }));
   }, []);
@@ -998,7 +1001,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<DataActions>(
     () => ({
       addTask: async (input) => {
-        // Throws a ProjectMilestoneError for a milestone outside the task's project.
+        // Throws before any write for an invalid parent/project or milestone.
+        assertTaskHierarchyChange(undefined, input, dataRef.current.tasks);
         const task = await repo().tasks.create(resolveTaskMilestone(undefined, input, dataRef.current.projectMilestones));
         setData((d) => ({ ...d, tasks: [...d.tasks, task] }));
         await logHistory(task.id, 'created');
@@ -1045,6 +1049,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // A milestone outside the resulting project is rejected; a project
         // change clears a milestone that does not belong to the new project.
         const safePatch = resolveTaskMilestone(before, patch, dataRef.current.projectMilestones);
+        assertTaskHierarchyChange(before, safePatch, dataRef.current.tasks);
         const updated = await repo().tasks.update(id, safePatch);
         patchTaskState(updated);
         if (!before) return;
@@ -1234,6 +1239,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTaskProject: async (id, projectId) => {
         const before = dataRef.current.tasks.find((t) => t.id === id);
         const patch = resolveTaskMilestone<Partial<Task>>(before, { projectId }, dataRef.current.projectMilestones);
+        assertTaskHierarchyChange(before, patch, dataRef.current.tasks);
         const updated = await repo().tasks.update(id, patch);
         patchTaskState(updated);
         await logHistory(id, 'project_changed');

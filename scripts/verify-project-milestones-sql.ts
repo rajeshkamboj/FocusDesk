@@ -555,6 +555,118 @@ async function main() {
     await alt.close();
   }
 
+  /* -------------------------------------------------------------- */
+  /* Native plan child Tasks reuse the base tasks FK, under RLS       */
+  /* -------------------------------------------------------------- */
+  const { reviewProjectPlan, buildProjectPlanRecords, buildExistingProjectPlanRecords, resolveExistingProjectImport } = await import('../lib/project-plan');
+  const parentFk = await constraint('tasks', 'tasks_parent_task_id_fkey');
+  ok(parentFk?.contype === 'f' && parentFk.reftable === 'tasks' && parentFk.columns === 'parent_task_id'
+     && parentFk.refcolumns === 'id' && parentFk.confdeltype === 'n' && parentFk.convalidated,
+     'Native task hierarchy already has tasks.parent_task_id → tasks(id), ON DELETE SET NULL; no new migration needed');
+  // Isolate these tests even from the other SQL fixtures: roll back the whole
+  // section, regardless of assertions. The database itself is in memory only.
+  await db.exec('begin');
+  try {
+    const rejectedInSavepoint = async (run: () => Promise<unknown>) => {
+      await db.exec('savepoint child_negative');
+      try {
+        return await rejects(run);
+      } finally {
+        // PostgreSQL errors abort the surrounding transaction unless the
+        // negative test rolls back to its savepoint before RESET ROLE.
+        await db.exec('rollback to savepoint child_negative');
+        await db.exec('release savepoint child_negative');
+      }
+    };
+    const now = '2026-10-10T12:00:00.000Z';
+    const reviewed = reviewProjectPlan({
+      format: 'focusdesk-project-plan', version: 1,
+      goal: { name: 'SQL imported goal' },
+      projects: [{ id: 'sql-source', name: 'SQL imported project', milestones: [{ id: 'sql-m', name: 'Reuse', tasks: [{
+        id: 'sql-parent', title: 'SQL parent', subtasks: [
+          { id: 'sql-child', title: 'SQL child', description: 'Child fields', status: 'planned', priority: 'high',
+            scheduledDate: '2026-10-12', dueDate: '2026-10-20', estimatedDuration: 30, notes: 'Keep notes', tags: ['qa'],
+            subtasks: [{ id: 'sql-grand', title: 'SQL grandchild', status: 'completed' }] },
+          { title: 'SQL sibling' },
+        ],
+      }] }] }],
+    }, { today: '2026-10-10' });
+    if (!reviewed.ok || !reviewed.plan) throw new Error(JSON.stringify(reviewed.errors));
+    let id = 0;
+    const ids = { newId: () => `plan-sql-${++id}`, now: () => now };
+    const created = buildProjectPlanRecords(reviewed.plan, ids);
+    const insertTasks = async (tasks: typeof created.tasks) => {
+      // The real builder's preorder and IDs, persisted through actual FK/RLS
+      // checks rather than a stand-in row bag. HTTP sequencing is tested in
+      // verify-project-plan-subtasks.tsx with the real Supabase SDK.
+      for (const task of tasks) {
+        await db.query(`insert into tasks
+          (id, title, description, status, priority, project_id, project_milestone_id, parent_task_id,
+           created_at, scheduled_date, due_date, estimated_duration, notes, tags, completed_at)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          [task.id, task.title, task.description ?? null, task.status, task.priority, task.projectId ?? null,
+            task.projectMilestoneId ?? null, task.parentTaskId ?? null, task.createdAt,
+            task.scheduledDate ?? null, task.dueDate ?? null, task.estimatedDuration ?? null,
+            task.notes ?? null, task.tags, task.completedAt ?? null]);
+      }
+    };
+    await as(USER_A, async () => {
+      for (const goal of created.goals) await db.query('insert into goals (id, name) values ($1,$2)', [goal.id, goal.name]);
+      for (const project of created.projects) await db.query('insert into projects (id, name, goal_id) values ($1,$2,$3)', [project.id, project.name, project.goalId ?? null]);
+      for (const milestone of created.projectMilestones) await db.query('insert into project_milestones (id, project_id, name, position) values ($1,$2,$3,$4)', [milestone.id, milestone.projectId, milestone.name, milestone.position]);
+      await insertTasks(created.tasks);
+    });
+    const child = created.tasks.find((task) => task.title === 'SQL child')!;
+    const grand = created.tasks.find((task) => task.title === 'SQL grandchild')!;
+    const parent = created.tasks.find((task) => task.title === 'SQL parent')!;
+    const persisted = await one<{ parent_task_id: string; project_id: string; project_milestone_id: string; status: string; priority: string; due_date: string; scheduled_date: string; notes: string; tags: string[] }>(
+      `select parent_task_id, project_id, project_milestone_id, status, priority, due_date::text, scheduled_date::text, notes, tags from tasks where id = $1`, [child.id]);
+    ok(persisted.parent_task_id === parent.id && persisted.project_id === created.projects[0].id
+       && persisted.project_milestone_id === created.projectMilestones[0].id
+       && persisted.status === 'planned' && persisted.priority === 'high'
+       && persisted.scheduled_date === '2026-10-12' && persisted.due_date === '2026-10-20'
+       && persisted.notes === 'Keep notes' && persisted.tags.join() === 'qa',
+       'Create-new builder records persist real parent/project/milestone IDs and child fields in PostgreSQL as the authenticated user');
+    const grandRow = await one<{ parent_task_id: string; completed: boolean }>('select parent_task_id, completed_at is not null as completed from tasks where id = $1', [grand.id]);
+    ok(grandRow.parent_task_id === child.id && grandRow.completed,
+       'Multiple levels and a completed child persist using the existing task fields/FK');
+    const hidden = await as(USER_B, () => db.query('select id from tasks where id = $1', [child.id]));
+    ok(hidden.rows.length === 0, 'RLS hides imported child tasks from a different authenticated user');
+    ok(await as(USER_A, () => rejectedInSavepoint(() => db.query('insert into tasks (id, user_id, title) values ($1,$2,$3)', ['plan-forged-owner', USER_B, 'No']))),
+       'RLS refuses a forged task owner on imported task writes');
+    ok(await as(USER_A, () => rejectedInSavepoint(() => db.query('insert into tasks (id, title, parent_task_id) values ($1,$2,$3)', ['plan-missing-parent', 'No', 'missing-parent']))),
+       'The real parent-task FK refuses a nonexistent parent');
+
+    // Add-to-existing: no second project/goal, reuse without touching the
+    // existing milestone, and a whole fresh task hierarchy inside p-old.
+    const existing = { id: 'plan-reuse-m', projectId: 'p-old', name: ' Reuse ', description: 'Untouched', position: 3, createdAt: now };
+    const targetProject = { id: 'p-old', name: 'Existing project', status: 'active' as const, createdAt: now };
+    await as(USER_A, () => db.query('insert into project_milestones (id, project_id, name, description, position) values ($1,$2,$3,$4,$5)',
+      [existing.id, existing.projectId, existing.name, existing.description, existing.position]));
+    const countsBefore = await one<{ goals: number; projects: number }>('select (select count(*)::int from goals) as goals, (select count(*)::int from projects) as projects');
+    const add = buildExistingProjectPlanRecords(resolveExistingProjectImport(reviewed, targetProject, [existing], []), ids, [existing]);
+    await as(USER_A, () => insertTasks(add.tasks));
+    const addChild = add.tasks.find((task) => task.title === 'SQL child')!;
+    const addRow = await one<{ parent_task_id: string; project_id: string; project_milestone_id: string }>('select parent_task_id, project_id, project_milestone_id from tasks where id = $1', [addChild.id]);
+    const countsAfter = await one<{ goals: number; projects: number }>('select (select count(*)::int from goals) as goals, (select count(*)::int from projects) as projects');
+    const reused = await one<{ description: string; position: number }>('select description, position from project_milestones where id = $1', [existing.id]);
+    ok(add.projectMilestones.length === 0 && addRow.parent_task_id === add.tasks[0].id
+       && addRow.project_id === 'p-old' && addRow.project_milestone_id === existing.id
+       && countsAfter.goals === countsBefore.goals && countsAfter.projects === countsBefore.projects
+       && reused.description === 'Untouched' && reused.position === 3,
+       'Add-to-existing builder hierarchy persists under the reused milestone; project/goal counts and the existing milestone remain unchanged');
+
+    await as(USER_A, () => db.query("update tasks set status = 'completed', completed_at = $1 where id = $2", [now, parent.id]));
+    ok((await one<{ status: string }>('select status from tasks where id = $1', [child.id])).status === 'planned',
+       'Completing a parent does not complete its full child tasks');
+    await as(USER_A, () => db.query('delete from tasks where id = $1', [parent.id]));
+    ok((await one<{ parent_task_id: string | null }>('select parent_task_id from tasks where id = $1', [child.id])).parent_task_id === null
+       && (await one<{ parent_task_id: string }>('select parent_task_id from tasks where id = $1', [grand.id])).parent_task_id === child.id,
+       'Parent deletion keeps children with SET NULL and preserves deeper descendants — no dangling parent links');
+  } finally {
+    await db.exec('rollback');
+  }
+
   const rollback = commented(/^-- ROLLBACK/, /^-- The app falls back/);
   await db.exec('begin');
   try {

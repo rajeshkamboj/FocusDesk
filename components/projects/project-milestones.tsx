@@ -124,7 +124,7 @@ export function ProjectMilestoneSections({
               </Menu>
             </div>
             {items.length > 0 ? (
-              <TaskList tasks={items} />
+              <TaskList tasks={items} hierarchical />
             ) : (
               <p className="px-3 py-1 text-[12.5px] text-ink-3">No tasks in this milestone yet.</p>
             )}
@@ -135,7 +135,7 @@ export function ProjectMilestoneSections({
       {direct.length > 0 ? (
         <section aria-label="Tasks without a milestone">
           <h4 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">No milestone</h4>
-          <TaskList tasks={direct} />
+          <TaskList tasks={direct} hierarchical />
         </section>
       ) : null}
     </div>

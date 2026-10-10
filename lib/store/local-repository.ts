@@ -352,6 +352,10 @@ export class LocalRepository implements AppRepository {
       }, task),
     );
 
+    // Match the existing tasks.parent_task_id ON DELETE SET NULL behavior,
+    // including direct repository callers, not just DataProvider's snapshot.
+    this.tasks.delete = (id) => this.deleteTasks([id]);
+
     this.subtasks = new Collection<Subtask, SubtaskInput>(
       db,
       'subtasks',
@@ -745,6 +749,25 @@ export class LocalRepository implements AppRepository {
   }
 
   /**
+   * Import-specific atomic commit. Stage arrays without mutating current data;
+   * adopt them only after the ONE storage write succeeds. Unlike ordinary
+   * edits, quota/storage failures must reject an import, not claim success
+   * while leaving a partial in-memory-only hierarchy.
+   */
+  private persistProjectPlan(next: AppData): void {
+    let raw: string;
+    try {
+      raw = JSON.stringify(next);
+      this.storage.setItem(STORAGE_KEY, raw);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new ProjectPlanError(`Import failed — nothing was kept. Could not save the plan to browser storage. ${reason}`);
+    }
+    this.data = next;
+    this.lastRaw = raw;
+  }
+
+  /**
    * Add a validated project plan (Goal → Project → ProjectMilestone → Task).
    *
    * Every record is built first — with real ids from this repository's own
@@ -763,11 +786,13 @@ export class LocalRepository implements AppRepository {
     // Sync first: append to the newest stored state, never to this tab's
     // snapshot, so a plan imported while another tab writes loses nothing.
     const data = this.current();
-    data.goals.push(...goals);
-    data.projects.push(...projects);
-    data.projectMilestones.push(...projectMilestones);
-    data.tasks.push(...tasks);
-    this.write();
+    this.persistProjectPlan({
+      ...data,
+      goals: [...data.goals, ...goals],
+      projects: [...data.projects, ...projects],
+      projectMilestones: [...data.projectMilestones, ...projectMilestones],
+      tasks: [...data.tasks, ...tasks],
+    });
 
     return { goals, projects, projectMilestones, tasks };
   }
@@ -799,9 +824,11 @@ export class LocalRepository implements AppRepository {
       now: nowISO,
     }, data.projectMilestones);
 
-    data.projectMilestones.push(...projectMilestones);
-    data.tasks.push(...tasks);
-    this.write();
+    this.persistProjectPlan({
+      ...data,
+      projectMilestones: [...data.projectMilestones, ...projectMilestones],
+      tasks: [...data.tasks, ...tasks],
+    });
 
     return { projectMilestones, tasks };
   }

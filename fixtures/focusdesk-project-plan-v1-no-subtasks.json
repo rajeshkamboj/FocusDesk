@@ -35,25 +35,7 @@
               "description": "Workspaces for the shell, the renderer and the shared types; one command builds both.",
               "priority": "high",
               "dueDate": "2026-10-09",
-              "estimatedDuration": 120,
-              "subtasks": [
-                {
-                  "id": "t-shell",
-                  "title": "Create the Tauri shell workspace",
-                  "description": "Keep native code separate from the renderer.",
-                  "status": "planned",
-                  "priority": "high",
-                  "scheduledDate": "2026-10-09",
-                  "dueDate": "2026-10-09",
-                  "estimatedDuration": 30,
-                  "notes": "Use the existing build command.",
-                  "tags": ["toolchain"],
-                  "subtasks": [
-                    { "title": "Verify the shell builds locally", "estimatedDuration": 10 }
-                  ]
-                },
-                { "title": "Create the React renderer workspace", "estimatedDuration": 45 }
-              ]
+              "estimatedDuration": 120
             },
             {
               "title": "Configure TypeScript strict mode, ESLint and the build gate",

@@ -9,7 +9,7 @@
  *     deliberately failing insert to prove the rollback) — no request can
  *     reach a real Supabase project;
  *   - DataProvider + the real Settings screen and importer modal in jsdom;
- *   - fixtures/focusdesk-project-plan-v1.json, read from disk.
+ *   - fixtures/focusdesk-project-plan-v1-no-subtasks.json, read from disk.
  *
  * The numbered assertions match the Phase 4 test list (1–24).
  *
@@ -605,11 +605,11 @@ async function main() {
   /* ================================================================ */
   /* The fixture, read from disk                                        */
   /* ================================================================ */
-  const fixtureText = readFileSync(join(process.cwd(), 'fixtures', 'focusdesk-project-plan-v1.json'), 'utf8');
+  const fixtureText = readFileSync(join(process.cwd(), 'fixtures', 'focusdesk-project-plan-v1-no-subtasks.json'), 'utf8');
   const fixtureJson = JSON.parse(fixtureText) as Row;
   const fixtureReview = review(fixtureJson);
 
-  section('22. fixtures/focusdesk-project-plan-v1.json');
+  section('22. fixtures/focusdesk-project-plan-v1-no-subtasks.json');
   {
     ok(fixtureReview.ok && fixtureReview.errors.length === 0, '22: the fixture validates with no errors');
     const counts = fixtureReview.counts;
@@ -910,9 +910,9 @@ async function main() {
        '20: the milestones this import created were rolled back, and the existing one was not');
     ok(server.tables.get('projects')!.rows.length === 2 && server.tables.get('goals')!.rows.length === 1, '20: the project and goal it created were rolled back too');
     const deletes = server.log.filter((r) => r.method === 'DELETE');
-    ok(deletes.length === 3 && deletes.every((r) => r.query.get('user_id') === `eq.${USER}` && (r.query.get('id') ?? '').startsWith('in.')),
+    ok(deletes.length === 4 && deletes.every((r) => r.query.get('user_id') === `eq.${USER}` && (r.query.get('id') ?? '').startsWith('in.')),
        '24: the rollback deleted only this import\u2019s own rows, by id and scoped to the user');
-    ok(deletes.map((r) => r.table).join() === `${PROJECT_MILESTONES_TABLE},projects,goals`, '20: the rollback removed children before parents');
+    ok(deletes.map((r) => r.table).join() === `tasks,${PROJECT_MILESTONES_TABLE},projects,goals`, '20: the rollback removed children before parents');
     ok(JSON.stringify(server.tables.get('milestones')!.rows) === snapshot.learnings && JSON.stringify(server.tables.get('tasks')!.rows) === snapshot.tasks,
        '20: the learnings and the pre-existing tasks are byte-identical after the rollback');
     server.fail = null;
@@ -1158,7 +1158,7 @@ async function main() {
     ok(ui.includes('reviewProjectPlanText') && /disabled=\{!canImport\}/.test(ui), 'The UI validates before it offers Import, and Import stays disabled until the plan is valid');
     ok(read('components/settings/settings-screen.tsx').includes('isProjectPlanPayload'),
        'Settings \u2192 Data \u2192 Import (JSON) recognises a project plan and refuses it instead of replacing the database');
-    ok(!read('lib/store/supabase-repository.ts').includes('importProjectPlan') || /await insert\('goals'[\s\S]*await insert\('projects'[\s\S]*PROJECT_MILESTONES_TABLE[\s\S]*await insert\('tasks'/.test(read('lib/store/supabase-repository.ts')),
+    ok(!read('lib/store/supabase-repository.ts').includes('importProjectPlan') || /await insert\('goals'[\s\S]*await insert\('projects'[\s\S]*PROJECT_MILESTONES_TABLE[\s\S]*await this\.insertPlanTasks/.test(read('lib/store/supabase-repository.ts')),
        'Supabase writes a plan parents-first: goals \u2192 projects \u2192 project milestones \u2192 tasks');
     ok(read('supabase/migrations/008_project_milestones.sql').length > 0 && readdirSync(join(process.cwd(), 'supabase', 'migrations')).length === 7,
        '25: no new migration was added and migration 008 is still there (7 files, 002\u2013008)');

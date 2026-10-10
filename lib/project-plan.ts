@@ -2,7 +2,7 @@
  * FocusDesk project plan — the canonical JSON format for plans written by
  * ChatGPT (or by hand) and imported into the app.
  *
- *   Goal → Project → ProjectMilestone → Task
+ *   Goal → Project → ProjectMilestone → Task → child Task
  *
  * Pure rules only: this module parses, validates and *resolves* a plan into
  * the records FocusDesk would create. It never touches storage, never talks to
@@ -116,11 +116,20 @@ export const PROJECT_PLAN_FIELDS = {
   goal: ['id', 'name', 'description', 'deadline', 'status'],
   project: ['id', 'name', 'description', 'deadline', 'status', 'milestones', 'tasks'],
   milestone: ['id', 'projectId', 'name', 'description', 'targetDate', 'tasks'],
-  task: ['id', 'projectId', 'milestoneId', 'title', 'description', 'status', 'priority', 'scheduledDate', 'dueDate', 'estimatedDuration', 'notes', 'tags'],
+  task: ['id', 'projectId', 'milestoneId', 'title', 'description', 'status', 'priority', 'scheduledDate', 'dueDate', 'estimatedDuration', 'notes', 'tags', 'subtasks'],
 } as const;
 
 /** Sanity ceilings, so one paste can never ask for an unbounded write. */
-export const PROJECT_PLAN_LIMITS = { projects: 100, milestones: 500, tasks: 2000 } as const;
+export const PROJECT_PLAN_LIMITS = {
+  projects: 100,
+  milestones: 500,
+  /** All full tasks, including every descendant. */
+  tasks: 2000,
+  /** Root task = level 1; at most 19 child edges below it. */
+  taskDepth: 20,
+  /** UTF-8 size of pasted/uploaded JSON, before parsing. */
+  bytes: 5 * 1024 * 1024,
+} as const;
 
 /** A plan that cannot be imported. The message is written for the user. */
 export class ProjectPlanError extends Error {
@@ -140,7 +149,7 @@ export class ProjectPlanError extends Error {
  * `tempId` is either the id the plan supplied or one this module made up so
  * every record has a key. The repository replaces all of them with real
  * FocusDesk ids and rewrites `goalTempId` / `projectTempId` /
- * `projectMilestoneTempId` through the same map.
+ * `projectMilestoneTempId` / `parentTaskTempId` through the same map.
  */
 export interface PendingGoal {
   tempId: string;
@@ -172,6 +181,8 @@ export interface PendingProjectMilestone {
 
 export interface PendingTask {
   tempId: string;
+  /** Inferred only from nesting, never an existing task id supplied by JSON. */
+  parentTaskTempId?: string;
   projectTempId?: string;
   projectMilestoneTempId?: string;
   title: string;
@@ -221,11 +232,20 @@ export interface ProjectPlanCounts {
   goals: number;
   projects: number;
   projectMilestones: number;
+  /** Total full tasks, roots + all descendants. */
   tasks: number;
+  /** Tasks without a parent (including roots with no children). */
+  parentTasks: number;
+  /** Every task below a root, at any depth. */
+  subtasks: number;
 }
 
 export interface PreviewTask {
+  tempId: string;
   title: string;
+  description?: string;
+  estimatedDuration?: number;
+  subtasks: PreviewTask[];
   status: TaskStatus;
   priority: TaskPriority;
   scheduledDate?: ISODate;
@@ -289,7 +309,7 @@ export interface ProjectPlanOptions {
   mode?: ProjectPlanImportMode;
 }
 
-const EMPTY_COUNTS: ProjectPlanCounts = { goals: 0, projects: 0, projectMilestones: 0, tasks: 0 };
+const EMPTY_COUNTS: ProjectPlanCounts = { goals: 0, projects: 0, projectMilestones: 0, tasks: 0, parentTasks: 0, subtasks: 0 };
 
 /* ------------------------------------------------------------------ */
 /* Small readers                                                       */
@@ -320,9 +340,11 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export function isValidPlanDate(value: unknown): value is ISODate {
   if (typeof value !== 'string' || !ISO_DATE.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);
-  if (m < 1 || m > 12 || d < 1) return false;
-  // Days in the month, leap years included: 2026-02-30 is not a date.
-  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+  if (y < 1 || m < 1 || m > 12 || d < 1) return false;
+  // Do not use Date.UTC: it treats years 00–99 as 1900–1999.
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return d <= days[m - 1];
 }
 
 /* ------------------------------------------------------------------ */
@@ -390,6 +412,10 @@ class PlanReview {
     const known: readonly string[] = allowed;
     for (const key of Object.keys(record)) {
       if (known.includes(key)) continue;
+      if (allowed === PROJECT_PLAN_FIELDS.task && record[key] != null && (key === 'parentTaskId' || key === 'parent_task_id' || key === 'parentTaskTempId')) {
+        this.error(path, `“${key}” is not supported in a plan. Put child tasks in “subtasks”; parents must come from this imported hierarchy, never existing records.`);
+        continue;
+      }
       if (key === 'goalId') {
         this.error(
           path,
@@ -490,6 +516,8 @@ class PlanReview {
 /** Where a task was found, which decides its project and milestone. */
 interface TaskContext {
   tasks: PendingTask[];
+  /** The containing task; children inherit its project and milestone, even when unset. */
+  parentTaskTempId?: string;
   /** The project this task sits in, when it sits in one. */
   projectTempId?: string;
   /** The milestone this task sits in, when it sits in one. */
@@ -516,7 +544,9 @@ function readTask(review: PlanReview, raw: unknown, path: string, context: TaskC
   let projectTempId = context.projectTempId;
   const askedProject = review.reference(path, raw.projectId, 'projectId', 'task', 'a project');
   if (askedProject !== undefined) {
-    if (projectTempId === undefined) projectTempId = askedProject;
+    if (context.parentTaskTempId !== undefined && askedProject !== projectTempId) {
+      review.error(path, `Subtask “${named}” must stay in its parent task’s project.`);
+    } else if (projectTempId === undefined) projectTempId = askedProject;
     else if (askedProject !== projectTempId) {
       review.error(path, `Task “${named}” sits inside one project but its “projectId” names another.`);
     } else {
@@ -529,7 +559,9 @@ function readTask(review: PlanReview, raw: unknown, path: string, context: TaskC
   let milestoneTempId = context.milestoneTempId;
   const askedMilestone = review.reference(path, raw.milestoneId, 'milestoneId', 'task', 'a project milestone');
   if (askedMilestone !== undefined) {
-    if (milestoneTempId === undefined) milestoneTempId = askedMilestone;
+    if (context.parentTaskTempId !== undefined && askedMilestone !== milestoneTempId) {
+      review.error(path, `Subtask “${named}” must keep its parent task’s milestone (or no milestone).`);
+    } else if (milestoneTempId === undefined) milestoneTempId = askedMilestone;
     else if (askedMilestone !== milestoneTempId) {
       review.error(path, `Task “${named}” sits inside one milestone but its “milestoneId” names another.`);
     } else {
@@ -595,6 +627,7 @@ function readTask(review: PlanReview, raw: unknown, path: string, context: TaskC
 
   context.tasks.push({
     tempId,
+    parentTaskTempId: context.parentTaskTempId,
     projectTempId,
     projectMilestoneTempId: milestoneTempId,
     title,
@@ -607,6 +640,18 @@ function readTask(review: PlanReview, raw: unknown, path: string, context: TaskC
     notes: review.optionalText(path, raw, 'notes', 'task'),
     tags,
     completed: status === 'completed' || undefined,
+  });
+
+  // The bounded hierarchy was checked iteratively before this recursive read.
+  // Preorder gives each child a claimed parent id and preserves JSON siblings.
+  review.array(`${path}.subtasks`, raw.subtasks, 'subtasks').forEach((child, index) => {
+    readTask(review, child, `${path}.subtasks[${index}]`, {
+      tasks: context.tasks,
+      parentTaskTempId: tempId,
+      projectTempId,
+      milestoneTempId,
+      milestoneProjects: context.milestoneProjects,
+    });
   });
 }
 
@@ -664,6 +709,48 @@ interface TaskGroup {
   projectTempId?: string;
   milestoneTempId?: string;
   raw: unknown[];
+}
+
+/**
+ * Bound the entire task tree BEFORE recursive readers/preview builders run.
+ * A stack of array cursors also bounds memory on very wide/deep input. JSON
+ * cannot contain cycles, but the parsed-object API refuses cyclic/shared task
+ * objects as well. Bad fields are still reported by the ordinary task reader.
+ */
+function checkTaskTreeLimits(review: PlanReview, groups: TaskGroup[]): boolean {
+  const seen = new WeakSet<object>();
+  let count = 0;
+  for (const group of groups) {
+    const stack = [{ list: group.raw, index: 0, path: group.path, depth: 1 }];
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      if (frame.index === frame.list.length) {
+        stack.pop();
+        continue;
+      }
+      const index = frame.index++;
+      const raw = frame.list[index];
+      const path = `${frame.path}[${index}]`;
+      if (++count > PROJECT_PLAN_LIMITS.tasks) {
+        review.error('plan.tasks', `A plan may contain at most ${PROJECT_PLAN_LIMITS.tasks} tasks, including all subtasks. Split the plan and import it in parts.`);
+        return false;
+      }
+      if (frame.depth > PROJECT_PLAN_LIMITS.taskDepth) {
+        review.error(path, `Task nesting may be at most ${PROJECT_PLAN_LIMITS.taskDepth} levels (a top-level task is level 1). Move this subtask higher in the hierarchy.`);
+        return false;
+      }
+      if (!isRecord(raw)) continue;
+      if (seen.has(raw)) {
+        review.error(path, 'A task object is reused or cyclic. Every subtask must have exactly one parent in the imported hierarchy.');
+        return false;
+      }
+      seen.add(raw);
+      if (Array.isArray(raw.subtasks) && raw.subtasks.length > 0) {
+        stack.push({ list: raw.subtasks, index: 0, path: `${path}.subtasks`, depth: frame.depth + 1 });
+      }
+    }
+  }
+  return true;
 }
 
 /**
@@ -726,6 +813,20 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
   }
   const planName = review.optionalText('plan', input, 'name', 'plan');
 
+  // Reject oversized structural arrays before allocating records for them.
+  const rawProjects = review.array('plan.projects', input.projects, 'projects');
+  const rawMilestones = review.array('plan.projectMilestones', input.projectMilestones, 'projectMilestones');
+  if (rawProjects.length > PROJECT_PLAN_LIMITS.projects) {
+    review.error('plan.projects', `A plan may contain at most ${PROJECT_PLAN_LIMITS.projects} projects (this one has ${rawProjects.length}).`);
+    return fail();
+  }
+  const milestoneCount = rawProjects.reduce<number>((count, raw) =>
+    count + (isRecord(raw) && Array.isArray(raw.milestones) ? raw.milestones.length : 0), rawMilestones.length);
+  if (milestoneCount > PROJECT_PLAN_LIMITS.milestones) {
+    review.error('plan.projectMilestones', `A plan may contain at most ${PROJECT_PLAN_LIMITS.milestones} project milestones (this one has ${milestoneCount}).`);
+    return fail();
+  }
+
   /* -- goal -------------------------------------------------------- */
   const goals: PendingGoal[] = [];
   let goalTempId: string | undefined;
@@ -760,7 +861,7 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
   /** The projects again, with their raw JSON, for pass 1b. */
   const projectDrafts: { path: string; raw: Rec; tempId: string }[] = [];
 
-  for (const [index, raw] of review.array('plan.projects', input.projects, 'projects').entries()) {
+  for (const [index, raw] of rawProjects.entries()) {
     const path = `projects[${index}]`;
     if (!isRecord(raw)) {
       review.error(path, 'A project must be a JSON object.');
@@ -805,7 +906,7 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
     });
   }
 
-  for (const [index, raw] of review.array('plan.projectMilestones', input.projectMilestones, 'projectMilestones').entries()) {
+  for (const [index, raw] of rawMilestones.entries()) {
     const path = `projectMilestones[${index}]`;
     const milestone = readMilestone(review, raw, path, undefined, milestones.length, milestoneProjects);
     if (!milestone) continue;
@@ -826,7 +927,9 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
     milestone.position = position;
   }
 
-  /* -- pass 2: tasks, now that every id in the plan is known -------- */
+  /* -- pass 2: tasks, now that every structural id is known --------- */
+  const rootGroup = { path: 'tasks', raw: review.array('plan.tasks', input.tasks, 'tasks') };
+  if (!checkTaskTreeLimits(review, [...groups, rootGroup])) return fail();
   const tasks: PendingTask[] = [];
   for (const group of groups) {
     group.raw.forEach((rawTask, index) => {
@@ -838,7 +941,7 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
       });
     });
   }
-  review.array('plan.tasks', input.tasks, 'tasks').forEach((rawTask, index) => {
+  rootGroup.raw.forEach((rawTask, index) => {
     readTask(review, rawTask, `tasks[${index}]`, { tasks, milestoneProjects, topLevel: true });
   });
 
@@ -917,6 +1020,8 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
   if (review.errors.length > 0) return fail();
 
   const plan: ResolvedProjectPlan = { goals, projects, projectMilestones: milestones, tasks };
+  for (const problem of findProjectPlanProblems(plan)) review.error('plan', problem);
+  if (review.errors.length > 0) return fail();
   return {
     ok: true,
     errors: [],
@@ -926,6 +1031,7 @@ export function reviewProjectPlan(input: unknown, options: ProjectPlanOptions = 
       projects: projects.length,
       projectMilestones: milestones.length,
       tasks: tasks.length,
+      ...pendingTaskCounts(tasks),
     },
     plan,
     preview: previewOf(plan, planName),
@@ -951,6 +1057,14 @@ export function stripCodeFence(input: string): string {
  * first — that is a formatting accident, not an ambiguous plan.
  */
 export function reviewProjectPlanText(rawText: string, options: ProjectPlanOptions = {}): ProjectPlanReview {
+  if (rawText.length > PROJECT_PLAN_LIMITS.bytes || new TextEncoder().encode(rawText).byteLength > PROJECT_PLAN_LIMITS.bytes) {
+    return {
+      ok: false,
+      errors: [{ path: 'plan', message: 'A project plan may be at most 5 MiB of UTF-8 JSON. Split the plan and import it in parts.' }],
+      warnings: [],
+      counts: EMPTY_COUNTS,
+    };
+  }
   const source = stripCodeFence(rawText);
   if (source === '') {
     return { ok: false, errors: [{ path: 'plan', message: 'Paste a project plan first.' }], warnings: [], counts: EMPTY_COUNTS };
@@ -974,12 +1088,38 @@ export function reviewProjectPlanText(rawText: string, options: ProjectPlanOptio
 /* ------------------------------------------------------------------ */
 
 const previewTask = (task: PendingTask): PreviewTask => ({
+  tempId: task.tempId,
   title: task.title,
+  description: task.description,
+  estimatedDuration: task.estimatedDuration,
+  subtasks: [],
   status: task.status,
   priority: task.priority,
   scheduledDate: task.scheduledDate,
   dueDate: task.dueDate,
 });
+
+/** Roots and descendants are counted separately; `tasks` remains the total. */
+function pendingTaskCounts(tasks: PendingTask[]): { parentTasks: number; subtasks: number } {
+  const subtasks = tasks.filter((t) => t.parentTaskTempId !== undefined).length;
+  return { parentTasks: tasks.length - subtasks, subtasks };
+}
+
+/** Reconstitute the preview tree from the same parent references we persist. */
+function previewTaskMap(tasks: PendingTask[]): Map<string, PreviewTask> {
+  const nodes = new Map(tasks.map((task) => [task.tempId, previewTask(task)]));
+  for (const task of tasks) {
+    if (task.parentTaskTempId !== undefined) {
+      nodes.get(task.parentTaskTempId)?.subtasks.push(nodes.get(task.tempId)!);
+    }
+  }
+  return nodes;
+}
+
+/** Total full tasks in preview branches, not just the immediate roots. */
+export function countPreviewTasks(tasks: PreviewTask[]): number {
+  return tasks.reduce((total, task) => total + 1 + countPreviewTasks(task.subtasks), 0);
+}
 
 /**
  * The hierarchy exactly as it will be created — built from the *resolved*
@@ -987,6 +1127,9 @@ const previewTask = (task: PendingTask): PreviewTask => ({
  */
 export function previewOf(plan: ResolvedProjectPlan, planName?: string): ProjectPlanPreview {
   const goal = plan.goals[0];
+  const taskNodes = previewTaskMap(plan.tasks);
+  const roots = plan.tasks.filter((task) => task.parentTaskTempId === undefined);
+  const node = (task: PendingTask) => taskNodes.get(task.tempId)!;
   const projects = plan.projects.map((project) => {
     const own = plan.projectMilestones.filter((m) => m.projectTempId === project.tempId).sort((a, b) => a.position - b.position);
     const ownIds = new Set(own.map((m) => m.tempId));
@@ -998,23 +1141,24 @@ export function previewOf(plan: ResolvedProjectPlan, planName?: string): Project
         name: milestone.name,
         position: milestone.position,
         targetDate: milestone.targetDate,
-        tasks: plan.tasks.filter((t) => t.projectMilestoneTempId === milestone.tempId).map(previewTask),
+        tasks: roots.filter((t) => t.projectMilestoneTempId === milestone.tempId).map(node),
       })),
-      tasks: plan.tasks
+      tasks: roots
         .filter((t) => t.projectTempId === project.tempId && (t.projectMilestoneTempId === undefined || !ownIds.has(t.projectMilestoneTempId)))
-        .map(previewTask),
+        .map(node),
     };
   });
   return {
     planName,
     goal: goal ? { name: goal.name, status: goal.status, deadline: goal.deadline } : undefined,
     projects,
-    tasks: plan.tasks.filter((t) => t.projectTempId === undefined).map(previewTask),
+    tasks: roots.filter((t) => t.projectTempId === undefined).map(node),
     counts: {
       goals: plan.goals.length,
       projects: plan.projects.length,
       projectMilestones: plan.projectMilestones.length,
       tasks: plan.tasks.length,
+      ...pendingTaskCounts(plan.tasks),
     },
   };
 }
@@ -1042,14 +1186,15 @@ export function projectPlanTreeLines(preview: ProjectPlanPreview): string[] {
   const taskLabel = (task: PreviewTask) =>
     `${task.title}${task.dueDate ? ` · due ${task.dueDate}` : task.scheduledDate ? ` · scheduled ${task.scheduledDate}` : ''}`;
 
+  const taskNode = (task: PreviewTask): TreeNode => ({ label: taskLabel(task), children: task.subtasks.map(taskNode) });
   const projectNode = (project: PreviewProject): TreeNode => ({
     label: `${project.name}${project.deadline ? ` · deadline ${project.deadline}` : ''}`,
     children: [
       ...project.milestones.map((milestone) => ({
-        label: `${milestone.name}${milestone.targetDate ? ` · target ${milestone.targetDate}` : ''} — ${milestone.tasks.length} ${milestone.tasks.length === 1 ? 'task' : 'tasks'}`,
-        children: milestone.tasks.map((task) => ({ label: taskLabel(task), children: [] })),
+        label: `${milestone.name}${milestone.targetDate ? ` · target ${milestone.targetDate}` : ''} — ${countPreviewTasks(milestone.tasks)} ${countPreviewTasks(milestone.tasks) === 1 ? 'task' : 'tasks'}`,
+        children: milestone.tasks.map(taskNode),
       })),
-      ...project.tasks.map((task) => ({ label: taskLabel(task), children: [] })),
+      ...project.tasks.map(taskNode),
     ],
   });
 
@@ -1064,7 +1209,7 @@ export function projectPlanTreeLines(preview: ProjectPlanPreview): string[] {
   if (preview.tasks.length > 0) {
     if (lines.length > 0) lines.push('');
     lines.push('Tasks without a project');
-    renderTreeNodes(preview.tasks.map((task) => ({ label: taskLabel(task), children: [] })), 1, '', lines);
+    renderTreeNodes(preview.tasks.map(taskNode), 1, '', lines);
   }
   return lines;
 }
@@ -1103,6 +1248,76 @@ export function findProjectPlanNameClashes(plan: ResolvedProjectPlan, existing: 
 /* Integrity                                                           */
 /* ------------------------------------------------------------------ */
 
+/** Validate task fields AND parent chains again at the repository boundary. */
+function findPendingTaskProblems(tasks: PendingTask[]): string[] {
+  const problems: string[] = [];
+  if (tasks.length > PROJECT_PLAN_LIMITS.tasks) {
+    problems.push(`A plan may contain at most ${PROJECT_PLAN_LIMITS.tasks} tasks, including all subtasks.`);
+  }
+  const byId = new Map(tasks.map((task) => [task.tempId, task]));
+  for (const task of tasks) {
+    if (!text(task.tempId) || task.tempId.length > 64) problems.push('Every task needs a temporary id of 1–64 characters.');
+    if (!text(task.title)) problems.push('Every task and subtask needs a non-blank title.');
+    if (!Object.prototype.hasOwnProperty.call(PROJECT_PLAN_TASK_STATUSES, task.status)) {
+      problems.push(`Task “${task.title}” has an unsupported status.`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(PROJECT_PLAN_TASK_PRIORITIES, task.priority)) {
+      problems.push(`Task “${task.title}” has an unsupported priority.`);
+    }
+    for (const field of ['scheduledDate', 'dueDate'] as const) {
+      if (task[field] !== undefined && !isValidPlanDate(task[field])) problems.push(`Task “${task.title}” has an invalid ${field}; use a real YYYY-MM-DD calendar date.`);
+    }
+    for (const field of ['description', 'notes'] as const) {
+      if (task[field] !== undefined && !text(task[field])) problems.push(`“${field}” of task “${task.title}” must be a non-empty string.`);
+    }
+    if (task.estimatedDuration !== undefined && (!Number.isInteger(task.estimatedDuration) || task.estimatedDuration < 1)) {
+      problems.push(`“estimatedDuration” of task “${task.title}” must be a whole number of minutes, 1 or more.`);
+    }
+    if (!Array.isArray(task.tags) || task.tags.some((tag) => !text(tag))) problems.push(`Task “${task.title}” needs an array of non-empty string tags.`);
+    if (task.parentTaskTempId === undefined) continue;
+    const parent = byId.get(task.parentTaskTempId);
+    if (!parent) {
+      problems.push(`Subtask “${task.title}” refers to a parent task that is not in this imported hierarchy.`);
+      continue;
+    }
+    if (parent.projectTempId !== task.projectTempId) problems.push(`Subtask “${task.title}” is not in the same project as its parent task.`);
+    if (parent.projectMilestoneTempId !== task.projectMilestoneTempId) problems.push(`Subtask “${task.title}” does not keep its parent task’s milestone.`);
+    const chain = new Set<string>();
+    let current: PendingTask | undefined = task;
+    while (current) {
+      if (chain.has(current.tempId)) {
+        problems.push(`Task “${task.title}” has a cyclic parent chain.`);
+        break;
+      }
+      chain.add(current.tempId);
+      if (chain.size > PROJECT_PLAN_LIMITS.taskDepth) {
+        problems.push(`Task nesting may be at most ${PROJECT_PLAN_LIMITS.taskDepth} levels (a top-level task is level 1).`);
+        break;
+      }
+      current = current.parentTaskTempId === undefined ? undefined : byId.get(current.parentTaskTempId);
+    }
+  }
+  return problems;
+}
+
+/** Stable preorder, including for a valid but unordered hand-built resolved plan. */
+function parentFirstTasks(tasks: PendingTask[]): PendingTask[] {
+  const children = new Map<string, PendingTask[]>();
+  for (const task of tasks) {
+    if (task.parentTaskTempId === undefined) continue;
+    const siblings = children.get(task.parentTaskTempId) ?? [];
+    siblings.push(task);
+    children.set(task.parentTaskTempId, siblings);
+  }
+  const ordered: PendingTask[] = [];
+  const walk = (task: PendingTask) => {
+    ordered.push(task);
+    for (const child of children.get(task.tempId) ?? []) walk(child);
+  };
+  for (const task of tasks) if (task.parentTaskTempId === undefined) walk(task);
+  return ordered;
+}
+
 /**
  * The consistency the repository guarantees for an export, checked on a
  * resolved plan: every milestone has its project, every task's milestone
@@ -1113,7 +1328,13 @@ export function findProjectPlanNameClashes(plan: ResolvedProjectPlan, existing: 
  * proved rather than assumed.
  */
 export function findProjectPlanProblems(plan: ResolvedProjectPlan): string[] {
-  const problems: string[] = [];
+  const problems = findPendingTaskProblems(plan.tasks);
+  if (plan.projects.length > PROJECT_PLAN_LIMITS.projects) problems.push(`A plan may contain at most ${PROJECT_PLAN_LIMITS.projects} projects.`);
+  if (plan.projectMilestones.length > PROJECT_PLAN_LIMITS.milestones) problems.push(`A plan may contain at most ${PROJECT_PLAN_LIMITS.milestones} project milestones.`);
+  const goalIds = new Set(plan.goals.map((g) => g.tempId));
+  for (const project of plan.projects) {
+    if (project.goalTempId !== undefined && !goalIds.has(project.goalTempId)) problems.push(`Project “${project.name}” refers to a goal that is not in the plan.`);
+  }
   const projectIds = new Set(plan.projects.map((p) => p.tempId));
   const milestones = new Map(plan.projectMilestones.map((m) => [m.tempId, m]));
   for (const milestone of plan.projectMilestones) {
@@ -1223,7 +1444,7 @@ export function buildProjectPlanRecords(plan: ResolvedProjectPlan, ids: ProjectP
     createdAt,
   }));
 
-  const tasks: Task[] = plan.tasks.map((task) => ({
+  const tasks: Task[] = parentFirstTasks(plan.tasks).map((task) => ({
     id: real(task.tempId),
     title: task.title.trim(),
     description: task.description?.trim() || undefined,
@@ -1232,11 +1453,11 @@ export function buildProjectPlanRecords(plan: ResolvedProjectPlan, ids: ProjectP
     projectId: task.projectTempId ? real(task.projectTempId) : undefined,
     projectMilestoneId: task.projectMilestoneTempId ? real(task.projectMilestoneTempId) : undefined,
     goalId: undefined,
-    parentTaskId: undefined,
+    parentTaskId: task.parentTaskTempId ? real(task.parentTaskTempId) : undefined,
     createdAt,
     scheduledDate: task.scheduledDate,
     dueDate: task.dueDate,
-    completedAt: task.completed ? createdAt : undefined,
+    completedAt: task.status === 'completed' ? createdAt : undefined,
     estimatedDuration: task.estimatedDuration,
     reminder: undefined,
     notes: task.notes?.trim() || undefined,
@@ -1379,14 +1600,16 @@ export interface ExistingProjectImportCounts {
   newMilestones: number;
   /** Existing milestones that will be reused (never modified). */
   reusedMilestones: number;
-  /** New tasks that will sit under a milestone. */
+  /** All new tasks under a milestone, including descendants. */
   milestoneTasks: number;
-  /** New tasks from the project's own `tasks` array — project-level, no milestone. */
+  /** All tasks in the source project's milestone-free branches, including descendants. */
   projectLevelTasks: number;
-  /** New tasks from the plan's top-level `tasks` — they become project-level tasks. */
+  /** All tasks in standalone source branches, including descendants; they join the target project. */
   rootTasks: number;
   /** All new tasks. */
   newTasks: number;
+  parentTasks: number;
+  subtasks: number;
 }
 
 /**
@@ -1450,6 +1673,7 @@ export function resolveExistingProjectImport(
   if (plan.projects.length !== 1) {
     throw new ProjectPlanError('Adding to an existing project accepts exactly one project in the plan.');
   }
+  assertProjectPlanConsistent(plan);
   const sourceProject = plan.projects[0];
   const mappings = planProjectMilestoneMappings(plan, targetProject.id, existingMilestones);
   for (const mapping of mappings) {
@@ -1489,6 +1713,7 @@ export function resolveExistingProjectImport(
       projectLevelTasks: projectLevelTasks.length,
       rootTasks: rootTasks.length,
       newTasks: plan.tasks.length,
+      ...pendingTaskCounts(plan.tasks),
     },
     existing: {
       milestones: ownExisting.length,
@@ -1532,15 +1757,20 @@ export function findExistingProjectImportProblems(
   resolved: ResolvedExistingProjectImport,
   existingMilestones: Pick<ProjectMilestone, 'id' | 'projectId' | 'name' | 'position'>[],
 ): string[] {
-  const problems: string[] = [];
-  const ownExisting = new Set(existingMilestones.filter((m) => m.projectId === resolved.targetProject.id).map((m) => m.id));
+  const problems = findPendingTaskProblems(resolved.tasks);
+  if (resolved.mappings.length > PROJECT_PLAN_LIMITS.milestones) problems.push(`A plan may contain at most ${PROJECT_PLAN_LIMITS.milestones} project milestones.`);
+  const ownExisting = new Map(existingMilestones.filter((m) => m.projectId === resolved.targetProject.id).map((m) => [m.id, m]));
+  const recordIds = new Set([resolved.sourceProject.tempId]);
+  if (resolved.sourceGoal) {
+    if (recordIds.has(resolved.sourceGoal.tempId)) problems.push('The source goal shares a temporary id with the source project.');
+    recordIds.add(resolved.sourceGoal.tempId);
+  }
   const mappingIds = new Set<string>();
   for (const mapping of resolved.mappings) {
-    if (mapping.tempId === resolved.sourceProject.tempId) {
-      problems.push(`The imported milestone “${mapping.name}” shares its temporary id with the source project.`);
-    }
-    if (mappingIds.has(mapping.tempId)) problems.push(`Two imported milestones share the temporary id “${mapping.tempId}”.`);
+    if (recordIds.has(mapping.tempId)) problems.push(`Two imported records share the temporary id “${mapping.tempId}”.`);
+    recordIds.add(mapping.tempId);
     mappingIds.add(mapping.tempId);
+    if (mapping.decision !== 'use-existing' && mapping.decision !== 'create-new') problems.push(`Milestone “${mapping.name}” has an unsupported mapping decision.`);
     if (mapping.decision === 'use-existing') {
       if (mapping.existingMilestoneId === undefined) {
         problems.push(`The imported milestone “${mapping.name}” is mapped to an existing milestone but names none.`);
@@ -1548,15 +1778,22 @@ export function findExistingProjectImportProblems(
         problems.push(
           `The imported milestone “${mapping.name}” is mapped to milestone “${mapping.existingMilestoneId}”, which does not belong to project “${resolved.targetProject.name}”.`,
         );
+      } else if (normalizeProjectMilestoneName(ownExisting.get(mapping.existingMilestoneId)!.name) !== normalizeProjectMilestoneName(mapping.name)) {
+        problems.push(`Milestone “${mapping.name}” is no longer an exact normalized-name match in the target project. Review the mapping again.`);
       }
     } else if (mapping.existingMilestoneId !== undefined) {
       problems.push(`The imported milestone “${mapping.name}” will be created new but still names an existing milestone.`);
     }
   }
-  const seen = new Set<string>();
   for (const task of resolved.tasks) {
-    if (seen.has(task.tempId)) problems.push(`Two tasks share the temporary id “${task.tempId}".`);
-    seen.add(task.tempId);
+    if (recordIds.has(task.tempId)) problems.push(`Two imported records share the temporary id “${task.tempId}”.`);
+    recordIds.add(task.tempId);
+    if (task.projectTempId !== undefined && task.projectTempId !== resolved.sourceProject.tempId) {
+      problems.push(`Task “${task.title}” belongs to a project that is not in the source plan.`);
+    }
+    if (task.projectMilestoneTempId !== undefined && task.projectTempId !== resolved.sourceProject.tempId) {
+      problems.push(`Task “${task.title}” needs the source project for its milestone.`);
+    }
     if (task.projectMilestoneTempId !== undefined && !mappingIds.has(task.projectMilestoneTempId)) {
       problems.push(`Task “${task.title}” refers to a project milestone that is not in the plan.`);
     }
@@ -1635,7 +1872,7 @@ export function buildExistingProjectPlanRecords(
     nextPosition += 1;
   }
 
-  const tasks: Task[] = resolved.tasks.map((task) => ({
+  const tasks: Task[] = parentFirstTasks(resolved.tasks).map((task) => ({
     id: real(task.tempId),
     title: task.title.trim(),
     description: task.description?.trim() || undefined,
@@ -1646,11 +1883,11 @@ export function buildExistingProjectPlanRecords(
     projectId: resolved.targetProject.id,
     projectMilestoneId: task.projectMilestoneTempId ? real(task.projectMilestoneTempId) : undefined,
     goalId: undefined,
-    parentTaskId: undefined,
+    parentTaskId: task.parentTaskTempId ? real(task.parentTaskTempId) : undefined,
     createdAt,
     scheduledDate: task.scheduledDate,
     dueDate: task.dueDate,
-    completedAt: task.completed ? createdAt : undefined,
+    completedAt: task.status === 'completed' ? createdAt : undefined,
     estimatedDuration: task.estimatedDuration,
     reminder: undefined,
     notes: task.notes?.trim() || undefined,
@@ -1706,13 +1943,16 @@ export function existingProjectImportPreview(resolved: ResolvedExistingProjectIm
   for (const mapping of resolved.mappings) byMilestone.set(mapping.tempId, []);
   const projectLevelTasks: PreviewTask[] = [];
   const rootTasks: PreviewTask[] = [];
+  const nodes = previewTaskMap(resolved.tasks);
   for (const task of resolved.tasks) {
+    if (task.parentTaskTempId !== undefined) continue;
+    const node = nodes.get(task.tempId)!;
     if (task.projectMilestoneTempId !== undefined) {
-      byMilestone.get(task.projectMilestoneTempId)?.push(previewTask(task));
+      byMilestone.get(task.projectMilestoneTempId)?.push(node);
     } else if (task.projectTempId === undefined) {
-      rootTasks.push(previewTask(task));
+      rootTasks.push(node);
     } else {
-      projectLevelTasks.push(previewTask(task));
+      projectLevelTasks.push(node);
     }
   }
   return {

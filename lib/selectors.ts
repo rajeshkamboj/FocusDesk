@@ -605,6 +605,24 @@ function byCompletedDesc(a: { completedAt?: string; createdAt: string }, b: { co
   return b.createdAt.localeCompare(a.createdAt);
 }
 
+/**
+ * Every live task whose *completion* falls on `date`, most recent first — the
+ * single rule for "what was finished on this day", shared by the Daily Review
+ * and the Today screen's "Completed today" list so the two can never disagree.
+ *
+ * The day comes from `completedAt` (see `completedOnDate`), never from
+ * `scheduledDate`: a task planned for the 11th but finished on the 8th is the
+ * 8th's work, and one planned for the 8th but finished on the 11th is the
+ * 11th's. A completed record with no usable `completedAt` (legacy/imported
+ * data) keeps the documented fallback and is reported on its scheduled day —
+ * no completion date is invented for it.
+ */
+export function completedTasksOn(tasks: Task[], date: ISODate): Task[] {
+  return tasks
+    .filter((t) => !t.archived && t.status === 'completed' && (completedOnDate(t) ?? t.scheduledDate) === date)
+    .sort(byCompletedDesc);
+}
+
 export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats {
   const live = data.tasks.filter((t) => !t.archived);
 
@@ -614,10 +632,9 @@ export function dailyReviewStats(data: AppData, date: ISODate): DailyReviewStats
   // today, and one planned today but finished tomorrow belongs to tomorrow.
   // A completed record with no completedAt (legacy/imported data) keeps the
   // old behaviour and is reported on its scheduled day; no completion date is
-  // invented for it.
-  const completed = live
-    .filter((t) => t.status === 'completed' && (completedOnDate(t) ?? t.scheduledDate) === date)
-    .sort(byCompletedDesc);
+  // invented for it. `completedTasksOn` holds that rule, and the Today screen
+  // asks it the same question.
+  const completed = completedTasksOn(data.tasks, date);
 
   // Planned-but-unfinished work is still keyed off scheduledDate: that is what
   // "what was planned for this day" means.

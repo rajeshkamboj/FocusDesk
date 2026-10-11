@@ -14,7 +14,7 @@ import { ExecutionWarnings } from './execution-warnings';
 import { PriorityCard } from './priority-card';
 import { WellbeingCard } from './wellbeing-card';
 import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
-import { isOpenTask, overdueTasks, tasksWithApproachingDeadline } from '@/lib/selectors';
+import { completedTasksOn, isOpenTask, overdueTasks, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
 
 export function TodayScreen() {
@@ -46,30 +46,34 @@ export function TodayScreen() {
       })()
     : 'Welcome back';
 
+  // Today's *plan*: everything scheduled for today that is still on the list.
+  // Scheduling only says when the work was meant to happen, so this set drives
+  // the open sections — it never decides what was finished.
   const todays = useMemo(
-    () => data.tasks.filter((t) => t.scheduledDate === today && t.status !== 'cancelled'),
+    () => data.tasks.filter((t) => !t.archived && t.scheduledDate === today && t.status !== 'cancelled'),
     [data.tasks, today],
   );
 
-  const openTasks = todays.filter(isOpenTask);
-  const completedTasks = useMemo(() => {
-    const list = todays.filter((t) => t.status === 'completed');
-    return list.sort((a, b) => {
-      const at = a.completedAt ? Date.parse(a.completedAt) : NaN;
-      const bt = b.completedAt ? Date.parse(b.completedAt) : NaN;
-      const av = Number.isNaN(at) ? 0 : at;
-      const bv = Number.isNaN(bt) ? 0 : bt;
-      if (av !== bv) return bv - av;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
-  }, [todays]);
+  // "Completed today" answers a different question — what did you actually
+  // finish today? That comes from the completion timestamp (`completedTasksOn`,
+  // the same rule the Daily Review uses), so a task scheduled for today but
+  // completed on another day no longer appears here, and work finished today
+  // from any other day does.
+  const completedToday = useMemo(() => completedTasksOn(data.tasks, today), [data.tasks, today]);
 
+  const openTasks = todays.filter(isOpenTask);
   const priority = openTasks.filter((t) => t.priority === 'high');
   const other = openTasks.filter((t) => t.priority === 'medium');
   const optional = openTasks.filter((t) => t.priority === 'low');
 
-  const done = completedTasks.length;
-  const total = todays.length;
+  // The day's denominator is the union of the two sets: a task both planned for
+  // today and finished today is counted once. This keeps "N completed" and the
+  // Completed-today list in agreement no matter which side a task belongs to.
+  const done = completedToday.length;
+  const total = useMemo(() => {
+    const plannedIds = new Set(todays.map((t) => t.id));
+    return todays.length + completedToday.filter((t) => !plannedIds.has(t.id)).length;
+  }, [todays, completedToday]);
   const totalMinutes = openTasks.reduce((sum, t) => sum + (t.estimatedDuration ?? 0), 0);
 
   // A slipped task appears once: in ExecutionWarnings, with an explicit
@@ -145,7 +149,7 @@ export function TodayScreen() {
             </Button>
           </div>
 
-          {openTasks.length === 0 && completedTasks.length === 0 ? (
+          {openTasks.length === 0 && completedToday.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center">
               <IconTasks width={22} height={22} className="mx-auto text-ink-3" />
               <p className="mt-3 text-[15px] font-medium text-ink">A clear day</p>
@@ -162,7 +166,7 @@ export function TodayScreen() {
               {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} /> : null}
               {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} /> : null}
               {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} /> : null}
-              {completedTasks.length > 0 ? (
+              {completedToday.length > 0 ? (
                 <section>
                   <button
                     type="button"
@@ -174,7 +178,7 @@ export function TodayScreen() {
                       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
                         Completed today
                       </h2>
-                      <span className="text-[11px] tabular-nums text-ink-3">{completedTasks.length}</span>
+                      <span className="text-[11px] tabular-nums text-ink-3">{completedToday.length}</span>
                     </div>
                     <IconChevronDown
                       width={14}
@@ -182,7 +186,7 @@ export function TodayScreen() {
                       className={`text-ink-3 transition-transform duration-150 ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
                     />
                   </button>
-                  {showCompleted ? <TaskList tasks={completedTasks} showDates={false} /> : null}
+                  {showCompleted ? <TaskList tasks={completedToday} showDates={false} /> : null}
                 </section>
               ) : null}
             </>

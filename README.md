@@ -69,6 +69,17 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). No backend setup is needed to get started; the app uses browser storage by default. For optional Supabase configuration, see [`.env.example`](.env.example) and the [`supabase`](supabase/) directory.
 
+### Password reset
+
+Passwords are stored (hashed) by Supabase and can never be read back, so the
+sign-in screen offers **Forgot password?** instead: it emails a time-limited
+recovery link, the link returns to the app, and you choose a new password
+there. Add the app's origin (for example `http://localhost:3000/**` and your
+deployed origin) to **Supabase → Authentication → URL Configuration → Redirect
+URLs**; otherwise the link falls back to the project's Site URL. Supabase's
+default recovery email template works as-is. Expired or already-used links land
+back on the sign-in screen with an explanation and a fresh request form.
+
 ---
 
 <div align="center">

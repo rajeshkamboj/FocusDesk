@@ -12,7 +12,7 @@ import { TimerDock } from './timer-dock';
 import { FocusMode } from './focus-mode';
 import { RegisterSW } from '@/components/pwa/register-sw';
 import { useNotificationNavigation, useNotificationScheduler } from '@/lib/notifications';
-import { applyTheme, watchSystemTheme } from '@/lib/theme';
+import { applyTheme } from '@/lib/theme';
 
 const LAST_SECTION_KEY = 'pace.lastSection';
 
@@ -32,11 +32,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname]);
 
-  // Apply the appearance preference (and follow the OS while it is 'system').
+  // Apply the repository preference once loaded (including cross-tab updates).
   useEffect(() => {
     if (!ready) return;
     applyTheme(data.settings.appearance.theme);
-    return watchSystemTheme();
   }, [ready, data.settings.appearance.theme]);
 
   return (

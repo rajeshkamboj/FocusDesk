@@ -15,7 +15,7 @@ export const defaultSettings: Settings = {
     eveningReviewReminder: true,
   },
   appearance: {
-    theme: 'system',
+    theme: 'dark',
   },
 };
 

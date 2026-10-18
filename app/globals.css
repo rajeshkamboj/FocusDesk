@@ -4,35 +4,9 @@
 /* Design tokens                                                       */
 /* ------------------------------------------------------------------ */
 
-:root {
-  color-scheme: light;
-
-  --background: #f8f7f2;
-  --surface: #ffffff;
-  --surface-2: #efefea;
-  --surface-3: #e7e7e1;
-  --line: #e3e3dc;
-  --line-strong: #cfcfc6;
-
-  --ink: #1b1c18;
-  --ink-2: #55574e;
-  --ink-3: #72756a;
-
-  --accent: #1e6b52;
-  --accent-hover: #175741;
-  --accent-soft: #e2efe9;
-  --accent-ink: #144837;
-
-  --danger: #a63d2e;
-  --danger-soft: #f6e8e3;
-  --warning: #8d6a1d;
-  --warning-soft: #f4ecd9;
-
-  --shadow-card: 0 1px 2px rgba(27, 28, 24, 0.04), 0 1px 3px rgba(27, 28, 24, 0.03);
-  --shadow-pop: 0 8px 24px rgba(27, 28, 24, 0.1), 0 2px 6px rgba(27, 28, 24, 0.06);
-}
-
-[data-theme="dark"] {
+:root,
+[data-theme="dark"],
+[data-theme="pixldot"] {
   color-scheme: dark;
 
   --background: #151613;
@@ -46,6 +20,7 @@
   --ink-2: #a9aa9f;
   --ink-3: #96998b;
 
+  --focus-ring: #4fae8d;
   --accent: #4fae8d;
   --accent-hover: #63bfa0;
   --accent-soft: #1d3b31;
@@ -58,6 +33,37 @@
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.18);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Logo-2x.png: royal blue #3757f5 and coral #e87552.
+ * Keep status tokens unchanged. Lighter blue ink makes text/focus accessible;
+ * the exact royal blue is reserved for filled controls with white labels.
+ */
+[data-theme="pixldot"] {
+  --background: #131620;
+  --surface: #1a1e2b;
+  --surface-2: #222838;
+  --surface-3: #2c3346;
+  --line: #30384c;
+  --line-strong: #4b5875;
+
+  --ink: #eef0f8;
+  --ink-2: #b2bbd0;
+  --ink-3: #98a4bd;
+
+  --focus-ring: #a9baff;
+  --accent-text: #a9baff;
+  --accent-text-hover: #c6d0ff;
+  --accent: #3757f5;
+  --accent-hover: #4563fa;
+  --accent-soft: #232f60;
+  --accent-ink: #a9baff;
+  --highlight: #e87552;
+}
+
+/* A quiet coral detail, rather than recolouring semantic warning/error states. */
+[data-theme="pixldot"] aside footer {
+  border-top-color: color-mix(in srgb, var(--highlight) 35%, var(--line));
 }
 
 @theme inline {
@@ -89,6 +95,16 @@
     Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Text/icons need a lighter blue than filled controls on the dark surfaces. */
+.text-accent,
+.hover\:text-accent:hover {
+  color: var(--accent-text, var(--accent));
+}
+
+.hover\:text-accent-hover:hover {
+  color: var(--accent-text-hover, var(--accent-hover));
+}
+
 /* ------------------------------------------------------------------ */
 /* Base                                                                */
 /* ------------------------------------------------------------------ */
@@ -112,7 +128,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

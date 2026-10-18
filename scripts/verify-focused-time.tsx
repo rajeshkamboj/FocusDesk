@@ -449,7 +449,7 @@ async function main() {
   ok(/focused time/i.test(dayText), 'The block is labelled "Focused time", never "Work hours"');
   ok(dayText.includes(formatFocusedTime(dayTotal(today))),
      `The headline shows the day's recorded time (${formatFocusedTime(dayTotal(today))})`);
-  ok(dayText.includes('Time recorded by FocusDesk task timers.'),
+  ok(dayText.includes('Time recorded by Focus Desk task timers.'),
      'The block says plainly what it measures — no claim about every minute worked');
   ok(dayBlock?.querySelectorAll('li').length === focusedTimeOnDate(c().data, today, Date.now()).byTask.length,
      'The optional per-task breakdown is rendered, one line per task');

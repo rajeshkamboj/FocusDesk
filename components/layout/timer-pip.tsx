@@ -24,7 +24,7 @@ import type { Task } from '@/lib/types';
 /** Comfortably inside the 280–360 × 100–220 range; the browser may clamp it. */
 const PIP_WIDTH = 320;
 const PIP_HEIGHT = 190;
-const PIP_TITLE = 'FocusDesk — Active timers';
+const PIP_TITLE = 'Focus Desk — Active timers';
 
 /**
  * Copy the app's stylesheets into the Picture-in-Picture document — a new

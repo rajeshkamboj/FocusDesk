@@ -62,7 +62,7 @@ export function ResetPasswordScreen({
         <div className="flex items-center gap-3">
           <BrandMark />
           <div>
-            <h1 className="text-[17px] font-semibold tracking-tight text-ink">Pace</h1>
+            <h1 className="text-[17px] font-semibold tracking-tight text-ink">Focus Desk</h1>
             <p className="text-[12px] text-ink-3">Choose a new password</p>
           </div>
         </div>

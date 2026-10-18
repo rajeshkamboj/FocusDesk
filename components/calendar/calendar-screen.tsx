@@ -341,7 +341,7 @@ export function CalendarScreen() {
                 ))}
               </ul>
             ) : null}
-            <p className="mt-2 text-[11px] text-ink-3">Time recorded by FocusDesk task timers.</p>
+            <p className="mt-2 text-[11px] text-ink-3">Time recorded by Focus Desk task timers.</p>
           </div>
         ) : null}
 

@@ -25,7 +25,7 @@ export function DisplayNameSetting({ savedName }: { savedName: string }) {
       } finally { setSaving(false); }
     }}>
       <label htmlFor="display-name" className="text-[13.5px] font-medium text-ink">Your name</label>
-      <p id="display-name-hint" className="mt-1 text-xs text-ink-2">Used for your greeting in FocusDesk.</p>
+      <p id="display-name-hint" className="mt-1 text-xs text-ink-2">Used for your greeting in Focus Desk.</p>
       <div className="mt-3 flex gap-2">
         <Input id="display-name" autoComplete="given-name" aria-describedby="display-name-hint" maxLength={80} placeholder="Your preferred name" value={name} disabled={saving} onChange={(event) => { setName(event.target.value); setMessage(''); }} className="min-w-0 flex-1" />
         <Button type="submit" disabled={saving || name.trim() === savedName}>{saving ? 'Saving…' : 'Save'}</Button>

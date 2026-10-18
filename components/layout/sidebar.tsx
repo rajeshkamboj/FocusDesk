@@ -1,25 +1,26 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useData } from '@/components/data/data-provider';
 import { NAV_ITEMS } from './nav';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data, ready } = useData();
+  const { data, ready, repoKind } = useData();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface lg:flex">
-      <div className="flex items-center gap-2.5 px-6 pb-2 pt-6">
+      <div className="flex items-center shrink-0 gap-2.5 px-6 pb-2 pt-6">
         <BrandMark />
         <div>
-          <div className="text-[15px] font-semibold leading-tight tracking-tight text-ink">Pace</div>
+          <div className="text-[15px] font-semibold leading-tight tracking-tight text-ink">Focus Desk</div>
           <div className="text-[11px] leading-tight text-ink-3">Personal execution system</div>
         </div>
       </div>
 
-      <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-3">
+      <nav className="mt-4 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href || (pathname ?? '').startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -49,17 +50,27 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="px-6 pb-5 pt-3 text-[11px] leading-relaxed text-ink-3">
-        Your data stays on this device
-        <br />
-        until Supabase sync is enabled.
-        <div className="mt-2">
-          Built by{' '}
-          <a href="https://pixldot.com" target="_blank" rel="noopener noreferrer" className="hover:text-ink-2">
-            PixlDot
+      <footer className="shrink-0 border-t border-line px-5 py-4 text-[11px] leading-relaxed text-ink-3">
+        <p>
+          {repoKind === 'supabase'
+            ? 'Your data syncs with Supabase when connected.'
+            : 'Your data stays on this device until Supabase sync is enabled.'}
+        </p>
+        <p className="mt-2 text-ink-2">
+          Developed with love for <span className="font-medium text-ink">Rajesh Singh</span>
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <a href="https://pixldot.com/" target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-sm">
+            <Image src="/Logo-2x.png" alt="PixlDot logo" width={24} height={24} className="h-6 w-auto" />
           </a>
+          <span>
+            Built by{' '}
+            <a href="https://pixldot.com/" target="_blank" rel="noopener noreferrer" className="font-medium text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-accent-ink">
+              PixlDot
+            </a>
+          </span>
         </div>
-      </div>
+      </footer>
     </aside>
   );
 }

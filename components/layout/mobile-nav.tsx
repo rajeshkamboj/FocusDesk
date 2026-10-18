@@ -30,7 +30,7 @@ export function MobileNav() {
             <div className="mb-2 flex items-center justify-between px-5">
               <div className="flex items-center gap-2.5">
                 <BrandMark size={26} />
-                <span className="text-sm font-semibold text-ink">Pace</span>
+                <span className="text-sm font-semibold text-ink">Focus Desk</span>
               </div>
               <button className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-2" aria-label="Close" onClick={() => setMoreOpen(false)}>
                 <IconX width={18} height={18} />

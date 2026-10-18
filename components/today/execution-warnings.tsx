@@ -31,7 +31,7 @@ export function ExecutionWarnings({ data, date }: { data: AppData; date: ISODate
             ).join(', ')}
             {stalled.length > 3 ? ` · +${stalled.length - 3} more` : ''}
           </p>
-          <p className="mt-1 text-ink-3">Active projects with open tasks and no recorded completion or focused time for 14+ days. Work outside FocusDesk may not be recorded.</p>
+          <p className="mt-1 text-ink-3">Active projects with open tasks and no recorded completion or focused time for 14+ days. Work outside Focus Desk may not be recorded.</p>
           <Link href="/projects" className="mt-1 inline-block rounded py-1 font-medium text-accent-ink underline underline-offset-2">Review projects</Link>
         </div>
       ) : null}

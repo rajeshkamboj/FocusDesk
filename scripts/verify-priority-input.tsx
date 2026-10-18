@@ -140,7 +140,7 @@ async function main() {
     ok(varValue('--leading-normal') === '1.5', 'leading-normal → line-height 1.5');
     ok(decl(String.raw`.focus\:outline-none:focus`).includes('outline-style:none'),
        'focus:outline-none really removes the global 2px :focus-visible outline');
-    ok(/:focus-visible\{outline:2px solid var\(--accent\)/.test(css),
+    ok(/:focus-visible\{outline:2px solid var\(--focus-ring\)/.test(css),
        'The app-wide focus outline still exists for every other control');
 
     console.log('\n— Box model (page px-5 = 20px each side, card p-6 = 24px each side) —');

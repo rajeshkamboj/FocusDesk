@@ -86,8 +86,9 @@ For the legacy browser check, omitting `UI_TEST_EXECUTABLE_PATH` retains its ins
 
 ## Deployment / review handoff
 
-GitHub's repository metadata points at a Vercel site, and deployment history contains both Production and Preview deployments. The Vercel dashboard's production-branch setting could not be verified from this environment, so the initial implementation commit was kept local.
+The user confirmed that Vercel deploys branches as separate testing previews and production is updated only after merging into `main`. Branch preview deployments are explicitly permitted.
 
-On the user's request to continue, a branch-specific deployment safeguard was added in `vercel.json`: `git.deploymentEnabled["arena/4fb0fea3-focusdesk"] = false`. This prevents automatic Vercel deployments from this review branch (including previews), without changing deployment behavior for `main` or any other branch. The field's behavior is defined by [Vercel's GitConfig types](https://github.com/vercel/vercel/blob/c628be7835e03a965b93e9cf9e2bd5ac2acbf5eb/packages/config/src/types.ts#L203-L211). The JSON was checked with Vercel's own `validateStaticFields` implementation from that same commit, and an assertion confirmed the only rule disables this session's actual Git branch. No Vercel dashboard settings, environment variables, credentials, or production configuration were modified.
+The temporary branch-only deployment block has therefore been removed, restoring the repository's existing Vercel integration behavior. No Vercel dashboard settings, environment variables, credentials, or production configuration were modified. Automatic preview deployment may run on pushes to this review branch. Do not merge or promote a deployment automatically.
 
-The safeguarded branch can now be pushed for a draft PR into `main`. Do not merge or promote a deployment automatically. The branch URL is https://github.com/rajeshkamboj/FocusDesk/tree/arena/4fb0fea3-focusdesk; the PR URL is supplied in the completion report. The branch-only rule may be kept after merging (it has no effect on `main`) or removed later by a reviewer once the project's production-branch setting has been verified.
+- Branch: https://github.com/rajeshkamboj/FocusDesk/tree/arena/4fb0fea3-focusdesk
+- Draft PR: https://github.com/rajeshkamboj/FocusDesk/pull/49

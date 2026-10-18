@@ -6,6 +6,68 @@ export type CuriosityNewsItem = {
   url: string;
 };
 
+/* ------------------------------------------------------------------ */
+/* Content pool                                                        */
+/*                                                                     */
+/* Every editorial card the scheduler can publish is one entry of a    */
+/* pool: a unique id, a category, a first-publication day (in the     */
+/* publication time zone, Asia/Kolkata), the card payload, and where   */
+/* its claims came from. The id is what the rotation ledger and the    */
+/* published snapshot refer to, so it must never be reused or renamed  */
+/* once a day has been published with it.                              */
+/* ------------------------------------------------------------------ */
+
+export type CuriosityCategory = 'one-thing' | 'literature' | 'learn-something' | 'book';
+
+export interface CuriositySourceRef {
+  /** Where a reader can check the claim. */
+  url: string;
+  /** Short publisher name, e.g. "MDN Web Docs". */
+  name: string;
+  /** Licence/attribution note shown next to the link when one is needed. */
+  attribution?: string;
+  /** ISO date the claim was last checked against this source. */
+  checkedAt?: string;
+}
+
+/**
+ * `curated`     — written for this app; nothing was copied from a third party.
+ * `source-checked` — the wording was checked against `source` before publishing.
+ *
+ * The distinction is kept on the record (not in a commit message) because the
+ * card links out to `source`, and a reader is entitled to know whether the text
+ * is ours or a paraphrase of the thing it links to.
+ */
+export type CuriosityProvenance = 'curated' | 'source-checked';
+
+export type CuriosityPoolStatus = 'draft' | 'published' | 'retired';
+
+export interface CuriosityPoolEntry<TItem = unknown> {
+  id: string;
+  category: CuriosityCategory;
+  /** First day (Asia/Kolkata) on which this item may be published. */
+  availableFrom: string;
+  status?: CuriosityPoolStatus;
+  provenance: CuriosityProvenance;
+  source?: CuriositySourceRef;
+  tags?: string[];
+  item: TItem;
+}
+
+export interface OneThingItem {
+  title: string;
+  explanation: string;
+  url?: string;
+  sourceName?: string;
+}
+
+export interface LearningItem {
+  topic: string;
+  explanation: string;
+  url?: string;
+  sourceName?: string;
+}
+
 export type DeveloperDiscovery = {
   name: string;
   description: string;
@@ -32,6 +94,7 @@ export interface LiteratureItem {
   attribution?: string;
   whyItMatters: string;
   url?: string;
+  sourceName?: string;
 }
 
 export interface BrainSharpener {
@@ -156,13 +219,101 @@ export type ChemistryConcept = ScienceConcept;
 export type PhysicsConcept = ScienceConcept;
 export type BiologyConcept = ScienceConcept;
 
+/* ------------------------------------------------------------------ */
+/* One Book — a candidate from the pool, plus the resolved record      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What this repository asserts about a book. Everything here is authored
+ * editorial: a title, an author, and two short paragraphs we wrote.
+ *
+ * It deliberately holds **no** cover, no rating, no publication year and no
+ * availability claim. Those belong to the catalogue, so they are fetched from
+ * Open Library at publish time (see `openlibrary.ts`) and are simply omitted
+ * when the catalogue does not provide them.
+ */
+export interface BookCandidate {
+  title: string;
+  author: string;
+  synopsis: string;
+  why: string;
+  /**
+   * An optional publisher/author page we also authored. When Open Library
+   * resolves, its work record becomes the primary link and this is dropped.
+   */
+  url?: string;
+  subjects?: string[];
+}
+
+/**
+ * The published book card. Fields are optional because they are only ever
+ * present when Open Library actually returned them — a missing `coverUrl`
+ * means no cover exists for this record, not that the book has no cover.
+ */
+export interface BookRecommendation extends BookCandidate {
+  id: string;
+  /** The link the card shows: the Open Library work record when resolved. */
+  url: string;
+  source: 'openlibrary' | 'curated';
+  sourceName: string;
+  /** Open Library work key, e.g. `/works/OL20803380W`. */
+  openLibraryKey?: string;
+  coverUrl?: string;
+  /** `false` when Open Library returned no cover id for this record. */
+  coverAvailable?: boolean;
+  firstPublishYear?: number;
+  publisher?: string;
+  publishersNote?: string;
+  editionCount?: number;
+  /** Internet Archive record for reading / borrowing / preview, when catalogue-listed. */
+  previewUrl?: string;
+  previewNote?: string;
+  fetchedAt?: string;
+  notes?: string[];
+}
+
+/** Every id that went into a snapshot — the audit trail behind a day. */
+export type CuriosityContentKey =
+  | 'one-thing'
+  | 'literature'
+  | 'learn-something'
+  | 'book'
+  | 'speak-better'
+  | 'mythology'
+  | 'chemistry'
+  | 'physics'
+  | 'biology'
+  | 'sharpener'
+  | 'history';
+
+export type PublishedContentIds = Partial<Record<CuriosityContentKey, string>>;
+
+/** Snapshot metadata surfaced on the page so "is this today's?" is answerable. */
+export interface CuriosityPublicationMeta {
+  /** The Asia/Kolkata date this snapshot was published for. */
+  date: string;
+  /** ISO timestamp of the successful publish (not the date key). */
+  publishedAt: string;
+  /** Where the snapshot came from: the store, or the built-in fallback. */
+  origin: 'published' | 'fallback';
+  store: 'supabase' | 'file';
+  /** Per-category content ids, so repetition can be audited. */
+  contentIds: PublishedContentIds;
+  /** Sections whose live source failed while this snapshot was built. */
+  degraded?: string[];
+  /** The publication day of the One Book record, and the day it next turns over. */
+  bookPublishedOn?: string;
+  bookNextChangeOn?: string;
+}
+
+
 export type CuriosityBriefing = {
   date: string;
   aiWorld: CuriosityNewsItem[];
   developerRadar: DeveloperDiscovery[];
-  book: { title: string; author: string; description: string; why: string; url: string };
-  oneThing: { title: string; explanation: string; url?: string };
-  learning: { topic: string; explanation: string; url?: string };
+  book: BookRecommendation;
+  oneThing: OneThingItem;
+  learning: LearningItem;
   history: HistoryEvent | null;
   literature: LiteratureItem;
   sharpener: BrainSharpener;
@@ -171,4 +322,6 @@ export type CuriosityBriefing = {
   chemistry: ChemistryConcept;
   physics: PhysicsConcept;
   biology: BiologyConcept;
+  /** Present whenever a scheduled snapshot (rather than the fallback) is shown. */
+  publication?: CuriosityPublicationMeta;
 };

@@ -10,7 +10,9 @@ import { SectionGroup } from './sections/section-group';
 import { SpeakBetterSection } from './sections/speak-better';
 import { MythologySection } from './sections/mythology';
 import { ScienceCard } from './sections/science';
+import { BookCard } from './sections/book-card';
 import { getDailyQuote } from '@/lib/quotes';
+import { formatPublicationDate, formatPublicationInstant } from '@/lib/curiosity/schedule';
 import {
   IconBiology,
   IconBook,
@@ -295,7 +297,22 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         <p className="mt-2 text-sm leading-relaxed text-ink-2">
           A few things worth knowing today. This is a finite briefing, not a feed.
         </p>
-        <p className="mt-2 text-xs text-ink-3">{briefing.date}</p>
+        <p className="mt-2 text-xs text-ink-3">
+          {formatPublicationDate(briefing.date)}
+          {briefing.publication ? (
+            briefing.publication.origin === 'published' ? (
+              <> · published {formatPublicationInstant(briefing.publication.publishedAt)}, Asia/Kolkata</>
+            ) : (
+              <> · built-in rotation — no published snapshot for this day yet</>
+            )
+          ) : null}
+        </p>
+        {briefing.publication?.degraded?.length ? (
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3">
+            {briefing.publication.degraded.length} section{briefing.publication.degraded.length === 1 ? '' : 's'} showing
+            fallback text because a source did not answer.
+          </p>
+        ) : null}
       </header>
 
       <div className="space-y-7">
@@ -385,6 +402,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
                   <LinkOut href={briefing.oneThing.url}>
                     Explore further →
                   </LinkOut>
+                  {briefing.oneThing.sourceName ? (
+                    <span className="mt-1 block text-[11px] text-ink-3">Source: {briefing.oneThing.sourceName}</span>
+                  ) : null}
                 </p>
               ) : null}
             </SectionCard>
@@ -449,32 +469,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           ) : null}
 
           <section className="h-full">
-            <SectionCard label="One Book">
-              <div className="flex gap-4">
-                <VisualMark tone="bg-warning-soft text-warning">
-                  <IconBook width={18} height={18} />
-                </VisualMark>
-                <div>
-                  <LinkOut href={briefing.book.url}>
-                    <h3 className="text-lg font-medium text-ink">
-                      {briefing.book.title}
-                    </h3>
-                  </LinkOut>
-                  <p className="mt-1 text-sm text-ink-2">
-                    by {briefing.book.author}
-                  </p>
-                </div>
-              </div>
-              <p className="mt-4 text-sm leading-relaxed text-ink-2">
-                {briefing.book.description}
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-ink-2">
-                <strong className="font-medium text-ink">
-                  Why it may help:
-                </strong>{' '}
-                {briefing.book.why}
-              </p>
-            </SectionCard>
+            <BookCard book={briefing.book} nextChangeOn={briefing.publication?.bookNextChangeOn} />
           </section>
         </div>
 
@@ -506,6 +501,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
                   <LinkOut href={briefing.learning.url}>
                     Read a source →
                   </LinkOut>
+                  {briefing.learning.sourceName ? (
+                    <span className="mt-1 block text-[11px] text-ink-3">Source: {briefing.learning.sourceName}</span>
+                  ) : null}
                 </p>
               ) : null}
             </SectionCard>

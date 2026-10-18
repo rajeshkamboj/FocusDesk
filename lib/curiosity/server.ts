@@ -1,134 +1,150 @@
-import { unstable_cache } from 'next/cache';
 import { dailyEditorial } from './content';
-import type { CuriosityBriefing, CuriosityNewsItem, DeveloperDiscovery, HistoryEvent } from './types';
+import { catchUpOnRender, currentBook } from './job';
+import { addPublicationDays, publicationDate } from './schedule';
+import { BOOK_INTERVAL_DAYS } from './schedule';
+import { getStateStore, type CuriosityState, type PublishedDaily } from './state';
+import type { CuriosityBriefing } from './types';
 
-const SOURCE_TIMEOUT_MS = 6_000;
-const MAX_AI_WORLD_ARTICLES = 10;
-const NEWS_FEEDS = [
-  ['OpenAI', 'https://openai.com/news/rss.xml'],
-  ['Anthropic', 'https://www.anthropic.com/news/rss.xml'],
-  ['Google DeepMind', 'https://deepmind.google/blog/rss.xml'],
-  ['Hugging Face', 'https://huggingface.co/blog/feed.xml'],
-  ['Microsoft AI', 'https://blogs.microsoft.com/ai/feed/'],
-  ['Meta AI', 'https://ai.meta.com/blog/rss/'],
-] as const;
+/**
+ * The read path for Curiosity.
+ *
+ * One rule decides everything here: **a render reads, it does not produce.**
+ * The briefing shown to a reader is either the snapshot the scheduler published
+ * for that Asia/Kolkata day, or — when no snapshot exists yet — the deterministic
+ * pool fallback for that day. Both are computed the same way for the same date,
+ * so a page load never depends on which of the two it got, and opening the app
+ * cannot cost an external API call.
+ *
+ * ### Why there is no `unstable_cache` any more
+ *
+ * The previous version wrapped `buildBriefing` in `unstable_cache` with
+ * `revalidate: 3600`, which is what made "daily" mean "hourly": the first
+ * request of the day did the work, a request after the cache expired could show
+ * a different book, and every shape change needed a version bump in the cache key
+ * or readers saw a stale briefing for an hour. The published snapshot replaces
+ * that whole mechanism — the cache is now the store, its key is the date, and its
+ * invalidation is the scheduler. The only in-process cache left is a
+ * few-seconds memo so a page that mounts twice in one paint does not read the
+ * store twice.
+ *
+ * ### Fallback and failure
+ *
+ * `store.read()` never throws, so an unreachable database or a corrupt state file
+ * yields "nothing published" and the pool fallback renders. A failed refresh
+ * leaves the previous snapshot in place, which the reader keeps seeing: content
+ * degrades to *older*, never to *nothing*.
+ */
 
-function text(value: string) {
-  return value.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+const stateMemo = new Map<string, { at: number; state: CuriosityState }>();
+const STATE_MEMO_MS = 5_000;
+
+/** The store read, memoised per process for a few seconds. */
+async function readState(): Promise<CuriosityState> {
+  const key = getStateStore().location;
+  const cached = stateMemo.get(key);
+  if (cached && Date.now() - cached.at < STATE_MEMO_MS) return cached.state;
+  const state = await getStateStore().read();
+  stateMemo.set(key, { at: Date.now(), state });
+  return state;
 }
 
-function isHttpUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
+function publicationFrom(
+  daily: PublishedDaily | null,
+  store: 'file' | 'supabase',
+  date: string,
+  state: CuriosityState,
+): CuriosityBriefing['publication'] {
+  const bookDay = state.book?.date;
+  return {
+    date,
+    publishedAt: daily?.publishedAt ?? new Date(`${date}T00:00:00+05:30`).toISOString(),
+    origin: daily ? 'published' : 'fallback',
+    store,
+    contentIds: daily?.contentIds ?? {},
+    degraded: daily?.degraded ?? ['No published snapshot for this day; showing the built-in rotation.'],
+    // The book keeps its own clock: the card says when it will next turn over,
+    // which is three publication days after the one it was published on.
+    bookPublishedOn: bookDay,
+    bookNextChangeOn: bookDay ? addPublicationDays(bookDay, BOOK_INTERVAL_DAYS) : undefined,
+  };
+}
+
+export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
+  const store = getStateStore();
+  const state = await readState();
+  const book = currentBook(state, date);
+
+  if (state.daily && state.daily.date === date) {
+    const daily = state.daily;
+    return {
+      date,
+      book,
+      ...daily.payload,
+      publication: publicationFrom(daily, store.kind, date, state),
+    };
   }
-}
 
-function tag(item: string, name: string) {
-  const match = item.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
-  return match ? text(match[1]) : '';
+  // Nothing published for the day the reader is on. If that day is *today* and a
+  // scheduler has not had the chance yet (a fresh deploy, a laptop with no cron),
+  // publish it now, once: the store claim means the second concurrent request of
+  // that moment finds the snapshot instead of starting a second run.
+  if (date === publicationDate(new Date())) {
+    const summary = await catchUpOnRender(date).catch(() => null);
+    if (summary && summary.status === 'published') {
+      const refreshed = await store.read();
+      if (refreshed.daily?.date === date) {
+        return {
+          date,
+          book: currentBook(refreshed, date),
+          ...refreshed.daily.payload,
+          publication: publicationFrom(refreshed.daily, store.kind, date, refreshed),
+        };
+      }
+    }
+  }
+
+  const fallback = dailyEditorial(date);
+  return {
+    date,
+    book,
+    // Live sections stay empty on the fallback path: an empty AI World or
+    // Developer Radar card is an honest "no source today", while a *stale* one
+    // dressed up as today's would not be.
+    aiWorld: [],
+    developerRadar: [],
+    oneThing: fallback.oneThing,
+    learning: fallback.learning,
+    literature: fallback.literature,
+    history: fallback.history,
+    sharpener: fallback.sharpener,
+    speakBetter: fallback.speakBetter,
+    mythology: fallback.mythology,
+    chemistry: fallback.chemistry,
+    physics: fallback.physics,
+    biology: fallback.biology,
+    publication: publicationFrom(null, store.kind, date, state),
+  };
 }
 
 /**
- * Keep the newest stories that the selected first-party AI publishers provide.
- *
- * These sources publish less often than a general newswire, so a rolling time
- * window can turn a useful briefing into an empty card. Source feeds already
- * establish authority; ordering all valid stories by their published date gives
- * readers the latest developments without hiding an important update from last
- * week.
+ * @param date the Asia/Kolkata day to render. `getDailyBriefing` never
+ *   re-derives "today" from the server clock beyond the catch-up check, so a
+ *   dated request (a stale tab rolling over at midnight, the `/api/curiosity`
+ *   route) resolves against the snapshot for exactly that day.
  */
-export function selectAiWorldArticles(items: CuriosityNewsItem[], now = Date.now()): CuriosityNewsItem[] {
-  const seen = new Set<string>();
-  return items
-    .filter((item) => {
-      const published = Date.parse(item.publishedAt);
-      if (!Number.isFinite(published) || published > now) return false;
-      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-    .slice(0, MAX_AI_WORLD_ARTICLES);
+export function getDailyBriefing(date: string): Promise<CuriosityBriefing> {
+  return buildBriefing(date);
 }
 
-async function fetchNews(): Promise<CuriosityNewsItem[]> {
-  try {
-    const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
-      try {
-        const response = await fetch(url, { headers: { accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
-        if (!response.ok) return [];
-        const xml = await response.text();
-        // A single publisher can account for all ten newest stories, so retain
-        // enough entries from each authoritative feed before the global limit.
-        return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, MAX_AI_WORLD_ARTICLES).map((match): CuriosityNewsItem | null => {
-          const item = match[0];
-          const link = tag(item, 'link') || (item.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
-          const title = tag(item, 'title');
-          const publishedAt = tag(item, 'pubDate') || tag(item, 'published') || tag(item, 'updated');
-          const summary = tag(item, 'description') || tag(item, 'summary');
-          return title && isHttpUrl(link) ? { title, source, publishedAt, summary: summary.slice(0, 280), url: link } : null;
-        }).filter((item): item is CuriosityNewsItem => Boolean(item));
-      } catch {
-        return [];
-      }
-    }));
-    return selectAiWorldArticles(batches.flat());
-  } catch {
-    return [];
-  }
+/** Today's briefing, keyed to the publication zone rather than to UTC. */
+export function getTodaysBriefing(now: Date = new Date()): Promise<CuriosityBriefing> {
+  return buildBriefing(publicationDate(now));
 }
 
-async function fetchDeveloperRadar(): Promise<DeveloperDiscovery[]> {
-  try {
-    const response = await fetch('https://api.github.com/search/repositories?q=topic%3Adeveloper-tools+language%3ATypeScript&sort=updated&order=desc&per_page=3', { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
-    if (!response.ok) return [];
-    const data = await response.json() as { items?: Array<{ name: string; description: string | null; html_url: string }> };
-    return (data.items ?? []).slice(0, 3).filter((item) => isHttpUrl(item.html_url)).map((item) => ({ name: item.name, description: item.description ?? 'An open-source developer project.', why: 'A recently updated open-source project worth evaluating for practical modern web work.', pricing: 'Open source; confirm the repository license and any hosted-service terms.', url: item.html_url }));
-  } catch {
-    return [];
-  }
+/**
+ * Force the store to be re-read after an administrative refresh; without this a
+ * refresh inside the 5-second memo window would still render the previous state.
+ */
+export function clearBriefingMemo(): void {
+  stateMemo.clear();
 }
-
-async function fetchHistory(date: string): Promise<HistoryEvent | null> {
-  const [, month, day] = date.split('-');
-  try {
-    // Wikipedia's selected anniversaries are editorially curated, not random events.
-    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/${month}/${day}`, {
-      headers: { accept: 'application/json', 'User-Agent': 'FocusDesk/0.1 (daily history reader)' },
-      signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS),
-    });
-    if (!response.ok) return null;
-    const result = await response.json() as { selected?: Array<{ year: number; text: string; pages?: Array<{ title: string; extract?: string; content_urls?: { desktop?: { page?: string } } }> }> };
-    const events = (result.selected ?? []).filter((event) => Number.isFinite(event.year) && event.text && event.pages?.some((page) => page.content_urls?.desktop?.page && isHttpUrl(page.content_urls.desktop.page)));
-    // Stable ordering makes the daily item independent of response ordering.
-    events.sort((a, b) => a.year - b.year || a.text.localeCompare(b.text));
-    const event = events[0];
-    if (!event) return null;
-    const page = event.pages!.find((page) => page.content_urls?.desktop?.page && isHttpUrl(page.content_urls.desktop.page))!;
-    return {
-      date: new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }),
-      year: event.year,
-      title: page.title.replaceAll('_', ' '),
-      explanation: event.text,
-      significance: page.extract ? (page.extract.length > 380 ? `${page.extract.slice(0, 377).replace(/\s+\S*$/, '')}…` : page.extract) : 'Featured in Wikipedia’s curated selection of significant anniversaries for this date.',
-      url: page.content_urls!.desktop!.page,
-    };
-  } catch { return null; }
-}
-
-async function buildBriefing(date: string): Promise<CuriosityBriefing> {
-  const editorial = dailyEditorial(date);
-  const [aiWorld, developerRadar, history] = await Promise.all([fetchNews(), fetchDeveloperRadar(), editorial.history ? Promise.resolve(editorial.history) : fetchHistory(date)]);
-  return { date, aiWorld, developerRadar, ...editorial, history };
-}
-
-// Refresh during the day so the briefing can pick up newly published stories,
-// while still avoiding a feed request for every page view.
-// The cache key carries a version: a briefing cached under an older key would
-// render without the newer daily sections for up to an hour, so the key must
-// be bumped whenever the briefing shape or the editorial corpus changes.
-export const getDailyBriefing = (date: string) => unstable_cache(() => buildBriefing(date), ['curiosity:v10', date], { revalidate: 3_600, tags: [`curiosity:v10:${date}`] })();

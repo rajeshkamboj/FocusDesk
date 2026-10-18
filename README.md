@@ -60,6 +60,63 @@ live schema/FK/RLS using the deployment checks in the format doc. Supabase
 milestone plans still require migration 008; imports use authenticated,
 user-scoped writes with compensating rollback, not a cross-table transaction.
 
+## Curiosity content automation
+
+The **Curiosity** tab publishes on a schedule, not per visitor. One Thing Worth
+Knowing, A Few Minutes of Literature and Learn Something change at **00:00
+Asia/Kolkata**; One Book changes **every three days** and pulls its cover, edition
+count, publisher and first-publication year from the Open Library Search and Covers
+APIs at publish time. Nothing is generated while you read: a render reads the
+published day, and the pool in `lib/curiosity/content/` (22 / 24 / 24 / 25 entries,
+each with an id, an eligibility date and a source link) is what a card shows when a
+live feed is unavailable.
+
+A refresh is driven by a schedule, not by visitors; a render only repairs a day the
+schedule missed, idempotently and at most once a day. Three equivalent entry points
+call the same authenticated endpoint at `30 18 * * *` (00:00 IST, India has no DST):
+**Vercel Cron** (`vercel.json`), **GitHub Actions**
+(`.github/workflows/curiosity-daily.yml`), or **Supabase pg_cron** with the Edge
+Function in `supabase/functions/curiosity-refresh`. A shell crontab and
+`npm run curiosity:refresh` do the same job on a self-hosted box. Every run is
+idempotent per publication day, single-flight under a lease, and leaves the last
+successful content in place if a source fails.
+
+Published days go to Supabase (`supabase/migrations/009_curiosity_content.sql`:
+briefings, a seen-item ledger, a read-only content override table and the job lease)
+when `SUPABASE_SECRET_KEY` is configured, and to `.curiosity/state.json` otherwise —
+so the feature runs with zero credentials, and survives restarts either way. No
+existing table or user data is touched. Settings → Data has an administrative
+**Curiosity content automation** panel (publish today, new book now, eligible counts,
+degraded sections, recent runs); it uses your own signed-in token, never a privileged
+key.
+
+Full design, sources, Open Library usage rules, verification results and runbook:
+[docs/curiosity-content-automation.md](docs/curiosity-content-automation.md).
+
+```bash
+npm run curiosity:verify   # the seven automation checks, offline and deterministic
+npm run curiosity:links    # confirm every cited source URL still resolves
+npm run curiosity:refresh -- --status
+```
+
+## Required API credentials
+
+**None to run the app or the Curiosity tab.** Optional, and only for what is noted:
+
+- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — auth and sync.
+  Public keys; only these two may be `NEXT_PUBLIC_*`.
+- `SUPABASE_SECRET_KEY` — service-role, server-side only. Enables durable
+  multi-instance Curiosity content and `--backfill-pool`; without it the published
+  record stays on disk.
+- `CURIOSITY_CRON_SECRET` — the shared secret a scheduler presents to
+  `/api/curiosity/refresh`. Unset in production, the endpoint refuses anonymous
+  callers (the signed-in admin path still works) rather than publishing unattended.
+- `OPENLIBRARY_CONTACT_EMAIL` — an identifying contact for Open Library's rate-limit
+  guidance. One request per book publish, once every three days.
+
+There is no paid AI API in this feature and no half-wired integration: the news card
+comes from public vendor feeds. See [`.env.example`](.env.example).
+
 ## Get started
 
 ```bash

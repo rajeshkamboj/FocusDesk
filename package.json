@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "curiosity:refresh": "npx tsx scripts/curiosity-refresh.ts",
+    "curiosity:verify": "npx tsx scripts/verify-curiosity-automation.tsx",
+    "curiosity:links": "node scripts/check-curiosity-links.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

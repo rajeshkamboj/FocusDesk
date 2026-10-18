@@ -1,86 +1,27 @@
 import type {
+  BookCandidate,
+  CuriosityCategory,
+  CuriosityPoolEntry,
   BrainSharpener,
   CuriosityBriefing,
   HistoryEvent,
+  LearningItem,
   LiteratureItem,
+  OneThingItem,
 } from './types';
+import { selectFromPool } from './pool';
+import { buildRecommendation } from './openlibrary';
 import { speakBetterLessons } from './content/speak-better';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
 import { biologyConcepts } from './content/biology';
 
-const books = [
-  {
-    title: 'The Design of Everyday Things',
-    author: 'Don Norman',
-    description:
-      'A practical look at why some products feel obvious and others feel frustrating. It connects psychology, design, and the small decisions that make tools easier to use.',
-    why: 'Useful for building calmer, more understandable websites and software.',
-    url: 'https://jnd.org/books/the-design-of-everyday-things-revised-and-expanded/',
-  },
-  {
-    title: 'The Information',
-    author: 'James Gleick',
-    description:
-      'A history of ideas about information, from language and code to the digital age. It shows how a scientific concept reshaped communication and computing.',
-    why: 'A thoughtful bridge between science, teaching, writing, and technology.',
-    url: 'https://www.jamesgleick.com/the-information/',
-  },
-  {
-    title: 'Range',
-    author: 'David Epstein',
-    description:
-      'An exploration of why broad experience can be an advantage in a world that rewards specialization. The book uses research and stories rather than simple productivity slogans.',
-    why: 'Relevant to a developer, teacher, and learner with several connected interests.',
-    url: 'https://davidepstein.com/the-range/',
-  },
-];
 
-const oneThings = [
-  {
-    title: 'Why does an LLM generate text one token at a time?',
-    explanation:
-      'An LLM does not write a whole answer in one step. It converts the context into numbers, estimates a probability for the next token, selects one, then runs the expanded context through the model again. A token may be a word, part of a word, punctuation, or whitespace. This repeated prediction makes streaming possible and lets each new token depend on everything already written. It also explains why a model can sound coherent locally while still drifting globally: each choice is made from probabilities, not from a guaranteed outline of the finished answer.',
-    url: 'https://developers.google.com/machine-learning/crash-course/llm/prompting',
-  },
-  {
-    title: 'Why does a database index make a query faster?',
-    explanation:
-      'A database index is an additional, organized lookup structure built beside a table. Without one, the database may inspect every row to find matching records. With one, it can navigate a smaller structure—often a B-tree—to locate likely row positions quickly. The trade-off is space and work on writes: every insert, update, or delete may also need to update the index. Indexes help most when they match real filters and sort orders; adding one to every column can make a system slower rather than faster.',
-    url: 'https://www.postgresql.org/docs/current/indexes.html',
-  },
-  {
-    title: 'Why can a fast server still produce poor Core Web Vitals?',
-    explanation:
-      'Server response time is only one part of the journey to a usable page. A page can receive HTML quickly and still feel slow if it sends a large JavaScript bundle, waits for client rendering, shifts content when images load, or blocks the main thread with expensive work. Core Web Vitals measure what the visitor experiences: loading, visual stability, and interaction responsiveness. Improving them often means reducing browser work and reserving layout space, not only upgrading the server.',
-    url: 'https://web.dev/articles/vitals',
-  },
-];
 
-const lessons = [
-  {
-    topic: 'Bayesian reasoning as an update rule',
-    explanation:
-      'Bayes’ theorem is a disciplined way to update a belief after seeing evidence. Start with a prior belief, measure how likely the evidence is under competing explanations, then normalize. It is less about complicated arithmetic than about making assumptions visible and revisable.',
-    url: 'https://plato.stanford.edu/entries/bayes-theorem/',
-  },
-  {
-    topic: 'The bicycle principle of gradient descent',
-    explanation:
-      'Imagine standing on a foggy hillside and wanting to reach the lowest point. You can feel the slope beneath your feet, take a small step downhill, and repeat. Gradient descent does the same with a model: the gradient says which direction increases error, and a learning rate controls the step size.',
-    url: 'https://developers.google.com/machine-learning/crash-course/linear-regression/gradient-descent',
-  },
-  {
-    topic: 'Why web browsers use the event loop',
-    explanation:
-      'JavaScript can run one piece of code at a time, but a browser still needs to wait for network and timer work without freezing the page. The event loop places completed callbacks in a queue and runs them when the current stack is clear, keeping the interface responsive while I/O is pending.',
-    url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model',
-  },
-];
 
 /* ------------------------------------------------------------------ */
-/* 1. Today in History                                                */
+/* Today in History — a curated corpus for the dates it covers.       */
 /* ------------------------------------------------------------------ */
 
 const historyEvents: HistoryEvent[] = [
@@ -176,103 +117,6 @@ const historyEvents: HistoryEvent[] = [
   },
 ];
 
-/* ------------------------------------------------------------------ */
-/* 2. A Few Minutes of Literature                                     */
-/* ------------------------------------------------------------------ */
-
-const literatureWorks: LiteratureItem[] = [
-  {
-    title: 'The Road Not Taken',
-    author: 'Robert Frost',
-    eraOrCountry: 'American Poetry (1916)',
-    format: 'poem',
-    passage:
-      'Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\nAnd be one traveler, long I stood\nAnd looked down one as far as I could\nTo where it bent in the undergrowth;\n[…]\nI took the one less traveled by,\nAnd that has made all the difference.',
-    whyItMatters:
-      'A timeless reflection on choice, individuality, and the narratives we build around life’s defining paths.',
-    url: 'https://www.poetryfoundation.org/poems/44272/the-road-not-taken',
-  },
-  {
-    title: 'Letters to a Young Poet (Letter Four)',
-    author: 'Rainer Maria Rilke',
-    eraOrCountry: 'Austrian Literature (1903)',
-    format: 'passage',
-    passage:
-      'Live the questions now.',
-    attribution: 'Brief excerpt; translated by M. D. Herter Norton.',
-    whyItMatters:
-      'Encourages gentle patience with uncertainty and recognizing that maturity is a process of lived experience.',
-    url: 'https://rilkepoetry.com/letters-to-a-young-poet/letter-four/',
-  },
-  {
-    title: 'Gitanjali (Song 35)',
-    author: 'Rabindranath Tagore',
-    eraOrCountry: 'Indian Poetry (1910)',
-    format: 'poem',
-    passage:
-      'Where the mind is without fear and the head is held high;\nWhere knowledge is free;\nWhere the world has not been broken up into fragments by narrow domestic walls;\nWhere words come out from the depth of truth;\nWhere tireless striving stretches its arms towards perfection;\n[…]\nInto that heaven of freedom, my Father, let my country awake.',
-    whyItMatters:
-      'A luminous prayer for moral integrity, unchained intellect, and freedom from narrow prejudice.',
-    url: 'https://www.nobelprize.org/prizes/literature/1913/tagore/poetry/',
-  },
-  {
-    title: 'Meditations (Book IV, 3)',
-    author: 'Marcus Aurelius',
-    eraOrCountry: 'Stoic Philosophy (c. 175 CE)',
-    format: 'passage',
-    passage:
-      'Men seek retreats for themselves, houses in the country, sea-shores, and mountains; and thou too art wont to desire such things very much. But this is altogether a mark of the most common sort of men, for it is in thy power whenever thou shalt choose to retire into thyself.',
-    attribution: 'Book IV, section 3; public-domain translation by George Long.',
-    whyItMatters:
-      'Reminds us that genuine calm and composure are cultivated from within, not found in physical flight.',
-    url: 'https://classics.mit.edu/Antoninus/meditations.4.four.html',
-  },
-  {
-    title: 'The Prophet: On Work',
-    author: 'Kahlil Gibran',
-    eraOrCountry: 'Lebanese-American Literature (1923)',
-    format: 'passage',
-    passage:
-      'You have been told also that life is darkness, and in your weariness you echo what was said by the weary. And I say that life is indeed darkness save when there is urge, and all urge is blind save when there is knowledge, and all knowledge is vain save when there is work, and all work is empty save when there is love; and when you work with love you bind yourself to yourself, and to one another, and to God.',
-    whyItMatters:
-      'Transforms the notion of daily effort into an expression of care, connection, and craft.',
-    url: 'https://www.gutenberg.org/ebooks/58585',
-  },
-  {
-    title: 'The Narrow Road to the Deep North',
-    author: 'Matsuo Basho',
-    eraOrCountry: 'Japanese Haibun (1689)',
-    format: 'passage',
-    passage:
-      'Every day is a journey, and the journey itself is home.',
-    attribution: 'Brief excerpt; translated by Sam Hamill.',
-    whyItMatters:
-      'A serene meditation on impermanence, mindful travel, and the poetry of everyday observation.',
-    url: 'https://en.wikipedia.org/wiki/Oku_no_Hosomichi',
-  },
-  {
-    title: 'Walden: Where I Lived, and What I Lived For',
-    author: 'Henry David Thoreau',
-    eraOrCountry: 'American Philosophy (1854)',
-    format: 'passage',
-    passage:
-      'I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach, and not, when I came to die, discover that I had not lived. I did not wish to live what was not life, living is so dear.',
-    whyItMatters:
-      'An inspiring reminder to protect our attention and focus on what genuinely gives life substance.',
-    url: 'https://www.gutenberg.org/ebooks/205',
-  },
-  {
-    title: 'Hope is the thing with feathers',
-    author: 'Emily Dickinson',
-    eraOrCountry: 'American Poetry (1891)',
-    format: 'poem',
-    passage:
-      '“Hope” is the thing with feathers -\nThat perches in the soul -\nAnd sings the tune without the words -\nAnd never stops - at all -\n\nAnd sweetest - in the Gale - is heard -\nAnd sore must be the storm -\nThat could abash the little Bird\nThat kept so many warm -',
-    whyItMatters:
-      'A tender yet steadfast portrait of hope as an enduring quiet force within the human spirit.',
-    url: 'https://www.poetryfoundation.org/poems/42889/hope-is-the-thing-with-feathers-314',
-  },
-];
 
 /* ------------------------------------------------------------------ */
 /* 3. Brain Sharpener                                                 */
@@ -387,17 +231,36 @@ const brainSharpeners: BrainSharpener[] = [
 /* ------------------------------------------------------------------ */
 
 /**
- * The four older editorial collections cycle at 3 / 3 / 3 / 8 / 6, so the mix
- * they produce repeats every 24 days. The newer daily categories are offset
- * from one another on purpose: each stays individually deterministic for a
- * given date, but they do not all advance in lockstep, so the briefing does not
- * return to the same combination of everything at once.
+ * The briefing for a date, with no scheduler and no network involved.
+ *
+ * Two kinds of category, on purpose:
+ *
+ *  - **Pool-backed** — One Thing, Literature, Learn Something and the book
+ *    candidate. These rotate through `lib/curiosity/pool.ts`, which filters by
+ *    publication date and accepts the rotation ledger. Called directly (as here)
+ *    there is no ledger, so the result is a pure function of the date; called by
+ *    the publisher job it is the same rotation *minus* whatever the last weeks
+ *    already showed.
+ *  - **Fixed corpus** — the older editorial sets (Speak Better, Mythology, the
+ *    three sciences, Brain Sharpener) and the dated history entries. Twelve or
+ *    fewer items each, offset from one another so the briefing does not return
+ *    to the same combination of everything at once, and cycling is acceptable
+ *    for a set this carefully authored.
+ *
+ * Every step is arithmetic on the date, never on a request count. A reader
+ * opening the page twice gets the same briefing; a reader opening it tomorrow
+ * gets a different one. That is the property the verify script tests, and it is
+ * why no card may consult `Date.now()` or a random value.
  */
 const SPEAK_BETTER_OFFSET = 5;
 const MYTHOLOGY_OFFSET = 2;
 const CHEMISTRY_OFFSET = 7;
 const PHYSICS_OFFSET = 11;
 const BIOLOGY_OFFSET = 3;
+
+function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolEntry<T> {
+  return selectFromPool(category, date).entry as CuriosityPoolEntry<T>;
+}
 
 export function dailyEditorial(date: string): Pick<
   CuriosityBriefing,
@@ -416,17 +279,34 @@ export function dailyEditorial(date: string): Pick<
   const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
   const safeDay = Number.isFinite(day) ? Math.abs(day) : 0;
 
+  const oneThing = poolEntry<OneThingItem>('one-thing', date);
+  const learning = poolEntry<LearningItem>('learn-something', date);
+  const literature = poolEntry<LiteratureItem>('literature', date);
+  const book = poolEntry<BookCandidate>('book', date);
+
   return {
-    book: books[safeDay % books.length],
-    oneThing: oneThings[safeDay % oneThings.length],
-    learning: lessons[safeDay % lessons.length],
+    // A fallback briefing is built offline, so the book card is the curated
+    // record on purpose: no cover, no publication year, no catalogue claims.
+    book: buildRecommendation(book, null),
+    oneThing: oneThing.item,
+    learning: learning.item,
     history: historyEvents.find((event) => event.date === new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }) && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible') ?? null,
-    literature: literatureWorks[safeDay % literatureWorks.length],
+    literature: literature.item,
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
     speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],
     mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
     chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
     physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],
     biology: biologyConcepts[(safeDay + BIOLOGY_OFFSET) % biologyConcepts.length],
+  };
+}
+
+/** The pool ids behind a fallback briefing, so a log can say what was shown. */
+export function dailyEditorialIds(date: string): Record<'oneThing' | 'learning' | 'literature' | 'book', string> {
+  return {
+    oneThing: poolEntry<OneThingItem>('one-thing', date).id,
+    learning: poolEntry<LearningItem>('learn-something', date).id,
+    literature: poolEntry<LiteratureItem>('literature', date).id,
+    book: poolEntry<BookCandidate>('book', date).id,
   };
 }

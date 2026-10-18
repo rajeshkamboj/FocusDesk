@@ -17,6 +17,10 @@
 /.next/
 /out/
 
+# Curiosity published content (local file store). Deployments that must survive a
+# rebuild use Supabase instead; see docs/curiosity-content-automation.md.
+/.curiosity/
+
 # production
 /build
 

@@ -3,6 +3,7 @@
 import { AppearanceSettings } from './appearance-settings';
 import { DisplayNameSetting } from './display-name-setting';
 import { ProjectPlanImportModal } from './project-plan-import';
+import { CuriosityRefreshSettings } from './curiosity-refresh';
 import { useRef, useState } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
@@ -291,6 +292,9 @@ export function SettingsScreen() {
             </div>
           </div>
         </section>
+
+        {/* Content automation */}
+        <CuriosityRefreshSettings />
       </div>
 
       {planImportOpen ? <ProjectPlanImportModal open onClose={() => setPlanImportOpen(false)} /> : null}

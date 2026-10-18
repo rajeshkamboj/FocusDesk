@@ -12,7 +12,7 @@ import { TimerDock } from './timer-dock';
 import { FocusMode } from './focus-mode';
 import { RegisterSW } from '@/components/pwa/register-sw';
 import { useNotificationNavigation, useNotificationScheduler } from '@/lib/notifications';
-import { applyTheme } from '@/lib/theme';
+import { applyTheme, subscribeCustomColors } from '@/lib/theme';
 
 const LAST_SECTION_KEY = 'pace.lastSection';
 
@@ -31,6 +31,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       }
     }
   }, [pathname]);
+
+  useEffect(() => subscribeCustomColors(() => {}), []);
 
   // Apply the repository preference once loaded (including cross-tab updates).
   useEffect(() => {

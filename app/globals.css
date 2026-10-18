@@ -20,6 +20,8 @@
   --ink-2: #a9aa9f;
   --ink-3: #96998b;
 
+  --on-accent: #ffffff;
+  --switch-off-thumb: #ffffff;
   --focus-ring: #4fae8d;
   --accent: #4fae8d;
   --accent-hover: #63bfa0;
@@ -66,6 +68,69 @@
   border-top-color: color-mix(in srgb, var(--highlight) 35%, var(--line));
 }
 
+/* Additional themes extend the same semantic tokens used by every screen. */
+[data-theme="light"],
+[data-theme="warm-paper"] {
+  color-scheme: light;
+  --switch-off-thumb: var(--ink-3);
+  --background: #f7f8f6;
+  --surface: #ffffff;
+  --surface-2: #eef1ed;
+  --surface-3: #e3e8e1;
+  --line: #d8dfd6;
+  --line-strong: #a5b0a1;
+  --ink: #1b211d;
+  --ink-2: #4d5b50;
+  --ink-3: #586657;
+  --accent: #1e6b52;
+  --accent-hover: #175741;
+  --accent-soft: #e0eee6;
+  --accent-ink: #144837;
+  --focus-ring: #1e6b52;
+  --danger: #993722;
+  --danger-soft: #fbe9e4;
+  --warning: #76520f;
+  --warning-soft: #fcf0cf;
+  --shadow-card: 0 1px 3px #1820190d;
+  --shadow-pop: 0 12px 32px #18201926;
+}
+
+[data-theme="midnight"] {
+  color-scheme: dark;
+  --background: #090b0e;
+  --surface: #13161b;
+  --surface-2: #1d2229;
+  --surface-3: #282f38;
+  --line: #303842;
+  --line-strong: #515f70;
+  --ink: #f1f3f5;
+  --ink-2: #b5bfcc;
+  --ink-3: #a0acbb;
+  --accent: #a8b9cd;
+  --accent-hover: #c4cfdd;
+  --accent-soft: #273444;
+  --accent-ink: #d1dfef;
+  --focus-ring: #c4cfdd;
+  --on-accent: #090b0e;
+}
+
+[data-theme="warm-paper"] {
+  --background: #f7f2e7;
+  --surface: #fffcf5;
+  --surface-2: #efe7d7;
+  --surface-3: #e5d9c4;
+  --line: #ded1bb;
+  --line-strong: #b8a17b;
+  --ink: #302a21;
+  --ink-2: #63533e;
+  --ink-3: #6a5941;
+  --accent: #855216;
+  --accent-hover: #6b3e0c;
+  --accent-soft: #eee0c5;
+  --accent-ink: #643b0e;
+  --focus-ring: #855216;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -78,6 +143,8 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
 
+  --color-switch-off-thumb: var(--switch-off-thumb);
+  --color-on-accent: var(--on-accent);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);

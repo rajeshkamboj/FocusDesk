@@ -1,5 +1,7 @@
 # Focus Desk branding and PixlDot theme
 
+> Historical verification of the initial two-theme implementation. For the current six-theme system and custom palette editor, see [advanced-themes-verification.md](advanced-themes-verification.md).
+
 ## Implementation
 
 - Session branch: `arena/4fb0fea3-focusdesk` (Arena fixes this session to this separate branch; `main` was not modified).

@@ -95,7 +95,7 @@ export function MonthlyReview() {
                     onClick={() => void actions.toggleMonthlyPriority(priority.id)}
                     aria-label={priority.completed ? 'Reopen priority' : 'Complete priority'}
                     className={`mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all duration-150 ${
-                      priority.completed ? 'border-accent bg-accent text-white' : 'border-line-strong hover:border-accent hover:bg-accent-soft'
+                      priority.completed ? 'border-accent bg-accent text-on-accent' : 'border-line-strong hover:border-accent hover:bg-accent-soft'
                     }`}
                   >
                     {priority.completed ? (

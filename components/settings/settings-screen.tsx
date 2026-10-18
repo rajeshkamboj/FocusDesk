@@ -1,5 +1,6 @@
 'use client';
 
+import { AppearanceSettings } from './appearance-settings';
 import { DisplayNameSetting } from './display-name-setting';
 import { ProjectPlanImportModal } from './project-plan-import';
 import { useRef, useState } from 'react';
@@ -11,19 +12,17 @@ import { Input } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
 import {
   IconDownload,
-  IconMoon,
   IconProjects,
   IconUpload,
 } from '@/components/ui/icons';
 import { PageHeader, SectionTitle } from '@/components/layout/page-header';
-import { applyTheme, normalizeTheme } from '@/lib/theme';
 import { PROJECT_PLAN_FORMAT, isProjectPlanPayload } from '@/lib/project-plan';
 import {
   notificationPermission,
   notificationsSupported,
   requestNotificationPermission,
 } from '@/lib/notifications';
-import type { AppDataImport, ThemePreference } from '@/lib/types';
+import type { AppDataImport } from '@/lib/types';
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
@@ -31,25 +30,7 @@ export function SettingsScreen() {
   const [permission, setPermission] = useState(notificationPermission());
   const [planImportOpen, setPlanImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { general, notifications, appearance } = data.settings;
-
-  const [themeSaving, setThemeSaving] = useState(false);
-  const [pendingTheme, setPendingTheme] = useState<ThemePreference | null>(null);
-  const activeTheme = pendingTheme ?? normalizeTheme(appearance.theme);
-  const setTheme = async (theme: ThemePreference) => {
-    setPendingTheme(theme);
-    applyTheme(theme);
-    setThemeSaving(true);
-    try {
-      await actions.updateSettings({ appearance: { theme } });
-    } catch {
-      applyTheme(normalizeTheme(appearance.theme));
-      notify('Could not save appearance. Please try again.');
-    } finally {
-      setPendingTheme(null);
-      setThemeSaving(false);
-    }
-  };
+  const { general, notifications } = data.settings;
 
   const exportJson = async () => {
     const payload = await actions.exportData();
@@ -240,44 +221,7 @@ export function SettingsScreen() {
           </div>
         </section>
 
-        {/* Appearance */}
-        <section>
-          <SectionTitle>Appearance</SectionTitle>
-          <div className="mt-3 rounded-2xl border border-line bg-surface p-5 shadow-card">
-            <p id="appearance-hint" className="mb-3 text-[13px] text-ink-2">Choose how Focus Desk looks.</p>
-            <fieldset aria-describedby="appearance-hint" disabled={themeSaving}>
-              <legend className="sr-only">Theme</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {([
-                  ['dark', 'Existing Dark', 'The original calm green accents.'],
-                  ['pixldot', 'PixlDot', 'Royal blue with warm coral highlights.'],
-                ] as const).map(([value, label, hint]) => (
-                  <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-colors ${
-                    activeTheme === value
-                      ? 'border-accent bg-accent-soft text-accent-ink'
-                      : 'border-line text-ink-2 hover:border-line-strong hover:bg-surface-2'
-                  } ${themeSaving ? 'cursor-wait opacity-70' : ''}`}>
-                    <input
-                      type="radio"
-                      name="theme"
-                      value={value}
-                      checked={activeTheme === value}
-                      onChange={() => void setTheme(value)}
-                      className="h-4 w-4 shrink-0 accent-accent"
-                    />
-                    <span>
-                      <span className="flex items-center gap-2 text-[13px] font-medium">
-                        <IconMoon width={16} height={16} aria-hidden />
-                        {label}
-                      </span>
-                      <span className="mt-1 block text-[11.5px] text-ink-2">{hint}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </div>
-        </section>
+        <AppearanceSettings />
 
         {/* Data */}
         <section>

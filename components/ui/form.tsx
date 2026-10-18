@@ -65,7 +65,7 @@ export function Checkbox({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-all duration-150 ${
-          checked ? 'border-accent bg-accent text-white' : 'border-line-strong bg-surface hover:border-accent'
+          checked ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-surface hover:border-accent'
         }`}
       >
         {checked ? (

@@ -41,7 +41,7 @@ export function Sidebar() {
               <Icon width={19} height={19} className={active ? 'text-accent' : 'text-ink-3 group-hover:text-ink-2'} />
               <span className="flex-1">{item.label}</span>
               {count > 0 ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${active ? 'bg-accent text-white' : 'bg-surface-3 text-ink-2'}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${active ? 'bg-accent text-on-accent' : 'bg-surface-3 text-ink-2'}`}>
                   {count}
                 </span>
               ) : null}
@@ -81,11 +81,11 @@ export function BrandMark({ size = 30 }: { size?: number }) {
       <rect width="32" height="32" rx="9" fill="var(--accent)" />
       <path
         d="M9 20.5c2.5 1.8 5 1.8 7 0s4.5-1.8 7 0"
-        stroke="white"
+        stroke="var(--on-accent)"
         strokeWidth="2.2"
         strokeLinecap="round"
       />
-      <circle cx="16" cy="12" r="3.2" stroke="white" strokeWidth="2.2" />
+      <circle cx="16" cy="12" r="3.2" stroke="var(--on-accent)" strokeWidth="2.2" />
     </svg>
   );
 }

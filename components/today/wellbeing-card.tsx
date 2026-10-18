@@ -36,7 +36,7 @@ export function CheckinBox({ checked }: { checked: boolean }) {
       aria-hidden="true"
       className={`flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border transition-all duration-150 ${
         checked
-          ? 'border-accent bg-accent text-white'
+          ? 'border-accent bg-accent text-on-accent'
           : 'border-line-strong bg-surface group-hover:border-ink-3'
       }`}
     >

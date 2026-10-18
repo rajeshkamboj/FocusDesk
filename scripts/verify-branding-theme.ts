@@ -14,7 +14,7 @@ async function main() {
   for (const value of [null, undefined, '', 'light', 'system', 'outdated', {}, 42, 'dark', 'pixldot']) {
     storage.clear();
     if (typeof value === 'string') storage.setItem('pace.theme', value);
-    const expected = value === 'pixldot' ? 'pixldot' : 'dark';
+    const expected = value === 'pixldot' || value === 'light' ? value : 'dark';
     assert.equal(normalizeTheme(value), expected);
     assert.equal(readStoredTheme(), expected);
     dom.window.eval(themeInitScript);

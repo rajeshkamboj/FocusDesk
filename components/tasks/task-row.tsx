@@ -39,7 +39,7 @@ function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange
       aria-label={label}
       className={`mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all duration-150 ${
         checked
-          ? 'border-accent bg-accent text-white'
+          ? 'border-accent bg-accent text-on-accent'
           : 'border-line-strong bg-surface hover:border-accent hover:bg-accent-soft'
       }`}
     >

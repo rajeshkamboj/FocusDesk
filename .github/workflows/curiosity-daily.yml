@@ -1,0 +1,115 @@
+name: Curiosity daily publish
+
+# The production scheduler for the daily briefing.
+#
+# Why a workflow and not Vercel's own cron: the refresh endpoint authenticates with a
+# bearer token, and Vercel Cron Jobs send no custom headers — only a request that can
+# carry `Authorization: Bearer $CURIOSITY_CRON_SECRET` may write a day of content. The
+# secret is never put in a query string, because URLs outlive the request in access logs.
+#
+# What it needs, in Settings → Secrets and variables → Actions:
+#   FOCUSDESK_URL           e.g. https://focusdesk.example.com
+#   CURIOSITY_CRON_SECRET   the same value the deployment uses
+#
+# What it does not need: a database credential, a service key, or access to this
+# repository's deployment. It issues one authenticated HTTP request and the app decides
+# what "due" means. Nothing here generates content, so a failed or paused workflow
+# leaves the last published day on screen, and the app's own once-a-day catch-up publish
+# still turns the briefing over on the first request of the day.
+#
+# 00:00 Asia/Kolkata is 18:30 UTC the year round — India has no daylight saving, so the
+# line below never needs shifting.
+
+on:
+  schedule:
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'What to refresh'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, daily, book]
+      force:
+        description: 'Publish even if today already exists'
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the Curiosity refresh
+        env:
+          URL: ${{ secrets.FOCUSDESK_URL }}
+          SECRET: ${{ secrets.CURIOSITY_CRON_SECRET }}
+          SCOPE: ${{ inputs.scope || 'all' }}
+          FORCE: ${{ inputs.force && '1' || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "FOCUSDESK_URL and CURIOSITY_CRON_SECRET must both be set as repository secrets." >&2
+            exit 1
+          fi
+          query="scope=${SCOPE}"
+          if [ -n "${FORCE:-}" ]; then query="${query}&force=1"; fi
+          # --retry covers a cold start (a scale-to-zero deployment answers on the second
+          # attempt). The endpoint is idempotent per day and takes a lease, so a retry
+          # cannot publish the same day twice or interleave with a manual run.
+          status=$(curl -sS -o /tmp/curiosity.json -w '%{http_code}' \
+            --max-time 90 --retry 2 --retry-delay 20 \
+            -X POST "${URL%/}/api/curiosity/refresh?${query}" \
+            -H "authorization: Bearer ${SECRET}")
+          cat /tmp/curiosity.json
+          echo
+          case "$status" in
+            200) ;;
+            *)   echo "Curiosity refresh failed with HTTP $status." >&2; exit 1 ;;
+          esac
+          # A 200 is the transport, not the publication. The body's own `status` says what
+          # the job did: `published` is a new day, `already-published` is the idempotence
+          # case (another publisher got there first), `partial` means one section was kept
+          # from an earlier run. Anything else — including a body with no `status` — is a
+          # red run.
+          node -e '
+            const body = JSON.parse(require("fs").readFileSync("/tmp/curiosity.json", "utf8"));
+            const acceptable = ["published", "already-published", "partial"];
+            if (!acceptable.includes(body.status)) {
+              console.error("unexpected publish result: " + JSON.stringify(body).slice(0, 400));
+              process.exit(1);
+            }
+            console.log("Publish result: " + body.status);
+          '
+
+      - name: Verify the published record
+        # Read the state back through the same endpoint the Settings panel uses, so this
+        # proves the snapshot is in the store rather than merely that a function ran.
+        # "The job executed" and "today's briefing exists for readers" are different claims.
+        env:
+          URL: ${{ secrets.FOCUSDESK_URL }}
+          SECRET: ${{ secrets.CURIOSITY_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          today=$(TZ=Asia/Kolkata date +%F)
+          curl -sS --max-time 30 --retry 2 --retry-delay 10 \
+            "${URL%/}/api/curiosity/refresh?action=status" \
+            -H "authorization: Bearer ${SECRET}" -o /tmp/curiosity-status.json
+          node -e '
+            const body = JSON.parse(require("fs").readFileSync("/tmp/curiosity-status.json", "utf8"));
+            const today = process.argv[1];
+            const problems = [];
+            if (body?.daily?.date !== today) problems.push("daily snapshot is for " + (body?.daily?.date ?? "nothing") + ", not " + today);
+            if (!body?.daily?.publishedAt) problems.push("the snapshot carries no publish timestamp");
+            // `complete: false` is not a crash — curated fallback content is real content —
+            // but the schedule is the thing being tested here, so say what fell back.
+            if (body?.daily?.complete === false) {
+              console.log("note: some cards used curated fallback content: " + JSON.stringify(body.daily.degraded ?? []).slice(0, 400));
+            }
+            if (problems.length) { console.error(problems.join("; ")); process.exit(1); }
+            console.log("Confirmed: " + today + " is published, store " + body.store.kind + " (" + body.store.durability + ").");
+          ' "$today"

@@ -4,7 +4,75 @@ export type CuriosityNewsItem = {
   publishedAt: string;
   summary: string;
   url: string;
+  /**
+   * `live` (or absent) — an item read from the publisher's own feed, with a real
+   * `publishedAt`. `background` — a curated explainer from this repository: it has no
+   * publication date because it is not news, and the card must not print one.
+   */
+  origin?: 'live' | 'background';
 };
+
+/* ------------------------------------------------------------------ */
+/* Content pool                                                        */
+/*                                                                     */
+/* Every editorial card the scheduler can publish is one entry of a    */
+/* pool: a unique id, a category, a first-publication day (in the     */
+/* publication time zone, Asia/Kolkata), the card payload, and where   */
+/* its claims came from. The id is what the rotation ledger and the    */
+/* published snapshot refer to, so it must never be reused or renamed  */
+/* once a day has been published with it.                              */
+/* ------------------------------------------------------------------ */
+
+export type CuriosityCategory = 'one-thing' | 'literature' | 'learn-something' | 'book';
+
+export interface CuriositySourceRef {
+  /** Where a reader can check the claim. */
+  url: string;
+  /** Short publisher name, e.g. "MDN Web Docs". */
+  name: string;
+  /** Licence/attribution note shown next to the link when one is needed. */
+  attribution?: string;
+  /** ISO date the claim was last checked against this source. */
+  checkedAt?: string;
+}
+
+/**
+ * `curated`     — written for this app; nothing was copied from a third party.
+ * `source-checked` — the wording was checked against `source` before publishing.
+ *
+ * The distinction is kept on the record (not in a commit message) because the
+ * card links out to `source`, and a reader is entitled to know whether the text
+ * is ours or a paraphrase of the thing it links to.
+ */
+export type CuriosityProvenance = 'curated' | 'source-checked';
+
+export type CuriosityPoolStatus = 'draft' | 'published' | 'retired';
+
+export interface CuriosityPoolEntry<TItem = unknown> {
+  id: string;
+  category: CuriosityCategory;
+  /** First day (Asia/Kolkata) on which this item may be published. */
+  availableFrom: string;
+  status?: CuriosityPoolStatus;
+  provenance: CuriosityProvenance;
+  source?: CuriositySourceRef;
+  tags?: string[];
+  item: TItem;
+}
+
+export interface OneThingItem {
+  title: string;
+  explanation: string;
+  url?: string;
+  sourceName?: string;
+}
+
+export interface LearningItem {
+  topic: string;
+  explanation: string;
+  url?: string;
+  sourceName?: string;
+}
 
 export type DeveloperDiscovery = {
   name: string;
@@ -12,6 +80,12 @@ export type DeveloperDiscovery = {
   why: string;
   pricing: string;
   url: string;
+  /**
+   * `live` — found by the scheduled search of the public GitHub API, so it may be
+   * described as recently updated. `curated` — the shelf in `content/radar-fallback.ts`,
+   * chosen for being worth knowing, not for being new. The card says which.
+   */
+  origin?: 'live' | 'curated';
 };
 
 export interface HistoryEvent {
@@ -21,6 +95,17 @@ export interface HistoryEvent {
   explanation: string;
   significance: string;
   url?: string;
+  /**
+   * Was this event verified as belonging to the briefing's date? An archive entry
+   * shown because nothing was verified for today carries `false`, and the card has to
+   * say so — an anniversary presented under "Today in History" that is not one is a
+   * false statement, not a soft failure.
+   */
+  forThisDate?: boolean;
+  /** Where the event came from: the live anniversaries feed, or this repository. */
+  origin?: 'live' | 'curated';
+  /** Kept with the text when a source's own attribution is required. */
+  attribution?: string;
 }
 
 export interface LiteratureItem {
@@ -32,6 +117,7 @@ export interface LiteratureItem {
   attribution?: string;
   whyItMatters: string;
   url?: string;
+  sourceName?: string;
 }
 
 export interface BrainSharpener {
@@ -156,13 +242,130 @@ export type ChemistryConcept = ScienceConcept;
 export type PhysicsConcept = ScienceConcept;
 export type BiologyConcept = ScienceConcept;
 
+/* ------------------------------------------------------------------ */
+/* One Book — a candidate from the pool, plus the resolved record      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What this repository asserts about a book. Everything here is authored
+ * editorial: a title, an author, and two short paragraphs we wrote.
+ *
+ * It deliberately holds **no** cover, no rating, no publication year and no
+ * availability claim. Those belong to the catalogue, so they are fetched from
+ * Open Library at publish time (see `openlibrary.ts`) and are simply omitted
+ * when the catalogue does not provide them.
+ */
+export interface BookCandidate {
+  title: string;
+  author: string;
+  synopsis: string;
+  why: string;
+  /**
+   * An optional publisher/author page we also authored. When Open Library
+   * resolves, its work record becomes the primary link and this is dropped.
+   */
+  url?: string;
+  subjects?: string[];
+}
+
+/**
+ * The published book card. Fields are optional because they are only ever
+ * present when Open Library actually returned them — a missing `coverUrl`
+ * means no cover exists for this record, not that the book has no cover.
+ */
+export interface BookRecommendation extends BookCandidate {
+  id: string;
+  /** The link the card shows: the Open Library work record when resolved. */
+  url: string;
+  source: 'openlibrary' | 'curated';
+  sourceName: string;
+  /** Open Library work key, e.g. `/works/OL20803380W`. */
+  openLibraryKey?: string;
+  coverUrl?: string;
+  /** `false` when Open Library returned no cover id for this record. */
+  coverAvailable?: boolean;
+  firstPublishYear?: number;
+  publisher?: string;
+  publishersNote?: string;
+  editionCount?: number;
+  /** Internet Archive record for reading / borrowing / preview, when catalogue-listed. */
+  previewUrl?: string;
+  previewNote?: string;
+  fetchedAt?: string;
+  notes?: string[];
+}
+
+/** Every id that went into a snapshot — the audit trail behind a day. */
+export type CuriosityContentKey =
+  | 'ai-world'
+  | 'developer-radar'
+  | 'one-thing'
+  | 'literature'
+  | 'learn-something'
+  | 'book'
+  | 'speak-better'
+  | 'mythology'
+  | 'chemistry'
+  | 'physics'
+  | 'biology'
+  | 'sharpener'
+  | 'history';
+
+export type PublishedContentIds = Partial<Record<CuriosityContentKey, string>>;
+
+/**
+ * `shared`       — every instance and every restart reads the same record (the database).
+ * `single-host`  — survives a restart of this machine, invisible to any other instance.
+ * `instance-only`— written where the deployment filesystem is read-only, so it dies with
+ *                  the instance; useful, and not persistence.
+ * `unproven`     — nothing has been written yet from this process, so the store has not
+ *                  had to discover whether its directory is writable.
+ */
+export type CuriosityDurability = 'shared' | 'single-host' | 'instance-only' | 'unproven';
+
+/** How the content a card is showing arrived. */
+export type CuriositySectionOrigin = 'new' | 'cached' | 'curated' | 'unavailable';
+
+/** Snapshot metadata surfaced on the page so "is this today's?" is answerable. */
+export interface CuriosityPublicationMeta {
+  /** The Asia/Kolkata date this snapshot was published for. */
+  date: string;
+  /** ISO timestamp of the successful publish (not the date key). */
+  publishedAt: string;
+  /** Where the snapshot came from: the store, or the built-in fallback. */
+  origin: 'published' | 'fallback';
+  store: 'supabase' | 'file';
+  /** Per-category content ids, so repetition can be audited. */
+  contentIds: PublishedContentIds;
+  /** Sections whose live source failed while this snapshot was built. */
+  degraded?: string[];
+  /**
+   * How each card's content got here, computed by the server so the components can
+   * stay presentational: `new` from today's successful fetch, `cached` from an earlier
+   * successful fetch, `curated` from this repository, `unavailable` when neither
+   * applies. A reader should be able to tell without hovering over anything.
+   */
+  sectionOrigins?: Partial<Record<'history' | 'aiWorld' | 'developerRadar' | 'book', CuriositySectionOrigin>>;
+  /**
+   * Whether this snapshot is still there after a restart, and whether another instance
+   * would see it. Reported, not assumed: the file store is `single-host` on a machine
+   * with a writable disk, `instance-only` on a read-only deployment filesystem, and the
+   * database store is `shared`.
+   */
+  durability?: CuriosityDurability;
+  /** The publication day of the One Book record, and the day it next turns over. */
+  bookPublishedOn?: string;
+  bookNextChangeOn?: string;
+}
+
+
 export type CuriosityBriefing = {
   date: string;
   aiWorld: CuriosityNewsItem[];
   developerRadar: DeveloperDiscovery[];
-  book: { title: string; author: string; description: string; why: string; url: string };
-  oneThing: { title: string; explanation: string; url?: string };
-  learning: { topic: string; explanation: string; url?: string };
+  book: BookRecommendation;
+  oneThing: OneThingItem;
+  learning: LearningItem;
   history: HistoryEvent | null;
   literature: LiteratureItem;
   sharpener: BrainSharpener;
@@ -171,4 +374,6 @@ export type CuriosityBriefing = {
   chemistry: ChemistryConcept;
   physics: PhysicsConcept;
   biology: BiologyConcept;
+  /** Present whenever a scheduled snapshot (rather than the fallback) is shown. */
+  publication?: CuriosityPublicationMeta;
 };

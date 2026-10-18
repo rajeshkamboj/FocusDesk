@@ -60,6 +60,81 @@ live schema/FK/RLS using the deployment checks in the format doc. Supabase
 milestone plans still require migration 008; imports use authenticated,
 user-scoped writes with compensating rollback, not a cross-table transaction.
 
+## Curiosity content automation
+
+The **Curiosity** tab publishes on a schedule, not per visitor. One Thing Worth
+Knowing, A Few Minutes of Literature and Learn Something change at **00:00
+Asia/Kolkata**; One Book changes **every three days** and pulls its cover, edition
+count, publisher and first-publication year from the Open Library Search and Covers
+APIs at publish time. Nothing is generated while you read: a render reads the
+published day, and the pool in `lib/curiosity/content/` (22 / 24 / 24 / 25 entries,
+each with an id, an eligibility date and a source link) is what a card shows when a
+live feed is unavailable. **A source outage never leaves an empty card:** each of the
+three live cards falls back to a curated shelf in this repository (12 AI-background
+explainers, 12 developer tools, 9 dated history entries), every fallback is labelled
+on the card — *curated*, *curated reading*, *From the archive — not an event of this
+date* — and the cause is recorded for the admin panel instead of being shown to a
+reader.
+
+A refresh is driven by a schedule, not by visitors; a render only repairs a day the
+schedule missed, idempotently and at most once a day. The production scheduler is
+**GitHub Actions** (`.github/workflows/curiosity-daily.yml`), which calls the
+authenticated endpoint at `30 18 * * *` (00:00 Asia/Kolkata; India has no DST), then
+reads the published record back and fails the run if the body does not confirm it.
+Vercel's own cron is deliberately **not** configured: it sends no custom headers, so
+it cannot present the bearer secret, and the secret does not go in a query string
+because URLs are logged. Supabase pg_cron plus the Edge Function in
+`supabase/functions/curiosity-refresh`, or a shell crontab with
+`npm run curiosity:refresh`, are equivalent alternatives on their own terms. Every run
+is idempotent per publication day, single-flight under a lease, and leaves the last
+successful content in place if a source fails.
+
+Published days go to Supabase (`supabase/migrations/009_curiosity_content.sql`:
+briefings, a seen-item ledger, a read-only content override table and the job lease)
+when `SUPABASE_SECRET_KEY` is configured, and to `.curiosity/state.json` otherwise —
+so the feature runs with zero credentials. Those two are not equal, and the app says
+which one you have: the file is `single-host` (survives a restart here) or, on a
+read-only deployment filesystem, `instance-only` (it moves to the temp directory and
+dies with the instance), while only the database is `shared`. No existing table or user
+data is touched, and migration 009 is **not** applied by this change. Settings → Data has an administrative
+**Curiosity content automation** panel (publish today, new book now, eligible counts,
+degraded sections, recent runs); it uses your own signed-in token, never a privileged
+key.
+
+Full design, sources, Open Library usage rules, verification results and runbook:
+[docs/curiosity-content-automation.md](docs/curiosity-content-automation.md).
+
+```bash
+npm run curiosity:verify   # 19 automation + reliability checks, offline and deterministic
+npm run curiosity:links    # confirm every cited source URL still resolves
+npm run curiosity:refresh -- --status
+```
+
+## Required API credentials
+
+**None to run the app or the Curiosity tab.** Optional, and only for what is noted:
+
+- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — auth and sync.
+  Public keys; only these two may be `NEXT_PUBLIC_*`.
+- `SUPABASE_SECRET_KEY` — service-role, server-side only. Enables durable
+  multi-instance Curiosity content and `--backfill-pool`; without it the published
+  record stays on this host's disk (or this instance's temp directory), which the
+  Settings panel reports as `single-host` or `instance-only` rather than pretending
+  otherwise.
+- `CURIOSITY_CRON_SECRET` — the shared secret a scheduler presents to
+  `/api/curiosity/refresh` as `Authorization: Bearer …`. Unset in production, the
+  endpoint refuses anonymous callers (the signed-in admin path still works) rather
+  than publishing unattended. To enable the daily schedule: set it in the Vercel
+  project environment, add the same value plus `FOCUSDESK_URL` as GitHub repository
+  secrets, and run the workflow once manually — it must print `Publish result:
+  published` and `Confirmed: <today> is published`. A listing in `.env.example` is
+  documentation, not proof that the secret exists.
+- `OPENLIBRARY_CONTACT_EMAIL` — an identifying contact for Open Library's rate-limit
+  guidance. One request per book publish, once every three days.
+
+There is no paid AI API in this feature and no half-wired integration: the news card
+comes from public vendor feeds. See [`.env.example`](.env.example).
+
 ## Get started
 
 ```bash

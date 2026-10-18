@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { access, constants, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
-import type { BookRecommendation, CuriosityBriefing, CuriosityCategory, PublishedContentIds } from './types';
+import type { BookRecommendation, CuriosityBriefing, CuriosityCategory, CuriosityDurability, PublishedContentIds } from './types';
 
 /**
  * The published record: what was published, when, from which content ids, and
@@ -102,6 +102,12 @@ export interface CuriosityStateStore {
   readonly kind: 'supabase' | 'file';
   /** Where the record lives, for the settings panel and the run log. */
   readonly location: string;
+  /**
+   * What "it is stored" actually buys: whether a restart, or a second instance, will
+   * find the same record. The page and the settings panel show this instead of letting
+   * a successful write imply a durability the backend does not have.
+   */
+  readonly durability: CuriosityDurability;
   read(): Promise<CuriosityState>;
   /**
    * The most recent run, for deployments where the run log is not kept in the
@@ -233,6 +239,16 @@ export class FileStateStore implements CuriosityStateStore {
    * path, because "it is in /tmp, for this instance only" is the difference between
    * a deployment that persists content and one that republishes it on every boot.
    */
+  /**
+   * A file on a writable disk outlives a restart and nothing else; a file in a temp
+   * directory outlives nothing. Both are worth saying out loud, because "the run
+   * published successfully" reads like a promise this backend cannot keep.
+   */
+  get durability(): CuriosityDurability {
+    if (!this.settled) return 'unproven';
+    return this.settled.ephemeral ? 'instance-only' : 'single-host';
+  }
+
   get location() {
     const settled = this.settled;
     if (!settled) return this.configuredPath;
@@ -378,6 +394,7 @@ export function leaseToken(value: unknown): string | null {
  */
 export class SupabaseStateStore implements CuriosityStateStore {
   readonly kind = 'supabase' as const;
+  readonly durability = 'shared' as const;
   constructor(
     private readonly url: string,
     private readonly readKey: string,

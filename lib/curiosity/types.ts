@@ -4,6 +4,12 @@ export type CuriosityNewsItem = {
   publishedAt: string;
   summary: string;
   url: string;
+  /**
+   * `live` (or absent) — an item read from the publisher's own feed, with a real
+   * `publishedAt`. `background` — a curated explainer from this repository: it has no
+   * publication date because it is not news, and the card must not print one.
+   */
+  origin?: 'live' | 'background';
 };
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +80,12 @@ export type DeveloperDiscovery = {
   why: string;
   pricing: string;
   url: string;
+  /**
+   * `live` — found by the scheduled search of the public GitHub API, so it may be
+   * described as recently updated. `curated` — the shelf in `content/radar-fallback.ts`,
+   * chosen for being worth knowing, not for being new. The card says which.
+   */
+  origin?: 'live' | 'curated';
 };
 
 export interface HistoryEvent {
@@ -83,6 +95,17 @@ export interface HistoryEvent {
   explanation: string;
   significance: string;
   url?: string;
+  /**
+   * Was this event verified as belonging to the briefing's date? An archive entry
+   * shown because nothing was verified for today carries `false`, and the card has to
+   * say so — an anniversary presented under "Today in History" that is not one is a
+   * false statement, not a soft failure.
+   */
+  forThisDate?: boolean;
+  /** Where the event came from: the live anniversaries feed, or this repository. */
+  origin?: 'live' | 'curated';
+  /** Kept with the text when a source's own attribution is required. */
+  attribution?: string;
 }
 
 export interface LiteratureItem {
@@ -274,6 +297,8 @@ export interface BookRecommendation extends BookCandidate {
 
 /** Every id that went into a snapshot — the audit trail behind a day. */
 export type CuriosityContentKey =
+  | 'ai-world'
+  | 'developer-radar'
   | 'one-thing'
   | 'literature'
   | 'learn-something'
@@ -288,6 +313,19 @@ export type CuriosityContentKey =
 
 export type PublishedContentIds = Partial<Record<CuriosityContentKey, string>>;
 
+/**
+ * `shared`       — every instance and every restart reads the same record (the database).
+ * `single-host`  — survives a restart of this machine, invisible to any other instance.
+ * `instance-only`— written where the deployment filesystem is read-only, so it dies with
+ *                  the instance; useful, and not persistence.
+ * `unproven`     — nothing has been written yet from this process, so the store has not
+ *                  had to discover whether its directory is writable.
+ */
+export type CuriosityDurability = 'shared' | 'single-host' | 'instance-only' | 'unproven';
+
+/** How the content a card is showing arrived. */
+export type CuriositySectionOrigin = 'new' | 'cached' | 'curated' | 'unavailable';
+
 /** Snapshot metadata surfaced on the page so "is this today's?" is answerable. */
 export interface CuriosityPublicationMeta {
   /** The Asia/Kolkata date this snapshot was published for. */
@@ -301,6 +339,20 @@ export interface CuriosityPublicationMeta {
   contentIds: PublishedContentIds;
   /** Sections whose live source failed while this snapshot was built. */
   degraded?: string[];
+  /**
+   * How each card's content got here, computed by the server so the components can
+   * stay presentational: `new` from today's successful fetch, `cached` from an earlier
+   * successful fetch, `curated` from this repository, `unavailable` when neither
+   * applies. A reader should be able to tell without hovering over anything.
+   */
+  sectionOrigins?: Partial<Record<'history' | 'aiWorld' | 'developerRadar' | 'book', CuriositySectionOrigin>>;
+  /**
+   * Whether this snapshot is still there after a restart, and whether another instance
+   * would see it. Reported, not assumed: the file store is `single-host` on a machine
+   * with a writable disk, `instance-only` on a read-only deployment filesystem, and the
+   * database store is `shared`.
+   */
+  durability?: CuriosityDurability;
   /** The publication day of the One Book record, and the day it next turns over. */
   bookPublishedOn?: string;
   bookNextChangeOn?: string;

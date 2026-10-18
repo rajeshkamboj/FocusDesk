@@ -8,10 +8,13 @@ import { timingSafeEqual } from 'node:crypto';
  * accepted, and both of them fail closed:
  *
  *  - **`CURIOSITY_CRON_SECRET`** — the shared secret a scheduler sends as
- *    `Authorization: Bearer <secret>`. Vercel Cron cannot present a user session,
- *    so a header is the only portable option; the comparison is constant-time so
- *    the endpoint does not leak the secret one matching byte at a time. Set in
- *    the deployment environment only, never in a `NEXT_PUBLIC_*` variable.
+ *    `Authorization: Bearer <secret>`, which is the only portable option: a header
+ *    is the one place a credential can go that is not stored, and the comparison is
+ *    constant-time so the endpoint does not leak the secret one matching byte at a
+ *    time. It is also why Vercel Cron is not configured in `vercel.json` — its
+ *    requests carry no custom headers, and the alternative (the secret in a query
+ *    string) would put it in access logs. Set in the deployment environment only,
+ *    never in a `NEXT_PUBLIC_*` variable.
  *  - **A signed-in app user** — the Settings page passes the caller’s own Supabase
  *    access token and it is verified server-side with `auth.getUser()`. It is the
  *    user’s token, not the app’s: nothing privileged is ever placed in client

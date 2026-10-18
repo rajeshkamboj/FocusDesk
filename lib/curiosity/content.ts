@@ -4,11 +4,14 @@ import type {
   CuriosityPoolEntry,
   BrainSharpener,
   CuriosityBriefing,
+  CuriosityNewsItem,
+  DeveloperDiscovery,
   HistoryEvent,
   LearningItem,
   LiteratureItem,
   OneThingItem,
 } from './types';
+import { dayNumber } from './schedule';
 import { selectFromPool } from './pool';
 import { buildRecommendation } from './openlibrary';
 import { speakBetterLessons } from './content/speak-better';
@@ -16,6 +19,8 @@ import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
 import { biologyConcepts } from './content/biology';
+import { aiBackgroundLibrary } from './content/ai-background';
+import { radarFallbackShelf } from './content/radar-fallback';
 
 
 
@@ -258,6 +263,51 @@ const CHEMISTRY_OFFSET = 7;
 const PHYSICS_OFFSET = 11;
 const BIOLOGY_OFFSET = 3;
 
+/**
+ * How many curated items the live-only cards take from their shelves per day. Three
+ * from twelve means a full cycle is four days, and two consecutive days never share an
+ * entry — which is the honest maximum for a library that is not being refreshed.
+ */
+export const CURATED_PER_DAY = 3;
+
+/** A slice of a fixed list, advanced by the day so the shelf rotates. */
+function rotate<T>(list: readonly T[], date: string, take = CURATED_PER_DAY): T[] {
+  if (list.length === 0) return [];
+  const day = dayNumber(date);
+  const start = (day * Math.min(take, list.length)) % list.length;
+  const count = Math.min(take, list.length);
+  return Array.from({ length: count }, (_, index) => list[(start + index) % list.length]);
+}
+
+/**
+ * Curated AI background for a day. These are explainers, not news: every item arrives
+ * with `origin: 'background'` and no publication date, because nothing here claims to
+ * have happened recently, and the card is expected to say which of the two it is.
+ */
+export function curatedAiWorld(date: string): { items: CuriosityNewsItem[]; ids: string[] } {
+  const picked = rotate(aiBackgroundLibrary, date);
+  return { items: picked.map((entry) => entry.item), ids: picked.map((entry) => entry.id) };
+}
+
+/** Curated developer tools for a day, for when the repository search yielded nothing. */
+export function curatedRadar(date: string): { items: DeveloperDiscovery[]; ids: string[] } {
+  const picked = rotate(radarFallbackShelf, date);
+  return { items: picked.map((entry) => entry.item), ids: picked.map((entry) => entry.id) };
+}
+
+/**
+ * An event for a day that has no verified anniversary.
+ *
+ * Marked `forThisDate: false`, and carrying its own real date, so the card can show it
+ * as what it is: something worth reading today, not something that happened today. The
+ * alternative — leaving the card empty, or reusing yesterday's event — either wastes a
+ * curated corpus or states something untrue.
+ */
+export function curatedHistoryArchive(date: string): HistoryEvent {
+  const event = rotate(historyEvents, date, 1)[0];
+  return { ...event, forThisDate: false, origin: 'curated' };
+}
+
 function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolEntry<T> {
   return selectFromPool(category, date).entry as CuriosityPoolEntry<T>;
 }
@@ -265,6 +315,8 @@ function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolE
 export function dailyEditorial(date: string): Pick<
   CuriosityBriefing,
   | 'book'
+  | 'aiWorld'
+  | 'developerRadar'
   | 'oneThing'
   | 'learning'
   | 'history'
@@ -276,8 +328,12 @@ export function dailyEditorial(date: string): Pick<
   | 'physics'
   | 'biology'
 > {
-  const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
-  const safeDay = Number.isFinite(day) ? Math.abs(day) : 0;
+  // Deliberately *not* `dayNumber`: that one counts from ROTATION_EPOCH and drives the
+  // content pool, while these six cards have always counted from the Unix epoch. The two
+  // bases agree on nothing except being deterministic, and switching one of them would
+  // silently reshuffle every reader's daily card without changing a single fact.
+  const parsedDay = Date.parse(`${date}T00:00:00Z`);
+  const safeDay = Number.isFinite(parsedDay) ? Math.abs(Math.floor(parsedDay / 86_400_000)) : 0;
 
   const oneThing = poolEntry<OneThingItem>('one-thing', date);
   const learning = poolEntry<LearningItem>('learn-something', date);
@@ -285,12 +341,22 @@ export function dailyEditorial(date: string): Pick<
   const book = poolEntry<BookCandidate>('book', date);
 
   return {
+    // The two live-only cards are never empty, even offline: they take today's slice of
+    // the curated shelves, labelled as background and shelf picks rather than news.
+    aiWorld: curatedAiWorld(date).items,
+    developerRadar: curatedRadar(date).items,
     // A fallback briefing is built offline, so the book card is the curated
     // record on purpose: no cover, no publication year, no catalogue claims.
     book: buildRecommendation(book, null),
     oneThing: oneThing.item,
     learning: learning.item,
-    history: historyEvents.find((event) => event.date === new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }) && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible') ?? null,
+    // A date-matched curated event is a verified statement about today, so it says so;
+    // the archive rotation used when nothing is verified carries `forThisDate: false`.
+    history: (() => {
+      const key = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+      const match = historyEvents.find((event) => event.date === key && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible');
+      return match ? { ...match, forThisDate: true, origin: 'curated' as const } : null;
+    })(),
     literature: literature.item,
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
     speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],
@@ -308,5 +374,13 @@ export function dailyEditorialIds(date: string): Record<'oneThing' | 'learning' 
     learning: poolEntry<LearningItem>('learn-something', date).id,
     literature: poolEntry<LiteratureItem>('literature', date).id,
     book: poolEntry<BookCandidate>('book', date).id,
+  };
+}
+
+/** Which curated background/shelf items a day shows, for the published record. */
+export function curatedFallbackIds(date: string): { aiWorld: string; developerRadar: string } {
+  return {
+    aiWorld: curatedAiWorld(date).ids.join('+'),
+    developerRadar: curatedRadar(date).ids.join('+'),
   };
 }

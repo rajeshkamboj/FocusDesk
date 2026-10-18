@@ -27,6 +27,12 @@ const POOL_FILES = [
   'lib/curiosity/content/learn-something.ts',
   'lib/curiosity/content/books.ts',
 ];
+// The curated shelves that back the live cards link out too, so they belong in this
+// check: a card the reader can act on is a card whose source still opens.
+const SHELF_FILES = [
+  'lib/curiosity/content/ai-background.ts',
+  'lib/curiosity/content/radar-fallback.ts',
+];
 const TIMEOUT_MS = 15_000;
 const CONCURRENCY = 4;
 const UA = 'FocusDesk link check (content maintenance; not a crawler)';
@@ -36,13 +42,20 @@ const only = process.argv.slice(2).find((arg) => arg.startsWith('--only='))?.sli
 /** The URL belongs to the entry whose `id:` precedes it. */
 async function poolUrls() {
   const found = [];
-  for (const file of POOL_FILES) {
+  for (const file of [...POOL_FILES, ...SHELF_FILES]) {
     const source = await readFile(join(ROOT, file), 'utf8');
     const lines = source.split('\n');
     let currentId = '';
-    for (const line of lines) {
-      const id = line.match(/^\s+id: '([^']+)'/);
-      if (id) currentId = id[1];
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      let id = line.match(/^\s+id: '([^']+)'/)?.[1] ?? null;
+      if (!id) {
+        // The shelves build their entries through a helper whose first argument is the
+        // id, on its own line and followed within the entry by an https link.
+        const bare = line.trim().match(/^'([a-z][a-z0-9]*(?:-[a-z0-9]+)+)',$/);
+        if (bare && lines.slice(index + 1, index + 8).some((next) => /'https?:\/\//.test(next))) id = bare[1];
+      }
+      if (id) currentId = id;
       for (const url of line.matchAll(/'(https?:\/\/[^']+)'/g)) {
         if (!found.some((entry) => entry.url === url[1])) found.push({ url: url[1], id: currentId, file });
       }

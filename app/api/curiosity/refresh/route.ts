@@ -1,5 +1,7 @@
 import { authorizeRefresh } from '@/lib/curiosity/refresh-auth';
 import { normalizeScope, runCuriosityRefresh, getCuriosityStatus } from '@/lib/curiosity/job';
+import { publicationDate } from '@/lib/curiosity/schedule';
+import { probeSources } from '@/lib/curiosity/sources';
 import { clearBriefingMemo } from '@/lib/curiosity/server';
 
 /**
@@ -13,6 +15,8 @@ import { clearBriefingMemo } from '@/lib/curiosity/server';
  *   scope=daily|book|all   which record to refresh (default `all`)
  *   force=1                publish even if today’s record already exists
  *   action=status          read-only: what is published, where, and the last runs
+ *   action=probe           read-only, administrative: ask each source directly whether
+ *                          this server can reach it (a few seconds; never from a render)
  *
  * `force` is administrative: a scheduled run never needs it, and the idempotence
  * check is exactly what makes a double-fired cron harmless.
@@ -34,6 +38,18 @@ async function handle(request: Request) {
   if (params.get('action') === 'status') {
     const status = await getCuriosityStatus();
     return Response.json({ ...status, triggeredBy: authorization.via }, { headers: { ...NO_STORE } });
+  }
+
+  if (params.get('action') === 'probe') {
+    // Reachability is measured from where the publisher runs, so this is offered only
+    // after the same authorization a publish needs, and only on an explicit request:
+    // it is the one read path in Curiosity that is allowed to touch the network.
+    const probes = await probeSources(fetch, publicationDate(new Date()));
+    const status = await getCuriosityStatus();
+    return Response.json(
+      { checkedAt: new Date().toISOString(), probes, store: status.store, scheduler: status.scheduler, triggeredBy: authorization.via },
+      { headers: { ...NO_STORE } },
+    );
   }
 
   const summary = await runCuriosityRefresh({

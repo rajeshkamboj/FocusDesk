@@ -1,9 +1,10 @@
-import { dailyEditorial } from './content';
+import { sectionOrigins } from './origins';
+import { curatedHistoryArchive, dailyEditorial } from './content';
 import { catchUpOnRender, currentBook } from './job';
 import { addPublicationDays, publicationDate } from './schedule';
 import { BOOK_INTERVAL_DAYS } from './schedule';
 import { getStateStore, type CuriosityState, type PublishedDaily } from './state';
-import type { CuriosityBriefing } from './types';
+import type { CuriosityBriefing, CuriosityDurability } from './types';
 
 /**
  * The read path for Curiosity.
@@ -53,6 +54,7 @@ function publicationFrom(
   store: 'file' | 'supabase',
   date: string,
   state: CuriosityState,
+  durability: CuriosityDurability = 'unproven',
   /** Why there is nothing to show, in the publisher's own words. See `buildBriefing`. */
   reason?: string | null,
 ): CuriosityBriefing['publication'] {
@@ -71,6 +73,8 @@ function publicationFrom(
     // which is three publication days after the one it was published on.
     bookPublishedOn: bookDay,
     bookNextChangeOn: bookDay ? addPublicationDays(bookDay, BOOK_INTERVAL_DAYS) : undefined,
+    durability,
+    sectionOrigins: sectionOrigins(daily, date),
   };
 }
 
@@ -85,7 +89,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
       date,
       book,
       ...daily.payload,
-      publication: publicationFrom(daily, store.kind, date, state),
+      publication: publicationFrom(daily, store.kind, date, state, store.durability),
     };
   }
 
@@ -110,7 +114,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
           date,
           book: currentBook(refreshed, date),
           ...refreshed.daily.payload,
-          publication: publicationFrom(refreshed.daily, store.kind, date, refreshed),
+          publication: publicationFrom(refreshed.daily, store.kind, date, refreshed, store.durability),
         };
       }
     }
@@ -132,22 +136,24 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   return {
     date,
     book,
-    // Live sections stay empty on the fallback path: an empty AI World or
-    // Developer Radar card is an honest "no source today", while a *stale* one
-    // dressed up as today's would not be.
-    aiWorld: [],
-    developerRadar: [],
+    // The live cards take today's slice of the curated shelves rather than being empty.
+    // Empty is honest only if the reader is told nothing else is available — and they are
+    // told, by the label on the card — but a card that can be filled with something true
+    // and clearly marked as background is worth more than a card that can only be marked
+    // as missing. No date is printed on these, because none of them is news.
+    aiWorld: fallback.aiWorld,
+    developerRadar: fallback.developerRadar,
     oneThing: fallback.oneThing,
     learning: fallback.learning,
     literature: fallback.literature,
-    history: fallback.history,
+    history: fallback.history ?? curatedHistoryArchive(date),
     sharpener: fallback.sharpener,
     speakBetter: fallback.speakBetter,
     mythology: fallback.mythology,
     chemistry: fallback.chemistry,
     physics: fallback.physics,
     biology: fallback.biology,
-    publication: publicationFrom(null, store.kind, date, state, reason),
+    publication: publicationFrom(null, store.kind, date, state, store.durability, reason),
   };
 }
 

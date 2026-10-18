@@ -28,6 +28,7 @@ import type {
   BrainSharpener,
   CuriosityBriefing,
   CuriosityNewsItem,
+  CuriositySectionOrigin,
   DeveloperDiscovery,
   HistoryEvent,
   LiteratureItem,
@@ -46,6 +47,39 @@ function LinkOut({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
+/**
+ * How a card's content arrived, in the reader's words rather than the system's. `new`
+ * needs no label at all — that is the normal state — while a curated or cached card says
+ * so in two words. The text never blames a source or names an error: causes live in
+ * Settings → Data, where someone can act on them.
+ */
+function originLabel(origin: CuriositySectionOrigin | undefined, fallback: string): string {
+  switch (origin) {
+    case 'curated':
+      return 'curated reading';
+    case 'cached':
+      return 'from the last successful run';
+    case 'unavailable':
+      return 'nothing to show yet';
+    case 'new':
+    default:
+      return fallback;
+  }
+}
+
+function OriginTag({ origin }: { origin?: CuriositySectionOrigin }) {
+  if (!origin || origin === 'new') return null;
+  const text =
+    origin === 'curated' ? 'curated' : origin === 'cached' ? 'cached' : 'unavailable';
+  return (
+    <span
+      className="ml-1.5 inline-block rounded-md border border-line bg-surface-2 px-1.5 py-px align-middle text-[10px] font-medium normal-case tracking-normal text-ink-3"
+    >
+      {text}
+    </span>
+  );
+}
+
 function NewsItem({ item }: { item: CuriosityNewsItem }) {
   return (
     <article className="border-b border-line py-4 first:pt-0 last:border-0 last:pb-0">
@@ -61,12 +95,14 @@ function NewsItem({ item }: { item: CuriosityNewsItem }) {
           </LinkOut>
           <p className="mt-1 text-[12px] text-ink-3">
             {item.source}
-            {item.publishedAt
-              ? ` · ${new Date(item.publishedAt).toLocaleDateString('en', {
-                  month: 'short',
-                  day: 'numeric',
-                })}`
-              : ''}
+            {(() => {
+              // A date is printed only when the feed actually carried one. A curated
+              // background item has none on purpose, and inventing one would make it
+              // read as news.
+              const published = item.publishedAt ? Date.parse(item.publishedAt) : Number.NaN;
+              if (!Number.isFinite(published)) return item.origin === 'background' ? ' · background' : '';
+              return ` · ${new Date(published).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`;
+            })()}
           </p>
         </div>
       </div>
@@ -111,6 +147,13 @@ function HistorySection({ event }: { event: HistoryEvent }) {
           <IconCalendar width={18} height={18} />
         </VisualMark>
         <div className="min-w-0 flex-1">
+          {event.forThisDate === false ? (
+            /* The card is headed "Today in History". An item that is not tied to today
+               may only appear under that heading if it says so itself. */
+            <p className="mb-1.5 text-[11px] text-ink-3">
+              From the archive — not an event of this date.
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[17px] font-medium leading-snug text-ink">
               {event.title}
@@ -307,17 +350,11 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
             )
           ) : null}
         </p>
-        {briefing.publication?.degraded?.length ? (
-          /* The count is what a reader needs; the reason behind it is the tooltip. */
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3" title={briefing.publication.degraded.join('\n')}>
-            {briefing.publication.degraded.length} section
-            {briefing.publication.degraded.length === 1 ? '' : 's'} showing fallback text
-            {briefing.publication.origin === 'published'
-              ? ', because a source did not answer'
-              : ', because nothing has been published for this day yet'}
-            {briefing.publication.degraded.length > 1 ? ' — hover for the reason' : ''}.
-          </p>
-        ) : null}
+        {/*
+          Nothing about sources, failures or storage belongs here. A reader gets the day,
+          whether it was published, and — on each card — where that card's content came
+          from. The causes are an operator's problem and are reported in Settings → Data.
+        */}
       </header>
 
       <div className="space-y-7">
@@ -332,7 +369,13 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         {/* 1. Today in History */}
         {briefing.history ? (
           <section>
-            <SectionCard label="Today in History">
+            <SectionCard
+              label={
+                <>
+                  Today in History <OriginTag origin={briefing.publication?.sectionOrigins?.history} />
+                </>
+              }
+            >
               <HistorySection event={briefing.history} />
             </SectionCard>
           </section>
@@ -345,8 +388,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
               <>
                 AI World{' '}
                 <span className="ml-2 font-normal tracking-normal text-ink-3">
-                  up to 10
+                  {originLabel(briefing.publication?.sectionOrigins?.aiWorld, 'up to 10')}
                 </span>
+                <OriginTag origin={briefing.publication?.sectionOrigins?.aiWorld} />
               </>
             }
           >
@@ -356,8 +400,8 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
               ))
             ) : (
               <EmptyState
-                title="No AI updates available right now"
-                hint="Authoritative AI sources could not be reached. Please check back later."
+                title="Nothing to show yet"
+                hint="This card fills with the next daily publish."
               />
             )}
           </SectionCard>
@@ -371,8 +415,9 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
                 <>
                   Developer Radar{' '}
                   <span className="ml-2 font-normal tracking-normal text-ink-3">
-                    up to 3
+                    {originLabel(briefing.publication?.sectionOrigins?.developerRadar, 'up to 3')}
                   </span>
+                  <OriginTag origin={briefing.publication?.sectionOrigins?.developerRadar} />
                 </>
               }
             >
@@ -382,8 +427,8 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
                 ))
               ) : (
                 <EmptyState
-                  title="Developer Radar is unavailable"
-                  hint="The source could not be reached. No unverified recommendations are shown."
+                  title="Nothing to show yet"
+                  hint="This card fills with the next daily publish."
                 />
               )}
             </SectionCard>
@@ -474,7 +519,11 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           ) : null}
 
           <section className="h-full">
-            <BookCard book={briefing.book} nextChangeOn={briefing.publication?.bookNextChangeOn} />
+            <BookCard
+              book={briefing.book}
+              nextChangeOn={briefing.publication?.bookNextChangeOn}
+              publishedOn={briefing.publication?.bookPublishedOn}
+            />
           </section>
         </div>
 

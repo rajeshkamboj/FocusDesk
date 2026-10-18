@@ -65,7 +65,16 @@ function Cover({ book }: { book: BookRecommendation }) {
   );
 }
 
-export function BookCard({ book, nextChangeOn }: { book: BookRecommendation; nextChangeOn?: string | null }) {
+export function BookCard({
+  book,
+  nextChangeOn,
+  publishedOn,
+}: {
+  book: BookRecommendation;
+  nextChangeOn?: string | null;
+  /** The Asia/Kolkata day this record was published for — the proof of the interval. */
+  publishedOn?: string | null;
+}) {
   return (
     <SectionCard label="One Book">
       <div className="space-y-3.5">
@@ -122,8 +131,16 @@ export function BookCard({ book, nextChangeOn }: { book: BookRecommendation; nex
 
         <p className="border-t border-line pt-2.5 text-[11px] leading-relaxed text-ink-3">
           {BOOK_CADENCE_LABEL}
+          {publishedOn ? ` · published ${formatPublicationDate(publishedOn)}` : ''}
           {nextChangeOn ? ` · next change ${formatPublicationDate(nextChangeOn)}` : ''}
-          {book.fetchedAt ? ` · looked up ${new Date(book.fetchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}` : ''}
+          {(() => {
+            // Only ever a date the record actually carries: an unparseable timestamp is
+            // left out rather than printed as "Invalid Date" under a book cover.
+            const at = book.fetchedAt ? Date.parse(book.fetchedAt) : Number.NaN;
+            return Number.isFinite(at)
+              ? ` · looked up ${new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}`
+              : '';
+          })()}
         </p>
       </div>
     </SectionCard>

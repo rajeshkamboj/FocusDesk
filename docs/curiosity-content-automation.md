@@ -160,15 +160,37 @@ error page. The store's `kind` and `location` are echoed by
 `GET /api/curiosity/refresh?action=status` and printed in Settings, so "which backend is
 answering, and where" is always one question away.
 
-## 5. Scheduling — three entry points, one code path
+### What the store is allowed to claim
 
-All three call `POST /api/curiosity/refresh?scope=all` at `30 18 * * *`, and all three
-are optional because the app also self-heals on render (§6). Pick one.
+Every read of the published record — page, status endpoint, admin panel — carries the
+store's `durability`, and the words are chosen so that a successful write cannot be
+mistaken for persistence:
+
+| | Means |
+| --- | --- |
+| `shared` | Supabase. Every instance and every restart reads the same row. Only true once migration 009 is applied; it is **not** applied here, so this deployment does not have it. |
+| `single-host` | A file on a disk this process may write. Survives a restart of this machine; another instance, or a redeploy onto a different one, will not see it. |
+| `instance-only` | The filesystem was read-only (the normal Vercel case: `/var/task` is read-only and `/tmp` is per-instance), so the record moved to `${tmpdir}/focusdesk-curiosity` and will vanish with the instance. |
+| `unproven` | Nothing has been written from this process yet, so it has not had to discover whether its directory is writable. |
+
+The file store never reports `shared`, and no UI element implies that a published day is
+visible to other instances. `location` says so too — when a relocation happens it reads
+`… · ephemeral: moved there because EROFS on /var/task` rather than quietly pointing at a
+path that no longer exists.
+
+## 5. Scheduling — one publisher, three ways to call it
+
+Exactly one of these should be enabled, because two schedulers on one endpoint buy
+nothing: the lease serialises them and the day is published once either way. All of them
+call `POST /api/curiosity/refresh?scope=all` at `30 18 * * *`, and all are optional in
+the sense that the app also self-heals on render (§6) — but without one of them the
+briefing only turns over when somebody opens the page.
 
 | | Where | Needs | Notes |
 | --- | --- | --- | --- |
-| **Vercel Cron** | `vercel.json` | `CURIOSITY_CRON_SECRET` in project env | zero extra infrastructure if the app is already on Vercel. One line: `{"crons":[{"path":"/api/curiosity/refresh?scope=all","schedule":"30 18 * * *"}]}`. Check your plan's cron allowance; Vercel's scheduler can delay a run, which is harmless because the job is idempotent per day. |
-| **GitHub Actions** | `.github/workflows/curiosity-daily.yml` | repo secrets `FOCUSDESK_URL`, `CURIOSITY_CRON_SECRET` | Works with any host. Retries twice, fails the run on a non-200, and has a `workflow_dispatch` form (`scope`, `force`) for a manual push. GitHub suspends scheduled workflows on repos without activity in 60 days — the run log in Settings tells you if that happened. |
+| **GitHub Actions** (the one this repository ships) | `.github/workflows/curiosity-daily.yml` | repo secrets `FOCUSDESK_URL`, `CURIOSITY_CRON_SECRET` | Works with any host. Retries twice for a cold start, fails the run unless the response body says `published`/`already-published`/`partial`, then reads `action=status` back and checks that today's snapshot exists in the store. A `workflow_dispatch` form (`scope`, `force`) exists for a manual push. GitHub suspends scheduled workflows on repos with no activity in 60 days — the run log in Settings tells you if that happened. |
+| **Vercel Cron** | — | not usable against this endpoint | Vercel's scheduler sends a bare `GET` with no custom headers, so it cannot present `Authorization: Bearer $CURIOSITY_CRON_SECRET`. The alternative — the secret in a query string — is refused on purpose: URLs land in access logs and in browser history. `vercel.json` therefore declares **no** `crons`, and a run configured there would answer 401 every night. If Vercel's cron is ever the only option, the endpoint it needs is a separate one guarded by `VERCEL_CRON`-style header verification, which is not implemented here. |
+| **Supabase pg_cron** | the commented block at the end of migration 009 | `pg_cron` enabled, `app.curiosity_cron_secret` set via `alter database … set`, plus an Edge Function (`supabase/functions/curiosity-refresh`) or pg_net to make the call | Keeps the schedule next to the data, and needs migration 009 to be applied. The Edge Function is a thin caller: it reads `APP_URL` and `CURIOSITY_CRON_SECRET` as function secrets and passes the app's status through. It contains no content logic, so redeploying it can never change what is published. |
 | **Supabase pg_cron** | the commented block at the end of migration 009 | `pg_cron` enabled, `app.curiosity_cron_secret` set via `alter database … set`, plus an Edge Function (`supabase/functions/curiosity-refresh`) or pg_net to make the call | Keeps the schedule next to the data. The Edge Function is a thin caller: it reads `APP_URL` and `CURIOSITY_CRON_SECRET` as function secrets and passes the app's status through. It contains no content logic, so redeploying it can never change what is published. |
 
 Self-hosting without any of those: `npm run curiosity:refresh` from a shell crontab
@@ -265,7 +287,7 @@ any generator to have something to show.
 ## 9. Verifying it
 
 ```bash
-npm run curiosity:verify                                  # the seven requirements
+npm run curiosity:verify                                  # 19 lifecycle + reliability checks
 npx tsx scripts/verify-daily-content.tsx                   # the pre-existing page checks
 npx tsx scripts/verify-mobile-layout.tsx                  # needs `npm run build` first
 npm run curiosity:links                                    # every pool URL, from a machine with egress
@@ -283,28 +305,50 @@ book, degraded feeds are recorded, and a corrupt store falls back instead of err
 **(4)** twelve consecutive days give twelve distinct items per category and one ledger
 row per item, and a forced same-day re-run is a no-op; **(5)** covers, publication
 lines and preview links only ever say what the record supports, and the rendered card
-shows exactly that; **(6)** renders make no source calls, the catch-up rules hold, all
-four scheduler entry points say `30 18 * * *`, and the endpoint fails closed;
-**(7)** a restart reads back the identical snapshot, and a run that cannot take the
-lease writes nothing. A final block drives the Supabase store against a scripted
-PostgREST boundary — the same technique `verify-daily-content.tsx` uses for the app's
-own repository — covering lease acquisition and release, `(kind, date_key)` upserts,
-the ledger, read/write key separation, and an un-migrated database degrading quietly.
+shows exactly that; **(6)** renders make no source calls, the catch-up rules hold, every
+scheduler entry point says `30 18 * * *` while `vercel.json` stays cron-free, and the
+endpoint fails closed; **(7)** a restart reads back the identical snapshot, and a run
+that cannot take the lease writes nothing.
+
+**(8)** drives the Supabase store against a scripted PostgREST boundary — the same
+technique `verify-daily-content.tsx` uses for the app's own repository — covering lease
+acquisition and release, `(kind, date_key)` upserts, the ledger, read/write key
+separation, and an un-migrated database degrading quietly. **(9–18)** are the production
+reliability cases: total source outage (every card populated, labelled and explained);
+feed parsing (RSS and Atom, CDATA and entities, self-closing links, wrong content types,
+malformed XML, the recency window, one dead host not blocking the rest); GitHub errors
+(403/429 named as rate limits with their `Retry-After`, 5xx and non-JSON distinguished,
+incomplete or unsafe rows dropped, repeats collapsed) and the admin probe; fourteen days
+of history cards, each either verified for its date or an archive entry that says so; a
+coverless record rendering the local placeholder; validation before the write, with a
+failure inside the lease leaving the previous snapshot byte-identical; a read-only
+filesystem; durability never overstated; one publisher and no credential in a committed
+file; and an audit of the whole curated corpus — ids, links, provenance, prose, rotation.
+**(19)** confirms nothing outside Curiosity changed, against `git merge-base HEAD
+origin/main`.
 
 Results of the run performed for this change (sandbox, no outbound network): `tsc
---noEmit` clean, `eslint` clean, `next build` clean with no warnings,
-`verify-curiosity-automation.tsx` **PASS, six consecutive runs**, `verify-daily-content.tsx`
-PASS, `verify-mobile-layout.tsx` PASS (all mobile-layout checks), `npm run
-curiosity:links` executed and reported honestly that this machine has no egress (so the
-links are *not* confirmed from here — see below). Six repeats were run because the
-overlap check touches a real lock file; it now signals from inside the lease instead of
-polling for it, which had been a race in the test rather than in the code.
+--noEmit` clean, `eslint lib components app` clean, `next build` clean with no warnings,
+`verify-curiosity-automation.tsx` **PASS, 19 checks + 2 wiring reports**, `verify-daily-content.tsx`
+PASS (366 daily selections), `verify-mobile-layout.tsx` PASS (all mobile-layout checks),
+`npm run curiosity:links` executed and reported honestly that this machine has no egress —
+96 URLs unreachable — all 73 pool citations plus the 23 links on the curated shelves,
+which the check now collects as well — 0 dead, 0 ok, and that is the correct output for a sandbox. It is
+the reason the check exists: it must be re-run from a machine with egress before the pool
+links can be called verified. The dev server was also driven for real: `GET /api/curiosity`
+answered with a published day whose three live cards were labelled `curated` with their
+causes recorded, `action=status` reported `store.durability: "single-host"`, and
+`action=probe` reported all nine sources unreachable in ~15 ms each without hanging.
+`verify-mobile-layout.tsx` needs `jsdom`, which the repository does not list as a
+dependency; it was installed with `npm install --no-save jsdom` for this run and is the
+one thing about that check worth fixing separately.
 
 **Not verified here, and you must verify it once in your environment**: a live Open
 Library response (the scripted payload is a real captured shape, but this sandbox has no
 egress to `openlibrary.org`), a live RSS/GitHub/Wikipedia fetch, migration 009 applied to
 a project, the Edge Function deployed, the Actions workflow running on a schedule, and
-`npm run curiosity:links` — which needs a machine that can reach the 73 cited URLs.
+`npm run curiosity:links` — which needs a machine that can reach the 96 cited URLs, pool
+entries and curated shelves alike.
 
 ## 10. Runbook
 
@@ -322,43 +366,74 @@ a project, the Edge Function deployed, the Actions workflow running on a schedul
   SQL). `select * from curiosity_jobs` shows the lease and the last result; clearing
   `lease_token` is safe while no run is in flight.
 * **Reset local state** → delete `.curiosity/state.json`. The page still renders: the
-  pool is the fallback dataset, and the next publish repopulates the store.
+  pool and the curated shelves are the fallback dataset, and the next publish
+  repopulates the store.
+* **Which content is on screen right now?** → the label on each card (*curated*,
+  *curated reading*, *From the archive*). Settings → Data shows the same thing per
+  section (`Cards`), the last attempt and its result, the store's durability, and the
+  date the book turns over next. `action=status` returns all of it as JSON.
+* **Turn the production scheduler on** (nothing in this repository can do this for
+  you; it needs the deployment's UI): ① set `CURIOSITY_CRON_SECRET` in the Vercel
+  project environment to a long random value (`openssl rand -hex 32`) and redeploy;
+  ② in GitHub → Settings → Secrets and variables → Actions add `CURIOSITY_CRON_SECRET`
+  with the same value and `FOCUSDESK_URL` with the app's origin; ③ run
+  *Curiosity daily publish* once from the Actions tab with `force` ticked. It must
+  print `Publish result: published` and then `Confirmed: <today> is published, store
+  …`. If step ① is skipped the endpoint answers 503 in production and only the
+  render-time catch-up turns the day over.
 
-## 11. When a card is empty, in order of likelihood
+## 11. When a source is down: fallback, not an empty card
 
-Three cards — What's New in AI, Developer Radar, Today in History — are the only ones
-whose content exists nowhere in this repository. They are filled from the live sources
-at publish time, so an empty one means the publisher had nothing to put in it, and the
-snapshot always records which case it was:
+No card is ever empty because a source failed. That is a design rule, not a hope: the
+publisher walks a fixed chain per section and stops at the first link that has content.
+
+1. **Today's live content.** Whatever the feeds, `api.github.com` or Wikipedia produced
+   for this day, validated (URL shape, parseable date, inside the 45-day window,
+   deduplicated).
+2. **The last content that did answer** — kept with its own dates and links, so the card
+   is stale but every sentence in it is still true. It is never relabelled as today's.
+3. **This repository's curated shelf**, which exists so that step 2 can be skipped
+   entirely on a fresh deploy with no egress:
+
+   | Card | Shelf | Size | How it is labelled |
+   | --- | --- | --- | --- |
+   | What's New in AI | `content/ai-background.ts` — evergreen explainers of how these systems work | 12, three a day | `origin: 'background'`, no date printed, card header reads *curated reading* |
+   | Developer Radar | `content/radar-fallback.ts` — established open-source tools, described by what they do | 12, three a day | `origin: 'curated'`, no "recently updated" claim, card header reads *curated* |
+   | Today in History | the dated `historyEvents` corpus, rotated when nothing is verified for the day | 9 | `forThisDate: false` and the card states *From the archive — not an event of this date* |
+   | One Book | the curated recommendation, without catalogue fields | 25 | `source: 'curated'`; no cover, no year, no edition count unless Open Library returned them |
+
+   Rotations are keyed to the publication day, so consecutive days never show the same
+   three items and each shelf cycles in four days.
+
+The history card is the one section that is never *carried over*: yesterday's anniversary
+under "Today in History" would be a false statement rather than a stale one, so an
+unverified day gets an archive entry that says what it is.
+
+Every substitution is recorded on the snapshot — `aiWorld: nothing usable from the live
+source (none of the 6 feeds could be reached from this server (…)); published 3 curated
+item(s) in its place` — which is what makes the day auditable afterwards. A reader sees a
+label; nobody has to open a console to learn that a card is fallback content, and nobody
+has to read this file to learn why.
+
+### Why a fallback publication still counts as a successful publish
+
+`status: "published"` means a valid day was written: all four cards have content, each
+item passed validation, and the snapshot says which parts are curated. It does not claim
+the live sources were reached — that is what `degraded` is for, and what the Settings
+panel's per-card line shows. A run that could not produce a valid payload reports `failed`
+and leaves the previous day in place, so "published" never has to be discounted.
+
+### Reading the causes
 
 ```bash
-npm run curiosity:refresh -- --status    # degraded: [...] on the published day
+npm run curiosity:refresh -- --status     # degraded: [...] on the published day
+curl -s localhost:3000/api/curiosity/refresh?action=probe | jq   # per-source reachability
 ```
 
-1. **The source was unreachable from that server.** `none of the 6 feeds could be
-   reached from this server`, `api.github.com could not be reached`. A sandbox, a CI
-   runner, a firewall or a locked-down container all produce this. It is not a
-   deployment bug — the fallback cards stay correct and the live ones stay visibly
-   empty, which is the point: a card that says "no AI updates right now" is true, and a
-   card that recycles yesterday's headlines to look alive is not.
-2. **The source answered and had nothing recent.** Same empty card, different note
-   (`the N feed(s) that answered had nothing recent to show`). Waiting is the fix.
-3. **Nothing has been published for that day, and a render does not fetch.** A fresh
-   install before its first scheduled run, or `CURIOSITY_AUTO_PUBLISH=off` with no cron
-   configured yet. The header then says "nothing has been published for this day yet" —
-   run the refresh once and it becomes an ordinary published day.
-4. **The store could not be written.** The file store now relocates itself to the temp
-   directory when the deployment directory is read-only (Vercel's `/var/task`, an
-   immutable image) and says so in `store.location`: *ephemeral: moved there because
-   EROFS…*. Content then works for the life of the instance, which is why a Vercel
-   deployment that must persist days needs Supabase or an absolute path on a mounted
-   volume. If even that fails, the run reports `failed` and the previous content is
-   untouched.
-5. **The history card only.** It has 9 curated dated events; for any other date it
-   depends on Wikipedia's anniversaries feed, and it is deliberately *not* backfilled
-   from a previous day (§2). A missing history event is a small honest gap, not a
-   broken card.
-
-The reader sees the count in the page header and the reason on hover; the operator sees
-the same text in the status payload, in Settings, and in the publish output — so an empty
-card should never need someone to read this file to explain itself.
+Causes are phrased by the code that saw them: *could not be reached* (a deployment or
+network problem — a sandbox, CI runner, firewall or locked-down container all produce
+this), *answered 403 and is rate limited* (anonymous GitHub search allows ten requests a
+minute; the note carries `Retry-After`), *answered with text/html, not a feed* (the URL
+moved), and *answered but listed nothing* (a quiet day, waiting is the fix). The probe is
+admin-only because it is the one read path allowed to touch the network, and it measures
+reachability from the server that publishes, not from a browser.

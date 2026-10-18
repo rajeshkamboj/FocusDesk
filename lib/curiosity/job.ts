@@ -1,12 +1,15 @@
-import { dailyEditorial } from './content';
+import { curatedFallbackIds, curatedHistoryArchive, dailyEditorial } from './content';
 import { loadDatabasePool } from './content-db';
 import { eligibleEntries, isCuriosityCategory, mergePool, poolFor, selectFromPool } from './pool';
 import { buildRecommendation, lookupBook } from './openlibrary';
 import { fetchDeveloperRadar, fetchHistory, fetchNews, type SourceNote } from './sources';
 import { addPublicationDays, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import { emptyState, getStateStore, recentSeenIds, type RefreshTrigger, type CuriosityState, type DailyPayload } from './state';
+import { sectionOrigins, type SectionOrigins } from './origins';
 import type {
   BookCandidate,
+  CuriosityDurability,
+  CuriositySectionOrigin,
   CuriosityBriefing,
   BookRecommendation,
   CuriosityCategory,
@@ -78,7 +81,7 @@ export type RefreshSummary = {
   date: string;
   /** The instant the run finished, for the settings panel. */
   at: string;
-  store: { kind: 'file' | 'supabase'; location: string };
+  store: { kind: 'file' | 'supabase'; location: string; durability: CuriosityDurability; durable: boolean };
   trigger: RefreshTrigger;
   daily: DailyOutcome;
   book: BookOutcome;
@@ -189,7 +192,15 @@ export async function runCuriosityRefresh(
   // `store` is read at report time, not here: the file store chooses its writable
   // location on the first publish of a process, and a summary that names a path the
   // run then abandoned is worse than no path at all.
-  const storeAtReportTime = (): RefreshSummary['store'] => ({ kind: store.kind, location: store.location });
+  // The durability is reported with the path: "written to /tmp" and "written to the
+  // database" are different promises, and an operator reading a summary has to be able
+  // to tell them apart without knowing how the store was constructed.
+  const storeAtReportTime = (): RefreshSummary['store'] => ({
+    kind: store.kind,
+    location: store.location,
+    durability: store.durability,
+    durable: store.durability === 'shared',
+  });
   const started: Omit<RefreshSummary, 'daily' | 'book' | 'status' | 'detail' | 'store'> = {
     date,
     at: now.toISOString(),
@@ -236,6 +247,14 @@ export async function runCuriosityRefresh(
         // The catalogue's own timestamp is replaced by the run's clock so a
         // snapshot is internally consistent (and testable) end to end.
         const recommendation: BookRecommendation = { ...lookup.book, id, fetchedAt: publishedAt };
+        const bookProblems = invalidBookFields(recommendation);
+        if (bookProblems.length) {
+          // A malformed catalogue record must not become anyone's book of the day. The
+          // throw happens inside the lease, so nothing was written and the previous
+          // record is still the reader's — which is also why this is reported as a
+          // failed run rather than a degraded one.
+          throw new RangeError(`refusing to publish the One Book record: ${bookProblems.join('; ')}`);
+        }
         patch.book = {
           date,
           publishedAt,
@@ -277,38 +296,49 @@ export async function runCuriosityRefresh(
         ? [[] as CuriosityBriefing['aiWorld'], [] as CuriosityBriefing['developerRadar']]
         : [await fetchNews(fetchImpl, newsNote), await fetchDeveloperRadar(fetchImpl, radarNote)];
 
-      // A section whose source did not answer keeps the last successful items
-      // rather than being replaced by an empty list, and says so on the snapshot.
-      const keep = (label: string, next: number, previous: number, why?: string) => {
-        // The reason travels with the note, so an empty card is explainable from the
-        // record alone: "the feeds were unreachable here" and "the feeds are quiet
-        // today" are different problems with different fixes.
-        const cause = why ? ` (${why})` : '';
-        if (previous) degraded.push(`${label}: source returned nothing${cause}; kept the ${previous} item(s) from ${state.daily?.date ?? 'the last run'}`);
-        else if (!next) degraded.push(`${label}: nothing to publish for this day${cause}`);
+      // Where each section's content came from, in this order and never past the last
+      // one: today's live source, the last items that did answer (kept with their own
+      // dates and links, so a cached item is still a true statement), then this
+      // repository's curated shelf. An unreachable network is a reason to switch
+      // source, never a reason to publish an empty card.
+      const previousPayload = republishingToday?.payload ?? state.daily?.payload ?? null;
+      const choose = <T extends { url?: string }>(
+        label: string,
+        live: T[],
+        previous: T[] | undefined,
+        curated: T[],
+        cause?: string,
+      ): { value: T[]; origin: CuriositySectionOrigin } => {
+        const why = cause ? ` (${cause})` : '';
+        if (live.length) return { value: live, origin: 'new' };
+        if (previous?.length) {
+          degraded.push(`${label}: nothing usable from the live source${why}; kept the ${previous.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+          return { value: previous, origin: 'cached' };
+        }
+        degraded.push(`${label}: nothing usable from the live source${why}; published ${curated.length} curated item(s) in its place`);
+        return { value: curated, origin: 'curated' };
       };
-      const aiWorld = news.length ? news : (republishingToday?.payload.aiWorld ?? state.daily?.payload.aiWorld ?? []);
-      const developerRadar = radar.length ? radar : (republishingToday?.payload.developerRadar ?? state.daily?.payload.developerRadar ?? []);
-      keep('aiWorld', news.length, (republishingToday?.payload.aiWorld ?? state.daily?.payload.aiWorld ?? []).length, newsNote.text);
-      keep('developerRadar', radar.length, (republishingToday?.payload.developerRadar ?? state.daily?.payload.developerRadar ?? []).length, radarNote.text);
+      const aiWorldChoice = choose('aiWorld', news, previousPayload?.aiWorld, editorial.aiWorld, newsNote.text);
+      const radarChoice = choose('developerRadar', radar, previousPayload?.developerRadar, editorial.developerRadar, radarNote.text);
 
       // The curated date-matched event wins; the live anniversaries feed only
       // fills a day the corpus does not already cover.
       //
       // Unlike the rolling lists, history is *not* carried over from a previous
-      // day. A news item is labelled with its own date, so yesterday's entry is
-      // still true today; "Today in History" showing another day's anniversary
-      // would be a wrong statement, not a stale one. The card has an honest
-      // unavailable state for exactly this case, so it shows that instead.
+      // day. A news item is labelled with its own date, so yesterday's entry is still
+      // true today; "Today in History" showing another day's anniversary would be a
+      // wrong statement, not merely a stale one. So an unverified day falls back to a
+      // curated entry that says plainly that it is from the archive.
       let history = editorial.history;
       if (!history && !options.offline) history = await fetchHistory(date, fetchImpl, historyNote);
-      if (!history && !editorial.history) {
-        degraded.push(`history: no curated event for this date${historyNote.text ? ` and ${historyNote.text}` : ' and no live source was consulted'}`);
+      if (!history) {
+        history = curatedHistoryArchive(date);
+        degraded.push(`history: no verified event for ${date}${historyNote.text ? ` (${historyNote.text})` : ' and no live source was consulted'}; published a curated archive entry, labelled as not belonging to this date`);
       }
 
       const payload: DailyPayload = {
-        aiWorld: [...aiWorld],
-        developerRadar: [...developerRadar],
+        aiWorld: [...aiWorldChoice.value],
+        developerRadar: [...radarChoice.value],
         oneThing: picks.oneThing.item,
         learning: picks.learning.item,
         literature: picks.literature.item,
@@ -330,9 +360,27 @@ export async function runCuriosityRefresh(
         physics: payload.physics.id,
         biology: payload.biology.id,
         sharpener: payload.sharpener.id,
-        ...(history ? { history: `history-${date}` } : {}),
+        ...(history ? { history: history.forThisDate === false ? `history-archive-${date}` : `history-${date}` } : {}),
+        ...(aiWorldChoice.origin === 'curated' ? { 'ai-world': curatedFallbackIds(date).aiWorld } : {}),
+        ...(radarChoice.origin === 'curated' ? { 'developer-radar': curatedFallbackIds(date).developerRadar } : {}),
       };
-      patch.daily = { date, publishedAt, contentIds, payload, degraded, trigger };
+
+      // Validate the whole snapshot before it can be seen by anyone. A payload that
+      // would render an empty or malformed card must fail here, inside the lease, so a
+      // bad run leaves the previous good day exactly as it was rather than replacing it.
+      const invalid = invalidDailyFields(payload);
+      if (invalid.length) {
+        throw new RangeError(`refusing to publish ${date}: ${invalid.join('; ')}`);
+      }
+
+      patch.daily = {
+        date,
+        publishedAt,
+        contentIds,
+        payload,
+        degraded,
+        trigger,
+      };
       if (!republishingToday) {
         for (const [category, entryId] of Object.entries(contentIds)) {
           if (entryId && category !== 'history' && isCuriosityCategory(category)) {
@@ -410,7 +458,7 @@ export async function catchUpOnRender(date: string, fetchImpl?: typeof fetch): P
 }
 
 export type CuriosityStatus = {
-  store: { kind: 'file' | 'supabase'; location: string };
+  store: { kind: 'file' | 'supabase'; location: string; durability: CuriosityDurability; durable: boolean };
   today: string;
   scheduler: {
     cronSecretConfigured: boolean;
@@ -418,8 +466,26 @@ export type CuriosityStatus = {
     /** The UTC cron line every scheduler in this repo uses (= 00:00 Asia/Kolkata). */
     schedule: string;
     timezone: string;
+    /** The newest publish this process can see — the only liveness evidence from in here. */
+    lastPublishAt: string | null;
+    /**
+     * Always false, stated so on purpose: a repository can declare a schedule, it cannot
+     * see the platform's cron. Whether the scheduler is active is answered by
+     * `lastPublishAt`, never by the existence of a config file or a secret.
+     */
+    provenActive: boolean;
   };
-  daily: { published: boolean; date?: string; publishedAt?: string; contentIds?: PublishedContentIds; degraded?: string[] } | null;
+  daily: {
+    published: boolean;
+    date?: string;
+    publishedAt?: string;
+    contentIds?: PublishedContentIds;
+    degraded?: string[];
+    /** Per card: today's fetch, a kept-over run, or this repository's curated content. */
+    sections?: SectionOrigins;
+    /** Whether every card has content, so a "published" run is provably a usable day. */
+    complete: boolean;
+  } | null;
   book: { published: boolean; date?: string; publishedAt?: string; contentId?: string; source?: BookRecommendation['source']; nextChangeAfter?: string } | null;
   pool: Record<CuriosityCategory, { eligible: number; total: number }>;
   /** Most recent first. The database backend contributes a single entry. */
@@ -427,6 +493,103 @@ export type CuriosityStatus = {
 };
 
 /** What an operator wants before they trust the cron: is anything there, and when did it last move? */
+/* ------------------------------------------------------------------ */
+/* Nothing is published that a reader would experience as a broken card */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A field that is missing, or so long that a parser has clearly fed one card the
+ * contents of another. Deliberately blunt and small: this is the gate in front of the
+ * write, not a linter.
+ */
+function blank(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim().length === 0 || value.trim().length > 6000;
+}
+
+function invalidUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^https?:\/\/\S+$/i.test(value.trim())) return true;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol !== 'https:' && parsed.protocol !== 'http:';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Field names that must be present and plausible before a daily payload becomes the
+ * reader's briefing. Everything a card *claims* is checked against that claim: a dated
+ * news item must have a date, an undated background item must not have one, and an
+ * event that is not verified for today must be labelled as an archive pick. A payload
+ * that fails here is a bug or a source that answered with the wrong shape — either way
+ * the previous day's record is better than publishing it.
+ */
+export function invalidDailyFields(payload: DailyPayload): string[] {
+  const problems: string[] = [];
+  const check = (name: string, ok: boolean) => {
+    if (!ok) problems.push(name);
+  };
+
+  check('oneThing.title', !blank(payload.oneThing?.title));
+  check('oneThing.explanation', !blank(payload.oneThing?.explanation));
+  check('learning.topic', !blank(payload.learning?.topic));
+  check('learning.explanation', !blank(payload.learning?.explanation));
+  check('literature.title', !blank(payload.literature?.title));
+  check('literature.passage', !blank(payload.literature?.passage));
+  check('literature.whyItMatters', !blank(payload.literature?.whyItMatters));
+
+  check('aiWorld has items', (payload.aiWorld?.length ?? 0) > 0);
+  payload.aiWorld?.forEach((item, index) => {
+    check(`aiWorld[${index}].title`, !blank(item.title));
+    check(`aiWorld[${index}].url`, !invalidUrl(item.url));
+    check(`aiWorld[${index}].source`, !blank(item.source));
+    if (item.origin === 'background') check(`aiWorld[${index}] carries no date`, blank(item.publishedAt));
+    else check(`aiWorld[${index}].publishedAt`, !blank(item.publishedAt));
+  });
+
+  check('developerRadar has items', (payload.developerRadar?.length ?? 0) > 0);
+  payload.developerRadar?.forEach((item, index) => {
+    check(`developerRadar[${index}].name`, !blank(item.name));
+    check(`developerRadar[${index}].description`, !blank(item.description));
+    check(`developerRadar[${index}].url`, !invalidUrl(item.url));
+  });
+
+  if (payload.history) {
+    check('history.title', !blank(payload.history.title));
+    check('history.explanation', !blank(payload.history.explanation));
+    check('history.year', !blank(String(payload.history.year ?? '')));
+    check(
+      'history labelled when not verified for this date',
+      payload.history.forThisDate === false ? payload.history.origin === 'curated' : true,
+    );
+  } else {
+    check('history', false);
+  }
+
+  for (const key of ['sharpener', 'speakBetter', 'mythology', 'chemistry', 'physics', 'biology'] as const) {
+    const card = payload[key] as { id?: string } | undefined;
+    check(`${key}.id`, !blank(card?.id));
+  }
+  check('mythology.story', !blank(payload.mythology?.story));
+
+  return problems;
+}
+
+/** The One Book record: a title, an author, something to read it for, and a working link. */
+export function invalidBookFields(book: BookRecommendation): string[] {
+  const problems: string[] = [];
+  const check = (name: string, ok: boolean) => {
+    if (!ok) problems.push(name);
+  };
+  check('book.title', !blank(book.title));
+  check('book.author', !blank(book.author));
+  check('book.synopsis', !blank(book.synopsis));
+  check('book.why', !blank(book.why));
+  check('book.url', !invalidUrl(book.url));
+  if (book.coverUrl) check('book.coverUrl', !invalidUrl(book.coverUrl));
+  return problems;
+}
+
 export async function getCuriosityStatus(now: Date = new Date()): Promise<CuriosityStatus> {
   const store = getStateStore();
   const state = await store.read();
@@ -444,16 +607,35 @@ export async function getCuriosityStatus(now: Date = new Date()): Promise<Curios
     {} as CuriosityStatus['pool'],
   );
   return {
-    store: { kind: store.kind, location: store.location },
+    store: { kind: store.kind, location: store.location, durability: store.durability, durable: store.durability === 'shared' },
     today: date,
     scheduler: {
       cronSecretConfigured: Boolean(process.env.CURIOSITY_CRON_SECRET?.trim()),
       autoPublish: (process.env.CURIOSITY_AUTO_PUBLISH ?? '').toLowerCase() !== 'off',
       schedule: '30 18 * * *',
       timezone: 'Asia/Kolkata',
+      lastPublishAt: state.daily?.publishedAt ?? state.runs[state.runs.length - 1]?.at ?? null,
+      provenActive: false,
     },
-    daily: state.daily ? { published: true, date: state.daily.date, publishedAt: state.daily.publishedAt, contentIds: state.daily.contentIds, degraded: state.daily.degraded } : null,
-    book: state.book ? { published: true, date: state.book.date, publishedAt: state.book.publishedAt, contentId: state.book.contentId, source: state.book.payload.source, nextChangeAfter: `${state.book.date} + ${BOOK_INTERVAL_DAYS} days` } : null,
+    daily: state.daily
+      ? {
+          published: true,
+          date: state.daily.date,
+          publishedAt: state.daily.publishedAt,
+          contentIds: state.daily.contentIds,
+          degraded: state.daily.degraded,
+          sections: sectionOrigins(state.daily, date),
+          // A published day is only "complete" when no card is empty and nothing was
+          // recorded as degraded — curated content counts as content, because it is
+          // useful content; an *empty* card does not.
+          complete:
+            state.daily.degraded.length === 0 &&
+            state.daily.payload.aiWorld.length > 0 &&
+            state.daily.payload.developerRadar.length > 0 &&
+            state.daily.payload.history !== null,
+        }
+      : null,
+    book: state.book ? { published: true, date: state.book.date, publishedAt: state.book.publishedAt, contentId: state.book.contentId, source: state.book.payload.source, nextChangeAfter: addPublicationDays(state.book.date, BOOK_INTERVAL_DAYS) } : null,
     pool,
     runs,
   };

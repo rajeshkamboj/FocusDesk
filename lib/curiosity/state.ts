@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { access, constants, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
 import type { BookRecommendation, CuriosityBriefing, CuriosityCategory, PublishedContentIds } from './types';
 
@@ -189,6 +190,22 @@ export function stateFilePath(): string {
   return configured && configured.length > 0 ? configured : DEFAULT_STATE_FILE;
 }
 
+/** A filesystem that refuses writes outright, as opposed to a bug of ours. */
+function isRefusedByTheFilesystem(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'EROFS' || code === 'EACCES' || code === 'EPERM';
+}
+
+/**
+ * Where the state goes when the deployment directory cannot be written — which is
+ * the normal case on Vercel (`/var/task` is read-only) and on any immutable image.
+ * Concatenated rather than `join()` so the bundler keeps its hands off it; the
+ * directory is created by the same code that creates it for any other path.
+ */
+export function ephemeralStatePath(): string {
+  return `${tmpdir()}/focusdesk-curiosity/state.json`;
+}
+
 /**
  * Single-process, cross-restart, and honest about what it cannot do.
  *
@@ -201,10 +218,45 @@ export function stateFilePath(): string {
  */
 export class FileStateStore implements CuriosityStateStore {
   readonly kind = 'file' as const;
-  constructor(readonly path = stateFilePath()) {}
+  private settled: { path: string; ephemeral: boolean; why?: string } | null = null;
 
+  constructor(readonly configuredPath = stateFilePath()) {}
+
+  /** The path this process actually uses, once chosen. */
+  get path(): string {
+    return this.settled?.path ?? this.configuredPath;
+  }
+
+  /**
+   * Where the record lives, in the operator's words rather than ours: when the
+   * configured path had to be abandoned, `location` carries the errno and the new
+   * path, because "it is in /tmp, for this instance only" is the difference between
+   * a deployment that persists content and one that republishes it on every boot.
+   */
   get location() {
-    return this.path;
+    const settled = this.settled;
+    if (!settled) return this.configuredPath;
+    if (!settled.ephemeral) return settled.path;
+    return `${settled.path} · ephemeral: moved there because ${settled.why ?? 'the deployment filesystem was read-only'}`;
+  }
+
+  /**
+   * Choose a writable location, once per process, and never throw: a publisher that
+   * cannot prove a directory is writable should still try, and the write itself will
+   * report what happened. A render never calls this — reading is not a write, and an
+   * unwritable deployment must still be able to serve the day it can find.
+   */
+  private async settlePath(): Promise<void> {
+    if (this.settled) return;
+    try {
+      const dir = dirname(this.configuredPath);
+      await mkdir(dir, { recursive: true });
+      await access(dir, constants.W_OK);
+      this.settled = { path: this.configuredPath, ephemeral: false };
+    } catch (error) {
+      const why = isRefusedByTheFilesystem(error) ? `${(error as NodeJS.ErrnoException).code} on ${dirname(this.configuredPath)}` : `the configured path was unusable (${error instanceof Error ? error.message : String(error)})`;
+      this.settled = { path: ephemeralStatePath(), ephemeral: true, why };
+    }
   }
 
   private get lockPath() {
@@ -263,6 +315,7 @@ export class FileStateStore implements CuriosityStateStore {
 
   async withLease(ttlMs: number, mutate: (state: CuriosityState) => StatePatch | Promise<StatePatch>): Promise<LeaseResult> {
     const current = await this.read();
+    await this.settlePath();
     let token: string | null;
     try {
       token = await this.tryAcquire(ttlMs);

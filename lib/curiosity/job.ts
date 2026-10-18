@@ -2,7 +2,7 @@ import { dailyEditorial } from './content';
 import { loadDatabasePool } from './content-db';
 import { eligibleEntries, isCuriosityCategory, mergePool, poolFor, selectFromPool } from './pool';
 import { buildRecommendation, lookupBook } from './openlibrary';
-import { fetchDeveloperRadar, fetchHistory, fetchNews } from './sources';
+import { fetchDeveloperRadar, fetchHistory, fetchNews, type SourceNote } from './sources';
 import { addPublicationDays, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import { emptyState, getStateStore, recentSeenIds, type RefreshTrigger, type CuriosityState, type DailyPayload } from './state';
 import type {
@@ -186,10 +186,13 @@ export async function runCuriosityRefresh(
   const fetchImpl = options.fetchImpl ?? fetch;
   const date = publicationDate(now);
   const store = getStateStore();
-  const started: Omit<RefreshSummary, 'daily' | 'book' | 'status' | 'detail'> = {
+  // `store` is read at report time, not here: the file store chooses its writable
+  // location on the first publish of a process, and a summary that names a path the
+  // run then abandoned is worse than no path at all.
+  const storeAtReportTime = (): RefreshSummary['store'] => ({ kind: store.kind, location: store.location });
+  const started: Omit<RefreshSummary, 'daily' | 'book' | 'status' | 'detail' | 'store'> = {
     date,
     at: now.toISOString(),
-    store: { kind: store.kind, location: store.location },
     trigger,
   };
 
@@ -267,20 +270,27 @@ export async function runCuriosityRefresh(
         : fresh;
       const degraded: string[] = [];
 
+      const newsNote: SourceNote = {};
+      const radarNote: SourceNote = {};
+      const historyNote: SourceNote = {};
       const [news, radar] = options.offline
         ? [[] as CuriosityBriefing['aiWorld'], [] as CuriosityBriefing['developerRadar']]
-        : [await fetchNews(fetchImpl), await fetchDeveloperRadar(fetchImpl)];
+        : [await fetchNews(fetchImpl, newsNote), await fetchDeveloperRadar(fetchImpl, radarNote)];
 
       // A section whose source did not answer keeps the last successful items
       // rather than being replaced by an empty list, and says so on the snapshot.
-      const keep = (label: string, next: number, previous: number) => {
-        if (previous) degraded.push(`${label}: source returned nothing; kept the ${previous} item(s) from ${state.daily?.date ?? 'the last run'}`);
-        else if (!next) degraded.push(`${label}: no source available for this day`);
+      const keep = (label: string, next: number, previous: number, why?: string) => {
+        // The reason travels with the note, so an empty card is explainable from the
+        // record alone: "the feeds were unreachable here" and "the feeds are quiet
+        // today" are different problems with different fixes.
+        const cause = why ? ` (${why})` : '';
+        if (previous) degraded.push(`${label}: source returned nothing${cause}; kept the ${previous} item(s) from ${state.daily?.date ?? 'the last run'}`);
+        else if (!next) degraded.push(`${label}: nothing to publish for this day${cause}`);
       };
       const aiWorld = news.length ? news : (republishingToday?.payload.aiWorld ?? state.daily?.payload.aiWorld ?? []);
       const developerRadar = radar.length ? radar : (republishingToday?.payload.developerRadar ?? state.daily?.payload.developerRadar ?? []);
-      keep('aiWorld', news.length, (republishingToday?.payload.aiWorld ?? state.daily?.payload.aiWorld ?? []).length);
-      keep('developerRadar', radar.length, (republishingToday?.payload.developerRadar ?? state.daily?.payload.developerRadar ?? []).length);
+      keep('aiWorld', news.length, (republishingToday?.payload.aiWorld ?? state.daily?.payload.aiWorld ?? []).length, newsNote.text);
+      keep('developerRadar', radar.length, (republishingToday?.payload.developerRadar ?? state.daily?.payload.developerRadar ?? []).length, radarNote.text);
 
       // The curated date-matched event wins; the live anniversaries feed only
       // fills a day the corpus does not already cover.
@@ -291,8 +301,10 @@ export async function runCuriosityRefresh(
       // would be a wrong statement, not a stale one. The card has an honest
       // unavailable state for exactly this case, so it shows that instead.
       let history = editorial.history;
-      if (!history && !options.offline) history = await fetchHistory(date, fetchImpl);
-      if (!history && !editorial.history) degraded.push('history: no curated event and the anniversaries source did not answer');
+      if (!history && !options.offline) history = await fetchHistory(date, fetchImpl, historyNote);
+      if (!history && !editorial.history) {
+        degraded.push(`history: no curated event for this date${historyNote.text ? ` and ${historyNote.text}` : ' and no live source was consulted'}`);
+      }
 
       const payload: DailyPayload = {
         aiWorld: [...aiWorld],
@@ -343,6 +355,7 @@ export async function runCuriosityRefresh(
     const detail = result.reason === 'busy' ? 'Another refresh holds the lease; nothing was written.' : `Refresh failed: ${result.error}. The last published content is unchanged.`;
     return {
       ...started,
+      store: storeAtReportTime(),
       status: result.reason === 'busy' ? 'busy' : 'failed',
       daily: result.reason === 'busy' ? daily : { published: false, reason: 'failed', detail },
       book: result.reason === 'busy' ? book : { published: false, reason: 'failed', detail },
@@ -365,7 +378,7 @@ export async function runCuriosityRefresh(
     }))
     .catch(() => null);
 
-  return { ...started, status, daily, book, detail: detail || 'Nothing due; the published day is unchanged.' };
+  return { ...started, store: storeAtReportTime(), status, daily, book, detail: detail || 'Nothing due; the published day is unchanged.' };
 }
 
 /* ------------------------------------------------------------------ */

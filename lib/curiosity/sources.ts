@@ -79,12 +79,28 @@ export function selectAiWorldArticles(items: CuriosityNewsItem[], now = Date.now
     .slice(0, MAX_AI_WORLD_ARTICLES);
 }
 
-export async function fetchNews(fetchImpl: typeof fetch = fetch): Promise<CuriosityNewsItem[]> {
+/**
+ * Why a live section ended up empty, phrased by the code that knows. A card has to
+ * stay quiet either way, but the *record* should distinguish "the feeds could not be
+ * reached from this server" from "the feeds answered and had nothing recent" — the
+ * first is a deployment problem, the second is a Tuesday. The publisher copies the
+ * text into the snapshot's `degraded` list, where the status endpoint and Settings
+ * show it.
+ */
+export type SourceNote = { text?: string };
+
+export async function fetchNews(fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<CuriosityNewsItem[]> {
+  let reached = 0;
+  let refused = '';
   try {
     const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
       try {
         const response = await fetchImpl(url, { headers: { accept: 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
-        if (!response.ok) return [];
+        if (!response.ok) {
+          refused = `${source} returned ${response.status}`;
+          return [];
+        }
+        reached += 1;
         const xml = await response.text();
         // A single publisher can account for all ten newest stories, so retain
         // enough entries from each authoritative feed before the global limit.
@@ -100,24 +116,38 @@ export async function fetchNews(fetchImpl: typeof fetch = fetch): Promise<Curios
         return [];
       }
     }));
-    return selectAiWorldArticles(batches.flat());
-  } catch {
+    const items = selectAiWorldArticles(batches.flat());
+    if (!items.length && note) {
+      note.text =
+        reached === 0
+          ? `none of the ${NEWS_FEEDS.length} feeds could be reached from this server${refused ? ` (${refused})` : ''}`
+          : `the ${reached} feed(s) that answered had nothing recent to show`;
+    }
+    return items;
+  } catch (error) {
+    if (note) note.text = `the feeds could not be read (${error instanceof Error ? error.message : String(error)})`;
     return [];
   }
 }
 
-export async function fetchDeveloperRadar(fetchImpl: typeof fetch = fetch): Promise<DeveloperDiscovery[]> {
+export async function fetchDeveloperRadar(fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<DeveloperDiscovery[]> {
   try {
     const response = await fetchImpl('https://api.github.com/search/repositories?q=topic%3Adeveloper-tools+language%3ATypeScript&sort=updated&order=desc&per_page=3', { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      if (note) note.text = `api.github.com returned ${response.status}`;
+      return [];
+    }
     const data = await response.json() as { items?: Array<{ name: string; description: string | null; html_url: string }> };
-    return (data.items ?? []).slice(0, 3).filter((item) => isHttpUrl(item.html_url)).map((item) => ({ name: item.name, description: item.description ?? 'An open-source developer project.', why: 'A recently updated open-source project worth evaluating for practical modern web work.', pricing: 'Open source; confirm the repository license and any hosted-service terms.', url: item.html_url }));
-  } catch {
+    const items = (data.items ?? []).slice(0, 3).filter((item) => isHttpUrl(item.html_url)).map((item) => ({ name: item.name, description: item.description ?? 'An open-source developer project.', why: 'A recently updated open-source project worth evaluating for practical modern web work.', pricing: 'Open source; confirm the repository license and any hosted-service terms.', url: item.html_url }));
+    if (!items.length && note) note.text = 'GitHub answered but listed no repository matching the topic search';
+    return items;
+  } catch (error) {
+    if (note) note.text = `api.github.com could not be reached (${error instanceof Error ? error.message : String(error)})`;
     return [];
   }
 }
 
-export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch): Promise<HistoryEvent | null> {
+export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<HistoryEvent | null> {
   const [, month, day] = date.split('-');
   try {
     // Wikipedia's selected anniversaries are editorially curated, not random events.
@@ -125,13 +155,19 @@ export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch
       headers: { accept: 'application/json', 'User-Agent': 'FocusDesk/0.1 (daily history reader)' },
       signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (note) note.text = `Wikipedia returned ${response.status}`;
+      return null;
+    }
     const result = await response.json() as { selected?: Array<{ year: number; text: string; pages?: Array<{ title: string; extract?: string; content_urls?: { desktop?: { page?: string } } }> }> };
     const events = (result.selected ?? []).filter((event) => Number.isFinite(event.year) && event.text && event.pages?.some((page) => page.content_urls?.desktop?.page && isHttpUrl(page.content_urls.desktop.page)));
     // Stable ordering makes the daily item independent of response ordering.
     events.sort((a, b) => a.year - b.year || a.text.localeCompare(b.text));
     const event = events[0];
-    if (!event) return null;
+    if (!event) {
+      if (note) note.text = `Wikipedia listed no selected anniversary for ${month}/${day}`;
+      return null;
+    }
     const page = event.pages!.find((page) => page.content_urls?.desktop?.page && isHttpUrl(page.content_urls.desktop.page))!;
     return {
       date: new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }),
@@ -141,5 +177,8 @@ export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch
       significance: page.extract ? (page.extract.length > 380 ? `${page.extract.slice(0, 377).replace(/\s+\S*$/, '')}…` : page.extract) : 'Featured in Wikipedia’s curated selection of significant anniversaries for this date.',
       url: page.content_urls!.desktop!.page,
     };
-  } catch { return null; }
+  } catch (error) {
+    if (note) note.text = `en.wikipedia.org could not be reached (${error instanceof Error ? error.message : String(error)})`;
+    return null;
+  }
 }

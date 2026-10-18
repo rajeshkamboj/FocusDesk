@@ -308,9 +308,14 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           ) : null}
         </p>
         {briefing.publication?.degraded?.length ? (
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3">
-            {briefing.publication.degraded.length} section{briefing.publication.degraded.length === 1 ? '' : 's'} showing
-            fallback text because a source did not answer.
+          /* The count is what a reader needs; the reason behind it is the tooltip. */
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3" title={briefing.publication.degraded.join('\n')}>
+            {briefing.publication.degraded.length} section
+            {briefing.publication.degraded.length === 1 ? '' : 's'} showing fallback text
+            {briefing.publication.origin === 'published'
+              ? ', because a source did not answer'
+              : ', because nothing has been published for this day yet'}
+            {briefing.publication.degraded.length > 1 ? ' — hover for the reason' : ''}.
           </p>
         ) : null}
       </header>

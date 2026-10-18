@@ -53,6 +53,8 @@ function publicationFrom(
   store: 'file' | 'supabase',
   date: string,
   state: CuriosityState,
+  /** Why there is nothing to show, in the publisher's own words. See `buildBriefing`. */
+  reason?: string | null,
 ): CuriosityBriefing['publication'] {
   const bookDay = state.book?.date;
   return {
@@ -61,7 +63,10 @@ function publicationFrom(
     origin: daily ? 'published' : 'fallback',
     store,
     contentIds: daily?.contentIds ?? {},
-    degraded: daily?.degraded ?? ['No published snapshot for this day; showing the built-in rotation.'],
+    degraded: daily?.degraded ?? [
+      'No published snapshot for this day; showing the built-in rotation.',
+      ...(reason ? [reason] : []),
+    ],
     // The book keeps its own clock: the card says when it will next turn over,
     // which is three publication days after the one it was published on.
     bookPublishedOn: bookDay,
@@ -88,8 +93,16 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   // scheduler has not had the chance yet (a fresh deploy, a laptop with no cron),
   // publish it now, once: the store claim means the second concurrent request of
   // that moment finds the snapshot instead of starting a second run.
-  if (date === publicationDate(new Date())) {
+  let reason: string | null = null;
+  const isToday = date === publicationDate(new Date());
+  if (isToday) {
     const summary = await catchUpOnRender(date).catch(() => null);
+    if (summary && summary.status !== 'published') {
+      reason = `publish attempt for ${date} finished as ${summary.status}: ${summary.detail}`;
+    } else if (!summary) {
+      // Today, no snapshot, and no attempt — the only way that happens is the opt-out.
+      reason = 'no publish was attempted: CURIOSITY_AUTO_PUBLISH=off leaves the schedule as the only writer.';
+    }
     if (summary && summary.status === 'published') {
       const refreshed = await store.read();
       if (refreshed.daily?.date === date) {
@@ -101,6 +114,18 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
         };
       }
     }
+  }
+
+  // Say why the live cards are empty, instead of letting the card guess. "The
+  // source could not be reached" is the wrong explanation for a day that was never
+  // published at all — which is the normal state of a fresh install whose scheduler
+  // is not configured yet, and an operator should not have to read the source to
+  // work that out. The notes ride on `degraded`: the header shows the count, the
+  // status endpoint and the Settings panel show the text.
+  if (reason === null) {
+    reason = isToday
+      ? 'a publish was attempted for today and did not complete; its summary names the failing source (npx tsx scripts/curiosity-refresh.ts).'
+      : `nothing has been published for ${date}, and a render never fetches sources — the scheduler fills these sections.`;
   }
 
   const fallback = dailyEditorial(date);
@@ -122,7 +147,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
     chemistry: fallback.chemistry,
     physics: fallback.physics,
     biology: fallback.biology,
-    publication: publicationFrom(null, store.kind, date, state),
+    publication: publicationFrom(null, store.kind, date, state, reason),
   };
 }
 

@@ -323,3 +323,42 @@ a project, the Edge Function deployed, the Actions workflow running on a schedul
   `lease_token` is safe while no run is in flight.
 * **Reset local state** → delete `.curiosity/state.json`. The page still renders: the
   pool is the fallback dataset, and the next publish repopulates the store.
+
+## 11. When a card is empty, in order of likelihood
+
+Three cards — What's New in AI, Developer Radar, Today in History — are the only ones
+whose content exists nowhere in this repository. They are filled from the live sources
+at publish time, so an empty one means the publisher had nothing to put in it, and the
+snapshot always records which case it was:
+
+```bash
+npm run curiosity:refresh -- --status    # degraded: [...] on the published day
+```
+
+1. **The source was unreachable from that server.** `none of the 6 feeds could be
+   reached from this server`, `api.github.com could not be reached`. A sandbox, a CI
+   runner, a firewall or a locked-down container all produce this. It is not a
+   deployment bug — the fallback cards stay correct and the live ones stay visibly
+   empty, which is the point: a card that says "no AI updates right now" is true, and a
+   card that recycles yesterday's headlines to look alive is not.
+2. **The source answered and had nothing recent.** Same empty card, different note
+   (`the N feed(s) that answered had nothing recent to show`). Waiting is the fix.
+3. **Nothing has been published for that day, and a render does not fetch.** A fresh
+   install before its first scheduled run, or `CURIOSITY_AUTO_PUBLISH=off` with no cron
+   configured yet. The header then says "nothing has been published for this day yet" —
+   run the refresh once and it becomes an ordinary published day.
+4. **The store could not be written.** The file store now relocates itself to the temp
+   directory when the deployment directory is read-only (Vercel's `/var/task`, an
+   immutable image) and says so in `store.location`: *ephemeral: moved there because
+   EROFS…*. Content then works for the life of the instance, which is why a Vercel
+   deployment that must persist days needs Supabase or an absolute path on a mounted
+   volume. If even that fails, the run reports `failed` and the previous content is
+   untouched.
+5. **The history card only.** It has 9 curated dated events; for any other date it
+   depends on Wikipedia's anniversaries feed, and it is deliberately *not* backfilled
+   from a previous day (§2). A missing history event is a small honest gap, not a
+   broken card.
+
+The reader sees the count in the page header and the reason on hover; the operator sees
+the same text in the status payload, in Settings, and in the publish output — so an empty
+card should never need someone to read this file to explain itself.

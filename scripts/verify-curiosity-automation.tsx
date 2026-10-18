@@ -245,6 +245,9 @@ async function main() {
       assert.deepEqual(afterSameDay.daily?.payload.developerRadar, before.daily?.payload.developerRadar, 'a failed source cleared the radar instead of keeping the last good items');
       assert.deepEqual(afterSameDay.daily?.payload.aiWorld, before.daily?.payload.aiWorld);
       const notes = (sameDay.daily.degraded ?? []).join('; ');
+      // Every empty section arrives with its reason, so an empty card is explainable
+      // from the record instead of from a documentation file.
+      assert.match(notes, /aiWorld: [^(]*\(/, 'a degraded section was recorded without a reason');
       assert.match(notes, /aiWorld/, 'the empty news section was not reported as degraded');
       assert.match(notes, /developerRadar/, 'the empty radar section was not reported as degraded');
       assert.deepEqual(afterSameDay.book?.payload, before.book?.payload);

@@ -48,7 +48,7 @@ export function Tabs({
             // it may never break onto a second line inside its own chip.
             className={`shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[13px] font-medium transition-all duration-150 ${
               active === item.id
-                ? 'bg-accent text-white shadow-[0_1px_2px_rgba(0,0,0,0.1)]'
+                ? 'bg-accent text-on-accent shadow-[0_1px_2px_rgba(0,0,0,0.1)]'
                 : 'text-ink-2 hover:bg-surface-2 hover:text-ink'
             }`}
           >

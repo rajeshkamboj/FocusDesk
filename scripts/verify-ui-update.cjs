@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 async function main() {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true });
+  const browser = await chromium.launch({ headless: true, ...(process.env.UI_TEST_EXECUTABLE_PATH ? { executablePath: process.env.UI_TEST_EXECUTABLE_PATH, args: ['--no-sandbox', '--disable-dev-shm-usage'] } : { channel: 'msedge' }) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'Asia/Kolkata', serviceWorkers: 'block' });
   const page = await context.newPage();
   page.setDefaultTimeout(20_000);
@@ -68,7 +68,7 @@ async function main() {
     console.log(`PASS all routes and overflow at ${width}px; original Curious sections and daily additions present`);
   }
   await visit('settings');
-  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await page.getByRole('radio', { name: /^Existing Dark/ }).check();
   await visit('today');
   await page.screenshot({ path: `${shots}/today-dark.png`, fullPage: true });
   assert.deepEqual(errors, [], 'browser runtime errors');

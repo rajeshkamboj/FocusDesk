@@ -65,9 +65,9 @@ export function LoginScreen({
         <div className="flex items-center gap-3">
           <BrandMark />
           <div>
-            <h1 className="text-[17px] font-semibold tracking-tight text-ink">Pace</h1>
+            <h1 className="text-[17px] font-semibold tracking-tight text-ink">Focus Desk</h1>
             <p className="text-[12px] text-ink-3">
-              {forgot ? 'Reset your password' : 'Sign in to FocusDesk'}
+              {forgot ? 'Reset your password' : 'Sign in to Focus Desk'}
             </p>
           </div>
         </div>

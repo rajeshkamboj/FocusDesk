@@ -425,7 +425,7 @@ export interface TaskHistoryEntry {
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = 'dark' | 'pixldot' | 'light' | 'midnight' | 'warm-paper' | 'custom';
 
 export interface Settings {
   general: {

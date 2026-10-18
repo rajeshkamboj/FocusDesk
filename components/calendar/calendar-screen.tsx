@@ -192,7 +192,7 @@ export function CalendarScreen() {
               >
                 <span
                   className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11.5px] font-medium tabular-nums ${
-                    isToday ? 'bg-accent text-white' : 'text-ink-2'
+                    isToday ? 'bg-accent text-on-accent' : 'text-ink-2'
                   }`}
                 >
                   {parseISODate(day).getDate()}
@@ -341,7 +341,7 @@ export function CalendarScreen() {
                 ))}
               </ul>
             ) : null}
-            <p className="mt-2 text-[11px] text-ink-3">Time recorded by FocusDesk task timers.</p>
+            <p className="mt-2 text-[11px] text-ink-3">Time recorded by Focus Desk task timers.</p>
           </div>
         ) : null}
 

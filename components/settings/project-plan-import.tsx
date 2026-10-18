@@ -376,7 +376,7 @@ export function ProjectPlanImportModal({ open, onClose }: { open: boolean; onClo
           title="A project with this name already exists"
           message={
             clashes.length === 1
-              ? `“${clashes[0].name}” already exists. FocusDesk does not merge projects: the plan will be imported as new, creating a second project with that name. The existing one is left exactly as it is.`
+              ? `“${clashes[0].name}” already exists. Focus Desk does not merge projects: the plan will be imported as new, creating a second project with that name. The existing one is left exactly as it is.`
               : `${clashes.length} projects in this plan share a name with existing ones (${clashes
                   .map((c) => c.name)
                   .join(', ')}). They will be created as new projects; the existing ones are left exactly as they are.`

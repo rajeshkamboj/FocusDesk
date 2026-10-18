@@ -24,7 +24,7 @@ import type { Task } from '@/lib/types';
 /** Comfortably inside the 280–360 × 100–220 range; the browser may clamp it. */
 const PIP_WIDTH = 320;
 const PIP_HEIGHT = 190;
-const PIP_TITLE = 'FocusDesk — Active timers';
+const PIP_TITLE = 'Focus Desk — Active timers';
 
 /**
  * Copy the app's stylesheets into the Picture-in-Picture document — a new
@@ -55,20 +55,20 @@ function copyStyles(target: Window): void {
 
 /**
  * Mirror the app's current theme onto the Picture-in-Picture document. The
- * existing `data-theme` attribute drives every colour token, so following it is
- * all a second document needs — and a change in Settings reaches the popped-out
- * window live. Returns a cleanup function.
+ * existing `data-theme` attribute and inline custom tokens drive every colour.
+ * Mirroring both makes Settings changes reach the popped-out window live. Returns a cleanup function.
  */
 function mirrorTheme(target: Window): () => void {
   const root = document.documentElement;
   const apply = () => {
+    target.document.documentElement.style.cssText = root.style.cssText;
     const theme = root.getAttribute('data-theme');
     if (theme) target.document.documentElement.setAttribute('data-theme', theme);
     else target.document.documentElement.removeAttribute('data-theme');
   };
   apply();
   const observer = new MutationObserver(apply);
-  observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  observer.observe(root, { attributes: true, attributeFilter: ['data-theme', 'style'] });
   return () => observer.disconnect();
 }
 

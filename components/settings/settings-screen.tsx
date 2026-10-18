@@ -1,5 +1,6 @@
 'use client';
 
+import { AppearanceSettings } from './appearance-settings';
 import { DisplayNameSetting } from './display-name-setting';
 import { ProjectPlanImportModal } from './project-plan-import';
 import { useRef, useState } from 'react';
@@ -11,21 +12,17 @@ import { Input } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
 import {
   IconDownload,
-  IconMonitor,
-  IconMoon,
   IconProjects,
-  IconSun,
   IconUpload,
 } from '@/components/ui/icons';
 import { PageHeader, SectionTitle } from '@/components/layout/page-header';
-import { applyTheme } from '@/lib/theme';
 import { PROJECT_PLAN_FORMAT, isProjectPlanPayload } from '@/lib/project-plan';
 import {
   notificationPermission,
   notificationsSupported,
   requestNotificationPermission,
 } from '@/lib/notifications';
-import type { AppDataImport, ThemePreference } from '@/lib/types';
+import type { AppDataImport } from '@/lib/types';
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
@@ -33,12 +30,7 @@ export function SettingsScreen() {
   const [permission, setPermission] = useState(notificationPermission());
   const [planImportOpen, setPlanImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { general, notifications, appearance } = data.settings;
-
-  const setTheme = (theme: ThemePreference) => {
-    applyTheme(theme);
-    void actions.updateSettings({ appearance: { theme } });
-  };
+  const { general, notifications } = data.settings;
 
   const exportJson = async () => {
     const payload = await actions.exportData();
@@ -67,7 +59,7 @@ export function SettingsScreen() {
           return;
         }
         if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.tasks)) {
-          notify('That file does not look like a Pace export');
+          notify('That file does not look like a Focus Desk export');
           return;
         }
         void actions.importData(parsed).catch((error: unknown) => {
@@ -221,42 +213,15 @@ export function SettingsScreen() {
               <Badge tone="neutral">This browser does not support notifications</Badge>
             )}
             <p className="w-full text-[11.5px] leading-relaxed text-ink-3">
-              Reminders fire while FocusDesk is open, minimized, or in a background tab, and catch up after sleep,
+              Reminders fire while Focus Desk is open, minimized, or in a background tab, and catch up after sleep,
               wake, or a restart. Fully closing the browser cannot be guaranteed on the web without a push server —
-              missed reminders are delivered the next time you open FocusDesk. Allow notifications above; blocking
+              missed reminders are delivered the next time you open Focus Desk. Allow notifications above; blocking
               them in the browser silently skips delivery.
             </p>
           </div>
         </section>
 
-        {/* Appearance */}
-        <section>
-          <SectionTitle>Appearance</SectionTitle>
-          <div className="mt-3 rounded-2xl border border-line bg-surface p-5 shadow-card">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  ['light', 'Light', IconSun],
-                  ['dark', 'Dark', IconMoon],
-                  ['system', 'System', IconMonitor],
-                ] as const
-              ).map(([value, label, Icon]) => (
-                <button
-                  key={value}
-                  onClick={() => setTheme(value)}
-                  className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-colors ${
-                    appearance.theme === value
-                      ? 'border-accent bg-accent-soft text-accent-ink'
-                      : 'border-line text-ink-2 hover:border-line-strong'
-                  }`}
-                >
-                  <Icon width={16} height={16} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+        <AppearanceSettings />
 
         {/* Data */}
         <section>

@@ -123,7 +123,7 @@ export function TaskSubtasks({
                 onClick={() => void toggleSubtask(subtask)}
                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
                   subtask.completed
-                    ? 'border-accent bg-accent text-white'
+                    ? 'border-accent bg-accent text-on-accent'
                     : 'border-line-strong bg-surface hover:border-accent'
                 }`}
               >

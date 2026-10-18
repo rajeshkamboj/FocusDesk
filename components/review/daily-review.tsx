@@ -91,7 +91,7 @@ export function DailyReview({ date, onDateChange }: { date: ISODate; onDateChang
             <div className="mt-3 flex items-start gap-3">
               <div
                 className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                  priority.completed ? 'border-accent bg-accent text-white' : 'border-line-strong'
+                  priority.completed ? 'border-accent bg-accent text-on-accent' : 'border-line-strong'
                 }`}
               >
                 {priority.completed ? <IconCheck width={12} height={12} /> : null}

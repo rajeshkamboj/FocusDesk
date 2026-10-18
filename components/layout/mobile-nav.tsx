@@ -30,7 +30,7 @@ export function MobileNav() {
             <div className="mb-2 flex items-center justify-between px-5">
               <div className="flex items-center gap-2.5">
                 <BrandMark size={26} />
-                <span className="text-sm font-semibold text-ink">Pace</span>
+                <span className="text-sm font-semibold text-ink">Focus Desk</span>
               </div>
               <button className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-2" aria-label="Close" onClick={() => setMoreOpen(false)}>
                 <IconX width={18} height={18} />
@@ -68,7 +68,7 @@ export function MobileNav() {
                 <span className={`relative ${active ? 'text-accent' : 'text-ink-3'}`}>
                   <Icon width={22} height={22} />
                   {count > 0 ? (
-                    <span className="absolute -right-2 -top-1 rounded-full bg-accent px-1 text-[9px] font-bold leading-3.5 text-white">
+                    <span className="absolute -right-2 -top-1 rounded-full bg-accent px-1 text-[9px] font-bold leading-3.5 text-on-accent">
                       {count > 9 ? '9+' : count}
                     </span>
                   ) : null}
@@ -83,7 +83,7 @@ export function MobileNav() {
             aria-label="Quick capture"
             className="flex w-14 flex-col items-center"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-pop">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop">
               <IconPlus width={20} height={20} />
             </span>
           </button>

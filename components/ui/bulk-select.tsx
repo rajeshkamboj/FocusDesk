@@ -92,7 +92,7 @@ export function SelectionCheckbox({
       onClick={onChange}
       className={`flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
         checked
-          ? 'border-accent bg-accent text-white'
+          ? 'border-accent bg-accent text-on-accent'
           : indeterminate
             ? 'border-accent bg-accent-soft text-accent'
             : 'border-line-strong bg-surface hover:border-accent'

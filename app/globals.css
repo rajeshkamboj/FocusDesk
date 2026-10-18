@@ -4,35 +4,9 @@
 /* Design tokens                                                       */
 /* ------------------------------------------------------------------ */
 
-:root {
-  color-scheme: light;
-
-  --background: #f8f7f2;
-  --surface: #ffffff;
-  --surface-2: #efefea;
-  --surface-3: #e7e7e1;
-  --line: #e3e3dc;
-  --line-strong: #cfcfc6;
-
-  --ink: #1b1c18;
-  --ink-2: #55574e;
-  --ink-3: #72756a;
-
-  --accent: #1e6b52;
-  --accent-hover: #175741;
-  --accent-soft: #e2efe9;
-  --accent-ink: #144837;
-
-  --danger: #a63d2e;
-  --danger-soft: #f6e8e3;
-  --warning: #8d6a1d;
-  --warning-soft: #f4ecd9;
-
-  --shadow-card: 0 1px 2px rgba(27, 28, 24, 0.04), 0 1px 3px rgba(27, 28, 24, 0.03);
-  --shadow-pop: 0 8px 24px rgba(27, 28, 24, 0.1), 0 2px 6px rgba(27, 28, 24, 0.06);
-}
-
-[data-theme="dark"] {
+:root,
+[data-theme="dark"],
+[data-theme="pixldot"] {
   color-scheme: dark;
 
   --background: #151613;
@@ -46,6 +20,9 @@
   --ink-2: #a9aa9f;
   --ink-3: #96998b;
 
+  --on-accent: #ffffff;
+  --switch-off-thumb: #ffffff;
+  --focus-ring: #4fae8d;
   --accent: #4fae8d;
   --accent-hover: #63bfa0;
   --accent-soft: #1d3b31;
@@ -60,6 +37,100 @@
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Logo-2x.png: royal blue #3757f5 and coral #e87552.
+ * Keep status tokens unchanged. Lighter blue ink makes text/focus accessible;
+ * the exact royal blue is reserved for filled controls with white labels.
+ */
+[data-theme="pixldot"] {
+  --background: #131620;
+  --surface: #1a1e2b;
+  --surface-2: #222838;
+  --surface-3: #2c3346;
+  --line: #30384c;
+  --line-strong: #4b5875;
+
+  --ink: #eef0f8;
+  --ink-2: #b2bbd0;
+  --ink-3: #98a4bd;
+
+  --focus-ring: #a9baff;
+  --accent-text: #a9baff;
+  --accent-text-hover: #c6d0ff;
+  --accent: #3757f5;
+  --accent-hover: #4563fa;
+  --accent-soft: #232f60;
+  --accent-ink: #a9baff;
+  --highlight: #e87552;
+}
+
+/* A quiet coral detail, rather than recolouring semantic warning/error states. */
+[data-theme="pixldot"] aside footer {
+  border-top-color: color-mix(in srgb, var(--highlight) 35%, var(--line));
+}
+
+/* Additional themes extend the same semantic tokens used by every screen. */
+[data-theme="light"],
+[data-theme="warm-paper"] {
+  color-scheme: light;
+  --switch-off-thumb: var(--ink-3);
+  --background: #f7f8f6;
+  --surface: #ffffff;
+  --surface-2: #eef1ed;
+  --surface-3: #e3e8e1;
+  --line: #d8dfd6;
+  --line-strong: #a5b0a1;
+  --ink: #1b211d;
+  --ink-2: #4d5b50;
+  --ink-3: #586657;
+  --accent: #1e6b52;
+  --accent-hover: #175741;
+  --accent-soft: #e0eee6;
+  --accent-ink: #144837;
+  --focus-ring: #1e6b52;
+  --danger: #993722;
+  --danger-soft: #fbe9e4;
+  --warning: #76520f;
+  --warning-soft: #fcf0cf;
+  --shadow-card: 0 1px 3px #1820190d;
+  --shadow-pop: 0 12px 32px #18201926;
+}
+
+[data-theme="midnight"] {
+  color-scheme: dark;
+  --background: #090b0e;
+  --surface: #13161b;
+  --surface-2: #1d2229;
+  --surface-3: #282f38;
+  --line: #303842;
+  --line-strong: #515f70;
+  --ink: #f1f3f5;
+  --ink-2: #b5bfcc;
+  --ink-3: #a0acbb;
+  --accent: #a8b9cd;
+  --accent-hover: #c4cfdd;
+  --accent-soft: #273444;
+  --accent-ink: #d1dfef;
+  --focus-ring: #c4cfdd;
+  --on-accent: #090b0e;
+}
+
+[data-theme="warm-paper"] {
+  --background: #f7f2e7;
+  --surface: #fffcf5;
+  --surface-2: #efe7d7;
+  --surface-3: #e5d9c4;
+  --line: #ded1bb;
+  --line-strong: #b8a17b;
+  --ink: #302a21;
+  --ink-2: #63533e;
+  --ink-3: #6a5941;
+  --accent: #855216;
+  --accent-hover: #6b3e0c;
+  --accent-soft: #eee0c5;
+  --accent-ink: #643b0e;
+  --focus-ring: #855216;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -72,6 +143,8 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
 
+  --color-switch-off-thumb: var(--switch-off-thumb);
+  --color-on-accent: var(--on-accent);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
@@ -87,6 +160,16 @@
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Text/icons need a lighter blue than filled controls on the dark surfaces. */
+.text-accent,
+.hover\:text-accent:hover {
+  color: var(--accent-text, var(--accent));
+}
+
+.hover\:text-accent-hover:hover {
+  color: var(--accent-text-hover, var(--accent-hover));
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,7 +195,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

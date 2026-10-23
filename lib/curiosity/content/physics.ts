@@ -190,4 +190,88 @@ export const physicsConcepts: PhysicsConcept[] = [
     question:
       'A cyclone and a draining sink both rotate — why does the Earth’s rotation dominate one and not the other?',
   },
+  {
+    id: 'refraction-mirage',
+    topic: 'Why hot roads look like water',
+    simple:
+      'Light bends when it passes from one medium into another because its speed changes. Near a hot surface, air is warmer and less dense, so light travelling almost parallel to the road bends upward and reaches your eye as if it came from the sky — a mirage.',
+    deeper:
+      'The refractive index of air falls as it warms, so light curves gradually rather than sharply. The same effect makes a distant object appear to float or shimmer, and in the opposite direction it makes the horizon compress. A mirage is not a reflection off the road: there is no water, only a gradient in the air.',
+    equation: 'n₁ sin θ₁ = n₂ sin θ₂ (Snell’s law); in a continuous gradient the ray curves toward the denser, cooler air.',
+    connection:
+      'The same bending lifts the image of the sun above the horizon at sunset, so the sun is already geometrically set when you can still see it.',
+    surprising:
+      'Because light curves in a density gradient, a straight pole can appear bent in water and a star can appear displaced — the two effects are the same physics.',
+    question: 'Why do mirages appear on a hot road but not on a cool one?',
+  },
+  {
+    id: 'resonance-swing',
+    topic: 'Why a small push can build a big swing',
+    simple:
+      'Every object has natural frequencies at which it prefers to oscillate. Push it repeatedly at one of those frequencies and each push adds energy, so the amplitude grows. That is resonance.',
+    deeper:
+      'A driven oscillator reaches a steady amplitude set by how much damping it has and how close the driving frequency is to its natural frequency. Near resonance the response is large; damping limits it. A swing, a tuning fork and a bridge all follow the same equation, which is why the same word describes a playground and a structural failure.',
+    equation: 'ω₀ = √(k/m) for a mass on a spring; resonance occurs as driving ω → ω₀.',
+    connection:
+      'A microwave oven drives water molecules at a frequency they absorb strongly, and noise-cancelling headphones drive a speaker at the frequency of the ambient sound, which is resonance used deliberately.',
+    surprising:
+      'A bridge that collapses in wind is not necessarily a simple resonance: the Tacoma Narrows failure was aeroelastic flutter, a related but distinct effect, and calling it “resonance” is a common simplification.',
+    question: 'Why do soldiers break step when crossing a bridge, and what does damping do to the risk?',
+  },
+  {
+    id: 'entropy-second-law',
+    topic: 'Why heat flows one way',
+    simple:
+      'Heat moves from hot to cold on its own, never the reverse, because there are far more ways for energy to be spread out than concentrated. Entropy measures that spreading, and the second law says it does not decrease in an isolated system.',
+    deeper:
+      'A cold object and a hot one in contact exchange energy in both directions at the molecular level; the net flow is toward the colder object because more arrangements correspond to a middling temperature than to a large difference. Entropy is not “disorder” in a vague sense: it counts accessible microstates. Local decreases, such as a fridge or a growing plant, are paid for by an increase elsewhere.',
+    equation: 'ΔS = Q_rev / T for a reversible heat transfer; ΔS_total ≥ 0 for an isolated system.',
+    connection:
+      'A refrigerator does not destroy heat; it moves it from the inside to the room, and the compressor’s work makes the room slightly warmer overall.',
+    surprising:
+      'The second law is statistical, not a prohibition: a small system can briefly move heat the “wrong” way, and fluctuation theorems describe exactly how rare that is.',
+    question: 'Where does the entropy decrease inside a fridge go?',
+  },
+  {
+    id: 'angular-momentum-spin',
+    topic: 'Why a spinning skater speeds up',
+    simple:
+      'A spinning skater who pulls her arms in spins faster. Angular momentum depends on both how fast something rotates and how its mass is distributed, so reducing the radius while keeping the same angular momentum raises the rate.',
+    deeper:
+      'Angular momentum L = Iω, where I is the moment of inertia about the axis. With no external torque, L stays constant. Pulling mass toward the axis lowers I and therefore raises ω. The kinetic energy increases, and the extra energy comes from the work the skater does pulling her arms inward against the outward tendency.',
+    equation: 'L = Iω; I = Σ mᵢrᵢ²; with no net torque, I₁ω₁ = I₂ω₂.',
+    connection:
+      'A figure skater, a divers’ tuck and a collapsing star that spins up into a pulsar are all the same conservation law at different scales.',
+    surprising:
+      'The skater’s rotational energy goes up when she pulls her arms in, even though nothing external pushed her — the work is done by her own muscles.',
+    question: 'If angular momentum is conserved, where does the extra rotational energy come from?',
+  },
+  {
+    id: 'interference-noise-cancelling',
+    topic: 'How noise-cancelling headphones subtract sound',
+    simple:
+      'Sound is a pressure wave, so two waves can add or cancel. Noise-cancelling headphones listen to the incoming noise and produce an inverted copy, so the peaks meet troughs and the pressure variation is much smaller at your ear.',
+    deeper:
+      'Cancellation is only good where the two waves line up in time and shape. A microphone outside the ear hears the noise slightly before you do, and the electronics invert and delay it by the right amount. Low, steady sounds such as engine drone are easy to predict; sudden or high-frequency sounds are much harder, which is why speech still gets through.',
+    equation: 'y = A sin(ωt) + A sin(ωt + π) = 0 for perfectly matched antiphase waves.',
+    connection:
+      'The same principle is used in active noise control for aircraft cabins and industrial ducts, where a few loud low-frequency sources dominate the noise.',
+    surprising:
+      'Cancellation can be worse than useless at the wrong frequency: a badly timed inverted wave can reinforce part of the noise instead of removing it.',
+    question: 'Why do noise-cancelling headphones work well on an aeroplane but poorly on a busy street?',
+  },
+  {
+    id: 'photoelectric-effect',
+    topic: 'Why light can knock electrons out of a metal',
+    simple:
+      'When light of a high enough frequency hits a metal, it can eject electrons. Below that frequency, no electrons come out however bright the light is. That result could not be explained by light behaving only as a wave.',
+    deeper:
+      'Einstein’s 1905 explanation treated light as packets of energy. A single photon transfers its energy to one electron; if that energy exceeds the metal’s work function, the electron escapes with the difference. Brighter light means more photons, so more electrons, but not faster ones. The maximum kinetic energy depends on frequency, not intensity.',
+    equation: 'E_k(max) = hf − φ, where φ is the work function.',
+    connection:
+      'Solar cells and digital camera sensors both rely on photons freeing charge carriers, and light meters in old cameras used the photoelectric effect directly.',
+    surprising:
+      'The effect was observed before Einstein explained it, and it was for this work — not relativity — that he was awarded the 1921 Nobel Prize in Physics.',
+    question: 'Why does doubling the brightness not double the speed of the ejected electrons?',
+  },
 ];

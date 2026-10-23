@@ -198,6 +198,12 @@ export interface MythCharacter {
   name: string;
   /** The tradition or body of literature the character belongs to. */
   tradition: string;
+  /** Alternate names the tradition itself uses; used for deduplication. */
+  aliases?: string[];
+  /** Wikidata entity id, when the character has a canonically resolvable one. */
+  wikidataId?: string;
+  /** A page a reader can check the account against (Wikipedia or a primary text). */
+  sourceUrl?: string;
   /** Where the character appears — scriptures, epics, texts, oral traditions. */
   sources: string[];
   relationships: { with: string; note: string }[];
@@ -225,6 +231,18 @@ export interface MythCharacter {
 export interface ScienceConcept {
   id: string;
   topic: string;
+  /** Alternate names, so a concept cannot return under a different title. */
+  aliases?: string[];
+  /** Wikidata QID (or other stable identifier) for cross-title deduplication. */
+  wikidataId?: string;
+  /**
+   * `curated` — written for this app. `wikipedia` — assembled from a Wikipedia
+   * article's own sentences, linked and attributed. Discovered content is never
+   * presented as if an editor had written it.
+   */
+  origin?: 'curated' | 'wikipedia';
+  /** Where every factual sentence in this card can be checked. */
+  source?: CuriositySourceRef;
   simple: string;
   deeper?: string;
   equation?: string;
@@ -297,6 +315,7 @@ export interface BookRecommendation extends BookCandidate {
 
 /** Every id that went into a snapshot — the audit trail behind a day. */
 export type CuriosityContentKey =
+  | 'quote'
   | 'ai-world'
   | 'developer-radar'
   | 'one-thing'
@@ -361,6 +380,15 @@ export interface CuriosityPublicationMeta {
 
 export type CuriosityBriefing = {
   date: string;
+  /**
+   * A Thought for Today, when a published snapshot carries one.
+   *
+   * Optional on purpose: the quote used to be selected in the browser and there
+   * is nothing wrong with a briefing that omits it. When present, the publisher
+   * chose it through the same anti-repetition ledger as the other cards, so the
+   * same line cannot come back the next week under a different date.
+   */
+  quote?: { text: string; author: string };
   aiWorld: CuriosityNewsItem[];
   developerRadar: DeveloperDiscovery[];
   book: BookRecommendation;

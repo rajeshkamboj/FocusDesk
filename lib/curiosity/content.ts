@@ -29,7 +29,7 @@ import { radarFallbackShelf } from './content/radar-fallback';
 /* Today in History — a curated corpus for the dates it covers.       */
 /* ------------------------------------------------------------------ */
 
-const historyEvents: HistoryEvent[] = [
+export const historyEvents: HistoryEvent[] = [
   {
     date: 'October 5',
     year: 1923,
@@ -127,7 +127,7 @@ const historyEvents: HistoryEvent[] = [
 /* 3. Brain Sharpener                                                 */
 /* ------------------------------------------------------------------ */
 
-const brainSharpeners: BrainSharpener[] = [
+export const brainSharpeners: BrainSharpener[] = [
   {
     id: 'math-crossing-trains',
     subject: 'mathematics',
@@ -308,6 +308,22 @@ export function curatedHistoryArchive(date: string): HistoryEvent {
   return { ...event, forThisDate: false, origin: 'curated' };
 }
 
+/**
+ * Curated events that really belong to the requested month and day.
+ *
+ * The published pipeline uses this list, not a single entry, so the selector can
+ * prefer an anniversary the ledger has not shown recently. The Gutenberg entry is
+ * excluded here exactly as it is in `dailyEditorial`: it is an authoring record
+ * whose date is not the date the card would claim, and republishing it under
+ * "Today in History" would be a false statement.
+ */
+export function curatedHistoryMatches(date: string): HistoryEvent[] {
+  const key = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  return historyEvents
+    .filter((event) => event.date === key && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible')
+    .map((event) => ({ ...event, forThisDate: true, origin: 'curated' as const }));
+}
+
 function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolEntry<T> {
   return selectFromPool(category, date).entry as CuriosityPoolEntry<T>;
 }
@@ -352,11 +368,7 @@ export function dailyEditorial(date: string): Pick<
     learning: learning.item,
     // A date-matched curated event is a verified statement about today, so it says so;
     // the archive rotation used when nothing is verified carries `forThisDate: false`.
-    history: (() => {
-      const key = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-      const match = historyEvents.find((event) => event.date === key && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible');
-      return match ? { ...match, forThisDate: true, origin: 'curated' as const } : null;
-    })(),
+    history: curatedHistoryMatches(date)[0] ?? null,
     literature: literature.item,
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
     speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],

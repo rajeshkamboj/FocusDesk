@@ -147,6 +147,17 @@ export function MythologySection({ character }: { character: MythCharacter }) {
                   <li key={source} className="break-words text-[11.5px] leading-relaxed text-ink-2">{source}</li>
                 ))}
               </ul>
+              {/* Present only when an entity could be resolved; the card is complete without it. */}
+              {character.sourceUrl ? (
+                <a
+                  href={character.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block text-[11.5px] font-medium text-accent hover:underline"
+                >
+                  Reference article →
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

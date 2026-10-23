@@ -268,13 +268,26 @@ export async function fetchDeveloperRadar(fetchImpl: typeof fetch = fetch, note?
   }
 }
 
-export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<HistoryEvent | null> {
+/**
+ * Wikipedia's selected anniversaries for a date, as *several* candidates.
+ *
+ * The publisher needs alternatives, not one event: if the first anniversary was
+ * already shown in a previous year, the card must move to the next one rather
+ * than repeat it. `fetchHistory` below keeps the old single-result contract for
+ * callers that only need today's headline.
+ */
+export async function fetchHistoryCandidates(
+  date: string,
+  fetchImpl: typeof fetch = fetch,
+  note?: SourceNote,
+  limit = 5,
+): Promise<HistoryEvent[]> {
   const [, month, day] = date.split('-');
   const monthNumber = Number(month);
   const dayNumber = Number(day);
   if (!Number.isInteger(monthNumber) || !Number.isInteger(dayNumber) || monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) {
     if (note) note.text = `${date} is not a date the anniversaries API can be asked about`;
-    return null;
+    return [];
   }
   try {
     // Wikipedia's selected anniversaries are editorially curated, not random events.
@@ -286,19 +299,19 @@ export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch
     });
     if (!response.ok) {
       if (note) note.text = `en.wikipedia.org returned ${response.status} for the ${monthNumber}/${dayNumber} anniversaries`;
-      return null;
+      return [];
     }
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
       if (note) note.text = 'en.wikipedia.org answered with a body that was not JSON';
-      return null;
+      return [];
     }
     const selected = (payload as { selected?: unknown })?.selected;
     if (!Array.isArray(selected)) {
       if (note) note.text = 'en.wikipedia.org replied without a `selected` list';
-      return null;
+      return [];
     }
     const yearFloor = -3000;
     const yearCeiling = Number(date.slice(0, 4));
@@ -320,13 +333,13 @@ export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch
     });
     // Stable ordering makes the daily item independent of response ordering.
     events.sort((a, b) => a.year - b.year || a.text.localeCompare(b.text));
-    const event = events[0];
-    if (!event) {
+    if (!events.length) {
       if (note) note.text = `Wikipedia listed no usable selected anniversary for ${monthNumber}/${dayNumber}`;
-      return null;
+      return [];
     }
-    return {
-      date: new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }),
+    const dateLabel = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+    return events.slice(0, Math.max(1, limit)).map((event) => ({
+      date: dateLabel,
       year: event.year,
       title: event.title.replaceAll('_', ' '),
       explanation: event.text,
@@ -341,11 +354,17 @@ export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch
       // be headed "Today in History" without qualification.
       forThisDate: true,
       origin: 'live',
-    };
+    }));
   } catch (error) {
     if (note) note.text = `en.wikipedia.org could not be reached (${error instanceof Error ? error.message : String(error)})`;
-    return null;
+    return [];
   }
+}
+
+/** The first usable anniversary for a date, or `null`. */
+export async function fetchHistory(date: string, fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<HistoryEvent | null> {
+  const events = await fetchHistoryCandidates(date, fetchImpl, note, 1);
+  return events[0] ?? null;
 }
 
 /* ------------------------------------------------------------------ */

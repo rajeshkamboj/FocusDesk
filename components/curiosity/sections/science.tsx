@@ -62,6 +62,22 @@ export function ScienceCard({
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">Think about this</p>
           <p className="mt-1 text-[13px] leading-relaxed text-ink">{concept.question}</p>
         </div>
+
+        {/*
+          Citation, shown only when the card was assembled from a source (a
+          discovered Wikipedia concept). Authored concepts carry no link here and
+          render exactly as before, so this adds a line only where a reader would
+          otherwise have no way to check the claims.
+        */}
+        {concept.source?.url ? (
+          <p className="text-[11px] leading-relaxed text-ink-3">
+            Source:{' '}
+            <a href={concept.source.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              {concept.source.name ?? 'the source article'}
+            </a>
+            {concept.source.attribution ? <span className="mt-0.5 block">{concept.source.attribution}</span> : null}
+          </p>
+        ) : null}
       </div>
     </SectionCard>
   );

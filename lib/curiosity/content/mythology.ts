@@ -584,4 +584,548 @@ export const mythCharacters: MythCharacter[] = [
       'Isis is a portrait of grief with an organising purpose: she loses her husband, and then spends the rest of the myth making a case for her son. The tradition that ran for two thousand years is essentially the story of a woman who will not accept that the matter is closed, and Egypt traced its idea of kingship to her persistence.',
   },
 
+  {
+    id: 'gilgamesh',
+    name: 'Gilgamesh',
+    tradition: 'Mesopotamian — Sumerian and Akkadian epic',
+    aliases: ['Bilgames', 'Gilgamos'],
+    sources: [
+      'The Standard Babylonian Epic of Gilgamesh (twelve tablets, first millennium BCE)',
+      'Five earlier Sumerian poems about Bilgames, including “Gilgamesh and Huwawa”',
+      'Hittite and Hurrian fragments that preserve variant episodes',
+      'The Sumerian King List, which lists a Gilgamesh of Uruk',
+    ],
+    relationships: [
+      { with: 'Enkidu', note: 'The companion made to match him; his grief at Enkidu’s death drives the second half.' },
+      { with: 'Humbaba', note: 'Guardian of the Cedar Forest, killed by the pair against Enkidu’s warning.' },
+      { with: 'Utnapishtim', note: 'The flood survivor who tells him that death cannot be argued away.' },
+      { with: 'Ishtar', note: 'Her proposal is refused; the Bull of Heaven follows, and Enkidu dies after it.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Ninsun', note: 'A goddess; she interprets his dreams.' },
+      { relation: 'Father', name: 'Lugalbanda', note: 'Named as a king and, in some traditions, a divine hero.' },
+      { relation: 'Companion', name: 'Enkidu', note: 'Created from clay to balance him; not kin, but the epic’s central bond.' },
+      { relation: 'Ancestor', name: 'Utnapishtim', note: 'The flood survivor, called his forefather in the epic — which is why Gilgamesh seeks him out.' },
+    ],
+    timeline: [
+      { when: 'As king', event: 'Rules Uruk so harshly that the gods create Enkidu to oppose him.' },
+      { when: 'After the wrestling match', event: 'The two become inseparable and leave for the Cedar Forest.' },
+      { when: 'The Cedar Forest', event: 'They kill Humbaba; Ishtar’s proposal is refused and the Bull of Heaven is slain.' },
+      { when: 'Enkidu’s death', event: 'Enkidu dies; Gilgamesh refuses to accept that the same end awaits him.' },
+      { when: 'The journey', event: 'Crosses the Waters of Death to ask Utnapishtim how to escape mortality.' },
+      { when: 'Return', event: 'Loses the plant of rejuvenation to a serpent and comes home with the walls of Uruk.' },
+    ],
+    story:
+      'Gilgamesh is two parts divine and one part human, and the epic opens with him exhausting his own city. The gods answer with Enkidu, a wild man who becomes his equal; the friendship turns a tyrant into a king. Together they kill Humbaba and insult Ishtar, and the gods take Enkidu’s life as the price. Gilgamesh then walks to the edge of the world to ask the one man who survived the flood how death can be escaped, learns that it cannot, and returns to look at the walls he built.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Sumerian poems are older than the epic and were not originally one story: they cover separate episodes, and the epic is what stitched them into a life.' },
+      { layer: 'traditional', text: 'Tablet XII is a later addition that retells a Sumerian tale of the underworld and does not follow from the end of Tablet XI; scribes copied it as part of the series anyway.' },
+      { layer: 'analysis', text: 'Assyriologists read the epic’s turn from heroic conquest to the refusal of death as a deliberate argument about what a king can and cannot achieve.' },
+      { layer: 'inference', text: 'A historical ruler of Uruk named Gilgamesh may lie behind the tradition, but the king list that names him is a later composition and cannot date him.' },
+    ],
+    variants: [
+      { tradition: 'Sumerian poems', difference: 'Bilgames is a mortal hero in discrete adventures; the sustained meditation on mortality belongs to the Akkadian epic.' },
+      { tradition: 'Standard Babylonian epic', difference: 'The flood is told by Utnapishtim in the first person, in a version closely related to the flood narrative in Atrahasis.' },
+    ],
+    analysis:
+      'The epic’s subject is not the hero’s strength but his discovery that strength is not a route to permanence. It ends not with immortality but with a wall, a city and a text — the things a person can actually leave behind.',
+  },
+  {
+    id: 'inanna',
+    name: 'Inanna',
+    tradition: 'Sumerian and Akkadian — Mesopotamia',
+    aliases: ['Ishtar', 'Ninegala', 'Queen of Heaven'],
+    sources: [
+      '“The Descent of Inanna”, Sumerian cuneiform poem',
+      'The Akkadian recension, “The Descent of Ishtar to the Netherworld”',
+      'Hymns to Inanna, including the exaltation “Inanna B”',
+      '“Inanna and the God of Wisdom”, which narrates the transfer of the me',
+    ],
+    relationships: [
+      { with: 'Ereshkigal', note: 'Her sister and the queen of the underworld, who strips and kills her.' },
+      { with: 'Dumuzi', note: 'Her lover, given to the underworld in her place after her return.' },
+      { with: 'Enki', note: 'The god of wisdom who gives her the me after losing a drinking contest.' },
+      { with: 'Ninshubur', note: 'Her attendant, who raises the alarm when she does not return.' },
+    ],
+    family: [
+      { relation: 'Father', name: 'Nanna', note: 'The moon god, in the Sumerian tradition.' },
+      { relation: 'Sister', name: 'Ereshkigal', note: 'Queen of the underworld; their opposition is the axis of the descent poem.' },
+      { relation: 'Lover', name: 'Dumuzi', note: 'The shepherd; his yearly mourning is tied to the seasonal cycle.' },
+      { relation: 'Twin/associate', name: 'Utu', note: 'The sun god, her brother in the Sumerian pantheon.' },
+    ],
+    timeline: [
+      { when: 'As queen', event: 'Holds the me — the divine powers of civilisation — in Uruk after tricking Enki.' },
+      { when: 'Before the descent', event: 'Instructs Ninshubur to seek help if she has not returned in three days.' },
+      { when: 'The descent', event: 'Passes seven gates, losing one ornament at each, and is killed by Ereshkigal.' },
+      { when: 'The return', event: 'Revived with the food and water of life; ascends with the demons who demand a substitute.' },
+      { when: 'The substitute', event: 'Finds Dumuzi feasting, and sends him down in her place.' },
+    ],
+    story:
+      'Inanna is the Sumerian goddess of love, war and the morning and evening star, and the poems about her do not soften her. She takes the powers of civilisation from Enki by a trick, and then decides to go to the underworld, perhaps to take it too. At each of seven gates she surrenders an ornament, and at the last she is dead. Her attendant gets the gods to intervene, and she returns — but the underworld takes a substitute, and the poem lets her choose the lover who is feasting while she was gone.',
+    lesserKnown: [
+      { layer: 'textual', text: 'In the Sumerian poem she is killed and hung on a hook; her rescue involves two figures created from dirt, who sympathise with Ereshkigal’s pain rather than attacking her.' },
+      { layer: 'traditional', text: 'The mourning of Dumuzi, later Tammuz, was observed across Mesopotamia for centuries; the Hebrew Bible refers to women weeping for Tammuz.' },
+      { layer: 'analysis', text: 'The descent is often read as a ritual map rather than a biography: the stripping at the gates is the poem’s most-cited image, and its point is the surrender of status.' },
+      { layer: 'inference', text: 'The identification of Inanna with the Greek Aphrodite is a later cultural route through Ishtar; the traditions are related by contact, not direct inheritance of the same text.' },
+    ],
+    variants: [
+      { tradition: 'Sumerian', difference: 'Inanna, Ninshubur and Dumuzi are named; the poem ends with Dumuzi’s sister offering to share his time below.' },
+      { tradition: 'Akkadian', difference: 'Ishtar’s descent is shorter, and the ending is damaged; later Babylonian tradition develops Tammuz’s cult more fully.' },
+    ],
+    analysis:
+      'Inanna is a portrait of power that does not check itself: she takes the me, walks into the one place her authority does not run, and comes back having paid with someone else’s life. The poems neither condemn nor excuse her, which is part of why she remains a productive figure for modern readings of power.',
+  },
+  {
+    id: 'odin',
+    name: 'Odin',
+    tradition: 'Norse — Eddic and skaldic poetry',
+    aliases: ['Óðinn', 'Allfather', 'Grimnir', 'Wanderer'],
+    sources: [
+      'The Poetic Edda, especially Hávamál, Völuspá and Grímnismál',
+      'Snorri Sturluson’s Prose Edda (Gylfaginning, Skáldskaparmál)',
+      'Skaldic poems such as Ynglingatal and Hákonarmál',
+      'Runic and archaeological evidence, read cautiously',
+    ],
+    relationships: [
+      { with: 'Loki', note: 'Blood-brother by oath; the Eddas keep their alliance and its collapse in view.' },
+      { with: 'Thor', note: 'A son, and the opposite temperament: the hammer against the spear.' },
+      { with: 'Frigg', note: 'His wife, whose knowledge is often placed alongside his.' },
+      { with: 'Mímir', note: 'Whose well holds the wisdom Odin trades an eye for.' },
+      { with: 'Fenrir', note: 'The wolf he binds, and who kills him at Ragnarök.' },
+    ],
+    family: [
+      { relation: 'Father', name: 'Borr', note: 'Son of Búri, in Snorri’s account.' },
+      { relation: 'Mother', name: 'Bestla', note: 'Daughter of the giant Bölthorn.' },
+      { relation: 'Son', name: 'Thor', note: 'With Jörð, the earth personified.' },
+      { relation: 'Son', name: 'Baldr', note: 'With Frigg; his death sets Ragnarök in motion.' },
+      { relation: 'Son', name: 'Víðarr', note: 'Who avenges his father against Fenrir.' },
+    ],
+    timeline: [
+      { when: 'Before the world', event: 'With Vili and Vé, kills Ymir and shapes the world from the body.' },
+      { when: 'The well', event: 'Gives an eye to Mímir for wisdom.' },
+      { when: 'On Yggdrasil', event: 'Hangs nine nights, wounded by a spear, to learn the runes — as Hávamál reports it.' },
+      { when: 'The long wanderings', event: 'Moves through the world in disguise, testing hosts; Grímnismál is one such visit.' },
+      { when: 'Ragnarök', event: 'Fights Fenrir and is swallowed; Víðarr avenges him.' },
+    ],
+    story:
+      'Odin is the Norse god of wisdom, poetry, war and the dead, and every account of him is an account of what he is willing to give up. He trades an eye for knowledge, hangs himself on the world tree for the runes, and keeps two ravens who fly out over the world each day. He is also a god of the slain, who chooses which warriors die, and the Eddas never resolve that into comfort. At Ragnarök he fights the wolf he bound and loses.',
+    lesserKnown: [
+      { layer: 'textual', text: 'Hávamál has Odin speak in the first person about the hanging: “I know that I hung on a windy tree nine long nights.” It does not call the tree Yggdrasil — that identification comes from elsewhere.' },
+      { layer: 'traditional', text: 'The disguise names are many — Grímnir, Gangleri, Vakr — and the poems use the wandering stranger as a way to test hospitality.' },
+      { layer: 'analysis', text: 'Scholars have long compared the self-sacrifice on the tree with shamanic initiation and with Christian crucifixion imagery; the comparison is contested and the Eddas do not make it themselves.' },
+      { layer: 'inference', text: 'Snorri’s Prose Edda is a thirteenth-century Christian author’s systematic account, and where it disagrees with the older poems it is usually the poems that preserve the earlier tradition.' },
+    ],
+    variants: [
+      { tradition: 'Poetic Edda', difference: 'Odin is a speaker and a presence; the poems are sparse on narrative and heavy on counsel and cosmology.' },
+      { tradition: 'Snorri’s Prose Edda', difference: 'Supplies a continuous narrative and a euhemerised frame in Ynglinga saga, where Odin is a human chieftain later worshipped.' },
+    ],
+    analysis:
+      'Odin is the tradition’s figure for knowledge that costs something and does not make you safe. The eye, the hanging and the ravens all say the same thing: wisdom in these poems is accumulated by loss, and it does not avert the ending it predicts.',
+  },
+  {
+    id: 'persephone',
+    name: 'Persephone',
+    tradition: 'Greek — Homeric Hymns and Orphic tradition',
+    aliases: ['Kore', 'Proserpina'],
+    sources: [
+      'The Homeric Hymn to Demeter (seventh–sixth century BCE)',
+      'Hesiod’s Theogony, for her place in the genealogy',
+      'Orphic poems and gold tablets, which tell a different story',
+      'Later Greek and Roman retellings, including Ovid’s Metamorphoses',
+    ],
+    relationships: [
+      { with: 'Demeter', note: 'Her mother, whose grief makes the earth barren until her return is negotiated.' },
+      { with: 'Hades', note: 'Her husband and the reason she returns to the underworld each year.' },
+      { with: 'Zeus', note: 'Her father, who permits the abduction and then negotiates the compromise.' },
+      { with: 'Hecate', note: 'Witnesses the abduction and later accompanies her.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Demeter', note: 'Goddess of the harvest; the hymn is as much hers as Persephone’s.' },
+      { relation: 'Father', name: 'Zeus', note: 'Consents to the marriage with Hades without telling Demeter.' },
+      { relation: 'Husband', name: 'Hades', note: 'God of the dead; the pomegranate seeds bind her to his realm.' },
+      { relation: 'Siblings', name: 'Athena, Apollo, Artemis and others', note: 'Zeus’s children by other mothers; the Olympian family is a half-sibling network rather than a household.' },
+      { relation: 'Son (Orphic)', name: 'Dionysus Zagreus', note: 'Only in the Orphic tradition, which gives her a different story altogether.' },
+    ],
+    timeline: [
+      { when: 'Childhood', event: 'Gathers flowers in a meadow with the Oceanids when the earth opens.' },
+      { when: 'The abduction', event: 'Hades carries her off in his chariot; only Hecate and Helios witness it.' },
+      { when: 'Demeter’s search', event: 'Demeter withholds the harvest until Zeus intervenes.' },
+      { when: 'The pomegranate', event: 'Having eaten seeds in the underworld, she must return there for part of each year.' },
+      { when: 'The compromise', event: 'Divides her time between the upper world and the underworld; the Eleusinian Mysteries grow from the story.' },
+    ],
+    story:
+      'Persephone is gathering flowers when the ground opens and Hades takes her. Her mother Demeter searches the world, refuses to let anything grow, and forces Zeus to negotiate. Persephone comes back — but she has eaten pomegranate seeds in the underworld, and so she must go down again. The hymn makes her return the reason for the harvest, and her double dwelling the shape of the year.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Homeric Hymn does not say she was unwilling to eat: in some lines she takes the seed without being told what it does. The later Roman telling makes the eating more clearly a trick.' },
+      { layer: 'traditional', text: 'She is worshipped as Kore (“the girl”) and as Persephone; the two names mark her before and after the marriage, though the texts do not keep them strictly apart.' },
+      { layer: 'analysis', text: 'The Eleusinian Mysteries, among the most important cults of the Greek world, were built around this story; what happened inside them was kept secret and is still unknown.' },
+      { layer: 'inference', text: 'Reading the myth as an agricultural allegory is ancient, but reading it only that way is modern; the hymn is also about marriage, kinship and the price of a compromise between gods.' },
+    ],
+    variants: [
+      { tradition: 'Homeric Hymn', difference: 'Persephone spends a third of the year below and returns to her mother for the rest.' },
+      { tradition: 'Orphic tradition', difference: 'A different genealogy: Persephone is the mother of Dionysus Zagreus, and the story is one of cosmic succession rather than seasons.' },
+    ],
+    analysis:
+      'Persephone is the rare figure who belongs fully to neither world, and the hymn is careful about who arranged that. She is not simply rescued and not simply lost; the compromise is the point, and the Eleusinian cult built its promise of a better afterlife on it.',
+  },
+  {
+    id: 'heracles',
+    name: 'Heracles',
+    tradition: 'Greek — heroic myth and cult',
+    aliases: ['Hercules', 'Alcides'],
+    sources: [
+      'Apollodorus, Bibliotheca (the labours in sequence)',
+      'Homer, Iliad and Odyssey, which mention him without the full cycle',
+      'Euripides, Heracles; Sophocles, Trachiniae',
+      'Theocritus, Idyll 24; later Roman accounts, including Ovid',
+    ],
+    relationships: [
+      { with: 'Hera', note: 'Her stepmother and persistent enemy; her name is in his.' },
+      { with: 'Eurystheus', note: 'The king who sets the labours and hides when the results arrive.' },
+      { with: 'Iolaus', note: 'Nephew and charioteer, who helps him burn the Hydra’s necks.' },
+      { with: 'Deianira', note: 'His wife, whose poisoned shirt ends his life.' },
+      { with: 'Athena', note: 'Patron and helper at critical moments, including his apotheosis.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Alcmene', note: 'Mortal; Zeus fathers Heracles by disguising himself as Amphitryon.' },
+      { relation: 'Father (mortal)', name: 'Amphitryon', note: 'Raised him as his own son.' },
+      { relation: 'Father (divine)', name: 'Zeus', note: 'The source of Hera’s hostility.' },
+      { relation: 'Wife', name: 'Megara', note: 'Whom he kills in a madness sent by Hera.' },
+      { relation: 'Wife', name: 'Deianira', note: 'Whose attempt to keep his love kills him.' },
+    ],
+    timeline: [
+      { when: 'Infancy', event: 'Strangles two serpents sent by Hera in his cradle.' },
+      { when: 'Youth', event: 'Kills his music teacher in a rage, and is sent to tend cattle.' },
+      { when: 'The madness', event: 'Kills his own children; the labours are imposed as expiation.' },
+      { when: 'The twelve labours', event: 'Lion, Hydra, boar, hind, birds, stables, bull, mares, belt, cattle, apples, Cerberus.' },
+      { when: 'Death', event: 'The poisoned shirt; he builds his own pyre on Mount Oeta.' },
+      { when: 'Apotheosis', event: 'Becomes a god; Hera is reconciled, and he marries Hebe.' },
+    ],
+    story:
+      'Heracles is the son of Zeus and a mortal woman, and Hera’s hatred begins before he is born. He grows up stronger than anyone and less able to control it: he kills his music teacher and, in a madness, his own children. The twelve labours are set as a penance, and each one is a monster or a task that no ordinary person could survive. He completes them, loses his life to a poisoned shirt, and is taken up as a god.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The number twelve is later than the earliest lists: vase paintings show a varying set, and the canonical twelve are fixed in Roman-era handbooks such as Apollodorus.' },
+      { layer: 'traditional', text: 'The labours were local cult stories from different places — Nemea, Lerna, Arcadia — gathered into one biography over centuries.' },
+      { layer: 'analysis', text: 'The madness and the killing of his family are not a footnote: the labours only make sense as expiation, which is why the myth is about unmanageable strength rather than simple heroism.' },
+      { layer: 'inference', text: 'The Stoics and later moralists read Heracles as a model of endurance, a reading the tragedies do not share; they show the cost, not only the glory.' },
+    ],
+    variants: [
+      { tradition: 'Greek', difference: 'A hero who becomes a god, with a cult and a festival, and a death that is really a translation.' },
+      { tradition: 'Roman', difference: 'Hercules is moralised for Roman audiences and used as a figure of strength in service of order, with the labours read as civilising work.' },
+    ],
+    analysis:
+      'Heracles is the strongest person in the story and the least free. Every major choice is made for him — the madness, the labours, the shirt — and what the myths admire is not his judgement but his capacity to keep going after it has been taken away.',
+  },
+  {
+    id: 'quetzalcoatl',
+    name: 'Quetzalcoatl',
+    tradition: 'Mesoamerican — Nahua and Maya traditions',
+    aliases: ['Kukulkan', 'Gucumatz', 'Feathered Serpent', 'Ehecatl'],
+    sources: [
+      'The Florentine Codex, compiled by Sahagún with Nahua informants',
+      'The Popol Vuh, where the equivalent is Gucumatz',
+      'Anales de Cuauhtitlan and other colonial-era Nahua histories',
+      'Pre-Columbian iconography, which is older than any surviving text',
+    ],
+    relationships: [
+      { with: 'Tezcatlipoca', note: 'A rival and counterpart; their opposition structures several creation accounts.' },
+      { with: 'Xolotl', note: 'Twin or companion, associated with the evening star and with the underworld journey.' },
+      { with: 'Mictlantecuhtli', note: 'Lord of the dead, from whom the bones for the present humanity are taken.' },
+      { with: 'Coatlicue', note: 'In some accounts the mother of the gods, and of Quetzalcoatl among them.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Coatlicue', note: 'In the Nahua account of the birth of the gods.' },
+      { relation: 'Father', name: 'Mixcoatl', note: 'In some colonial-era genealogies.' },
+      { relation: 'Twin', name: 'Xolotl', note: 'Both are associated with Venus as morning and evening star.' },
+      { relation: 'Brothers', name: 'The four Tezcatlipocas', note: 'In the Florentine Codex account, Quetzalcoatl is one of four sons of the creator pair.' },
+    ],
+    timeline: [
+      { when: 'Creation', event: 'Descends to the underworld to gather bones, and with them makes the present people.' },
+      { when: 'As Ehecatl', event: 'Brings the wind that moves the sun and the rain clouds.' },
+      { when: 'At Tollan', event: 'Rules as a priest-king and teacher of the arts; the traditions differ on how he falls.' },
+      { when: 'The departure', event: 'Leaves eastward, promising to return — a promise the later histories use to explain the Spanish arrival.' },
+    ],
+    story:
+      'Quetzalcoatl is the feathered serpent: a god of wind, learning, and the morning star, and in some accounts a priest-king of Tollan. The Nahua histories tell how he goes down to the land of the dead to collect the bones of earlier people and, with his own blood, makes them alive again. At Tollan he is tricked into disgrace and leaves to the east. The traditions do not agree on what he was before he left.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Popol Vuh’s Gucumatz is a creator god in a K’iche’ Maya account; equating him with the Nahua Quetzalcoatl is a scholarly comparison across languages, not something the texts say.' },
+      { layer: 'traditional', text: 'The name is a title as well as a name: several priestly offices in central Mexico were called Quetzalcoatl, which complicates any search for one person behind the myth.' },
+      { layer: 'analysis', text: 'The story that Moctezuma took Cortés for the returning Quetzalcoatl is poorly supported by contemporary sources and is now widely treated as a later colonial narrative rather than a Nahua belief.' },
+      { layer: 'inference', text: 'The feathered serpent appears in Mesoamerican art centuries before the Aztec state; the later myth is a development of a much older image.' },
+    ],
+    variants: [
+      { tradition: 'Nahua (central Mexico)', difference: 'Quetzalcoatl is a god of wind and learning and, in some accounts, a Tollan ruler with a historical shadow.' },
+      { tradition: 'K’iche’ Maya', difference: 'Gucumatz is one of the creator pair in the Popol Vuh and is not a departing king.' },
+    ],
+    analysis:
+      'Quetzalcoatl is a case study in how a myth changes hands. The feathered serpent is ancient; the story of a king who promised to return is colonial-era history-writing; the two are often merged in modern retellings in a way neither the codices nor the Popol Vuh supports.',
+  },
+  {
+    id: 'maui',
+    name: 'Māui',
+    tradition: 'Polynesian — Māori, Hawaiian, Samoan and Tongan traditions',
+    aliases: ['Maui-tikitiki-a-Taranga', 'Māui-Pōtiki'],
+    sources: [
+      'Māori traditions recorded in collections such as Grey’s Polynesian Mythology (1855)',
+      'Hawaiian moʻolelo, where he is Māui-kupua',
+      'Samoan and Tongan oral traditions, which differ in detail',
+      'Comparative Polynesian scholarship, which treats the variants as one tradition family',
+    ],
+    relationships: [
+      { with: 'Mahuika', note: 'The fire goddess from whom he obtains fire, by trickery and at a cost.' },
+      { with: 'Te Ra', note: 'The sun, whom he slows with ropes so the days are long enough to work.' },
+      { with: 'Hine-nui-te-pō', note: 'Goddess of death; his attempt to defeat her is what kills him.' },
+      { with: 'Taranga', note: 'His mother, who abandoned him at birth and whom he follows to the underworld.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Taranga', note: 'In the Māori account, she wraps him in her hair and casts him into the sea.' },
+      { relation: 'Father', name: 'Makeatutara', note: 'A priest, whose mistake at the naming rite is part of the story.' },
+      { relation: 'Brothers', name: 'Māui’s elder brothers', note: 'Often resentful, and the reason his feats begin as a joke at their expense.' },
+      { relation: 'Ancestor', name: 'Murirangawhenua', note: 'His grandmother, who gives him the jawbone he uses as a fishhook.' },
+    ],
+    timeline: [
+      { when: 'Birth', event: 'Born early and cast into the sea; returns to find his family.' },
+      { when: 'The fish', event: 'Fishes up Te Ika-a-Māui, the North Island, with his grandmother’s jawbone.' },
+      { when: 'The sun', event: 'Traps and beats the sun to slow it, lengthening the day.' },
+      { when: 'Fire', event: 'Takes fire from Mahuika, and nearly destroys it in the process.' },
+      { when: 'Death', event: 'Tries to pass through Hine-nui-te-pō to win immortality and is killed by her.' },
+    ],
+    story:
+      'Māui is the trickster of the Polynesian Pacific: abandoned at birth, he comes back, outwits his brothers, and fishes up islands with a magic hook. He slows the sun so there is time to do anything at all, and he steals fire from its guardian. His last plan is the largest: to enter the body of the goddess of death and come out the other side, which would make people immortal. He fails, and that failure is why people die.',
+    lesserKnown: [
+      { layer: 'textual', text: 'There is no single canonical text: the Māori, Hawaiian and Samoan versions differ in the order of the feats, in names and in which of them are comic.' },
+      { layer: 'traditional', text: 'Māui’s jawbone is a fishhook in one tradition and a weapon in another; both readings are old, and neither is a mistake.' },
+      { layer: 'analysis', text: 'Comparativists treat the Polynesian variants as a family of tellings spread by voyaging, not as a corrupted copy of one original.' },
+      { layer: 'inference', text: 'The geographical feats — fishing up islands, slowing the sun — are sometimes read as memory of long voyages; the traditions themselves present them as events, not allegories.' },
+    ],
+    variants: [
+      { tradition: 'Māori', difference: 'Māui-tikitiki-a-Taranga is a demigod with a named whakapapa, and his death at Hine-nui-te-pō closes the cycle.' },
+      { tradition: 'Hawaiian', difference: 'Māui-kupua is a trickster whose feats include snaring the sun and lifting the sky; the death episode is not central in every telling.' },
+    ],
+    analysis:
+      'Māui is the tradition’s argument that cleverness can rearrange the world but not abolish death. Every feat is a joke with a real consequence, and the final one is the joke that does not work.',
+  },
+  {
+    id: 'sun-wukong',
+    name: 'Sun Wukong',
+    tradition: 'Chinese — Journey to the West and earlier vernacular traditions',
+    aliases: ['Monkey King', '美猴王', 'Sun Wukong'],
+    sources: [
+      'Wu Cheng’en (attrib.), Journey to the West, sixteenth century',
+      'Earlier “Journey to the West” story cycles and Yuan drama fragments',
+      'The Jataka and Ramayana comparisons sometimes proposed by scholars',
+      'Ming-era woodblock illustrations and later opera traditions',
+    ],
+    relationships: [
+      { with: 'Tang Sanzang', note: 'The monk he is bound to protect; the pilgrimage is his penance.' },
+      { with: 'Zhu Bajie', note: 'Fellow disciple and comic rival, always hungry and often unreliable.' },
+      { with: 'Sha Wujing', note: 'The third disciple, steady where the other two are not.' },
+      { with: 'The Jade Emperor', note: 'The heavenly authority he repeatedly defies.' },
+      { with: 'Buddha', note: 'Who traps him under a mountain and later sets the pilgrimage.' },
+    ],
+    family: [
+      { relation: 'Origin', name: 'A stone egg', note: 'He is born from a stone on the Mountain of Flowers and Fruit.' },
+      { relation: 'Teacher', name: 'Patriarch Subhuti', note: 'Teaches him transformation, cloud-somersaulting and immortality.' },
+      { relation: 'Adoptive kin', name: 'The monkey tribe', note: 'His first subjects and the reason he seeks immortality at all.' },
+      { relation: 'Sworn brothers', name: 'The six demon kings', note: 'Among them the Bull Demon King; the alliance is sworn before the havoc in heaven.' },
+    ],
+    timeline: [
+      { when: 'Birth', event: 'Emerges from a stone egg and becomes king of the monkeys by entering the waterfall cave.' },
+      { when: 'Training', event: 'Learns seventy-two transformations and the cloud somersault from Subhuti.' },
+      { when: 'Havoc in heaven', event: 'Eats the peaches and the elixir, defeats the heavenly armies, and is trapped under Five Elements Mountain.' },
+      { when: 'The pilgrimage', event: 'Released to escort Tang Sanzang to India, with a golden headband that tightens when he misbehaves.' },
+      { when: 'Enlightenment', event: 'Reaches the Western Paradise and is made a Buddha.' },
+    ],
+    story:
+      'Sun Wukong is born from a stone, becomes king of the monkeys, and immediately goes looking for a way not to die. He learns magic, takes a weapon from the dragon king, and is so unmanageable that heaven tries to buy him off with a title and then with a job. He eats the immortality peaches and the elixir, defeats the heavenly army, and is only stopped by Buddha’s hand. Five hundred years later he is released to guard a monk on the road to India, and the novel is the story of that road.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The novel’s authorship is attributed to Wu Cheng’en but not securely; the sixteenth-century text itself is anonymous in the earliest surviving edition.' },
+      { layer: 'traditional', text: 'The story existed before the novel in Yuan drama and in a shorter “Journey to the West” cycle, so the novel is a culmination rather than an origin.' },
+      { layer: 'analysis', text: 'The Monkey King has been read as a satire of bureaucracy, a Buddhist allegory of the unruly mind, and a folk hero; the text supports all three, and no reading has displaced the others.' },
+      { layer: 'inference', text: 'The suggestion that the character derives from the Hindu Hanuman is a hypothesis based on resemblance; there is no textual chain that demonstrates it, and Chinese scholars have proposed indigenous antecedents.' },
+    ],
+    variants: [
+      { tradition: 'Ming novel', difference: 'A hundred-chapter pilgrimage with a defined cast and a Buddhist frame.' },
+      { tradition: 'Folk and opera', difference: 'Episodes circulate independently, and the Monkey King is often a triumphant trickster rather than a disciple in penance.' },
+    ],
+    analysis:
+      'Sun Wukong is the novel’s engine because he refuses every frame imposed on him — heaven’s, the monk’s and, for a long time, the story’s own. The pilgrimage works only because the rebellion is not cured, merely given somewhere to go.',
+  },
+  {
+    id: 'change',
+    name: 'Chang’e',
+    tradition: 'Chinese — myth and Mid-Autumn festival tradition',
+    aliases: ['Heng’e', 'Cháng’é', 'The Moon Goddess'],
+    sources: [
+      'Huainanzi (second century BCE), one of the earliest surviving references',
+      'Shanhaijing and other classical compilations, which differ',
+      'Later Tang and Ming retellings, including the story of the moon rabbit',
+      'Mid-Autumn festival customs and their recorded explanations',
+    ],
+    relationships: [
+      { with: 'Hou Yi', note: 'The archer, her husband, who obtains the elixir of immortality.' },
+      { with: 'The Jade Rabbit', note: 'Her companion on the moon, pounding medicine in later iconography.' },
+      { with: 'Wu Gang', note: 'The woodcutter condemned to chop an ever-regrowing tree, a separate moon tradition.' },
+    ],
+    family: [
+      { relation: 'Husband', name: 'Hou Yi', note: 'The archer who shoots down nine suns in the older myth.' },
+      { relation: 'Companion', name: 'The Jade Rabbit', note: 'A later addition to the moon imagery, not present in the earliest texts.' },
+      { relation: 'Fellow moon figure', name: 'Wu Gang', note: 'A separate tradition places the woodcutter on the moon; the two stories are told together but are not one family.' },
+      { relation: 'Source of the elixir', name: 'Xiwangmu', note: 'The Queen Mother of the West, with whom the elixir of immortality is associated in Han-era traditions.' },
+    ],
+    timeline: [
+      { when: 'Earliest record', event: 'The Huainanzi (second century BCE) preserves the shortest surviving version of the story.' },
+      { when: 'The ten suns', event: 'Hou Yi shoots down nine of ten suns and is rewarded with the elixir.' },
+      { when: 'The elixir', event: 'Chang’e takes or drinks it — the early texts differ on why — and rises to the moon.' },
+      { when: 'The moon', event: 'She lives there with the rabbit; the full moon of the eighth lunar month is the festival that remembers her.' },
+    ],
+    story:
+      'Chang’e is the woman on the moon. In the best-known telling her husband Hou Yi, an archer who saved the world by shooting down nine of ten suns, is given an elixir of immortality. Chang’e swallows it — to keep it from a thief, in the later versions — and floats up to the moon, where she stays. The Mid-Autumn Festival, when the moon is fullest, is the night the story is told.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Huainanzi passage is very short and does not mention a rabbit, a festival or a thief; most of the familiar story is later accretion.' },
+      { layer: 'traditional', text: 'Her earliest name is Heng’e; the change to Chang’e is commonly explained as a naming taboo during the Han, though the chronology is debated.' },
+      { layer: 'analysis', text: 'The theft variant is comparatively late and turns an ambiguous act into a moral one; earlier versions leave her motive unexplained.' },
+      { layer: 'inference', text: 'The moon rabbit appears in several Asian traditions and may travel with Buddhist narrative; its association with Chang’e is a Chinese development rather than a classical one.' },
+    ],
+    variants: [
+      { tradition: 'Huainanzi', difference: 'A brief notice: she steals the elixir and flees to the moon. No motive is given.' },
+      { tradition: 'Later folk tellings', difference: 'She takes the elixir to prevent the thief Peng Meng from stealing it, which makes her sacrifice rather than theft.' },
+    ],
+    analysis:
+      'Chang’e is a figure the tradition keeps rewriting: a bare classical notice becomes a festival, a companion animal and a story about a wife protecting her husband’s gift. The variants are worth telling side by side because the moral is not in the oldest text.',
+  },
+  {
+    id: 'cu-chulainn',
+    name: 'Cú Chulainn',
+    tradition: 'Irish — Ulster Cycle',
+    aliases: ['Sétanta', 'Cuchulainn', 'The Hound of Ulster'],
+    sources: [
+      'Táin Bó Cúailnge (The Cattle Raid of Cooley), in Lebor na hUidre and the Book of Leinster',
+      'The Boyhood Deeds of Cú Chulainn, a pre-tale to the Táin',
+      'Other Ulster Cycle tales, including Bricriu’s Feast and The Death of Cú Chulainn',
+      'Later folklore and nineteenth-century translations, which reshape the hero',
+    ],
+    relationships: [
+      { with: 'Conchobar', note: 'His uncle and king; Cú Chulainn is bound to him and to Ulster.' },
+      { with: 'Ferdiad', note: 'Foster-brother and closest friend, forced to fight him at the ford.' },
+      { with: 'Medb', note: 'Queen of Connacht and leader of the raid; his principal opponent.' },
+      { with: 'Lug', note: 'His divine father, who appears to help him in the Táin.' },
+      { with: 'The Morrígan', note: 'Goddess who offers him love, is refused, and harries him afterwards.' },
+    ],
+    family: [
+      { relation: 'Mother', name: 'Deichtine', note: 'Sister of Conchobar.' },
+      { relation: 'Father (divine)', name: 'Lug', note: 'Who acknowledges him and heals him in the Táin.' },
+      { relation: 'Foster-father', name: 'Fergus mac Róich', note: 'Among his teachers and protectors.' },
+      { relation: 'Wife', name: 'Emer', note: 'Whose wooing is one of the earliest tales about him.' },
+      { relation: 'Son', name: 'Connla', note: 'Whom he kills without knowing who he is, in a later tale.' },
+    ],
+    timeline: [
+      { when: 'Boyhood', event: 'Kills the hound of Culann and offers himself as its replacement, taking the name Cú Chulainn.' },
+      { when: 'Training', event: 'Learns the feats from Scáthach in Alba and returns to Ulster.' },
+      { when: 'The raid', event: 'Defends Ulster alone at the fords against Connacht’s army, fighting a series of champions.' },
+      { when: 'Ferdiad', event: 'Kills his foster-brother at the ford, and is changed by it.' },
+      { when: 'Death', event: 'Bound to a standing stone, he is killed by Lugaid’s spear; the Morrígan’s warning is ignored.' },
+    ],
+    story:
+      'Cú Chulainn is seventeen when the cattle raid of Cooley begins, and the rest of Ulster is under a curse that leaves him to hold the border alone. He fights champion after champion at the fords, including his foster-brother Ferdiad, whom he kills with the one technique only he knows. The Táin is not a victory narrative: the hero wins the raid and dies young, and the poem keeps its eye on both.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Táin survives in two main recensions, and the earlier Lebor na hUidre version is shorter and rougher than the later Book of Leinster text, which adds speeches and episodes.' },
+      { layer: 'traditional', text: 'His battle frenzy, the ríastrad, is described in bodily detail — one eye sinking, the other bulging, a spray of light from his head — and is a literary set-piece, not a metaphor.' },
+      { layer: 'analysis', text: 'The Ulster Cycle is a warrior aristocracy’s literature, and its ethics are about honour and obligation rather than good and evil; Cú Chulainn’s worst acts are usually the ones his code requires.' },
+      { layer: 'inference', text: 'The historical existence of a hero behind the tales is not established; the earliest manuscripts are Christian-era, and the oral tradition behind them is older but undatable.' },
+    ],
+    variants: [
+      { tradition: 'Medieval Ulster Cycle', difference: 'A violent, formally sophisticated saga with a tragic hero and a marked interest in the cost of honour.' },
+      { tradition: 'Later folklore and revival', difference: 'Cú Chulainn becomes a national hero and a model of sacrifice, a reading shaped by nineteenth- and twentieth-century politics.' },
+    ],
+    analysis:
+      'Cú Chulainn is a hero defined by being bound: to his king, his word and his name. The Táin’s most memorable scene is not a victory but the killing of Ferdiad, because the poem knows that a hero who cannot break an obligation is also a person with no way out.',
+  },
+  {
+    id: 'baba-yaga',
+    name: 'Baba Yaga',
+    tradition: 'Slavic — Russian and East Slavic folktale',
+    aliases: ['Jezibaba', 'Baba Jaga', 'Яга'],
+    sources: [
+      'Alexander Afanasyev, Russian Fairy Tales (collected 1855–1863)',
+      'East Slavic folktale collections and variants from Ukraine, Poland and the Balkans',
+      'Vladimir Propp’s structural study of the folktale, which classifies her role',
+      'Nineteenth- and twentieth-century literary retellings, which are not folklore',
+    ],
+    relationships: [
+      { with: 'Vasilisa the Beautiful', note: 'The girl sent to her hut for fire; the tale turns on whether she obeys the rules.' },
+      { with: 'Ivan Tsarevich', note: 'Sometimes an adversary, sometimes the helper who gives him the object he needs.' },
+      { with: 'The three riders', note: 'In some tales, horsemen whose names are day, sun and night serve her.' },
+    ],
+    family: [
+      { relation: 'Kin', name: 'A daughter, in some variants', note: 'Not a fixed family: her household changes between tellings.' },
+      { relation: 'Servants', name: 'The skulls on the fence', note: 'In Vasilisa, the fence is crowned with glowing skulls.' },
+      { relation: 'Kin (some variants)', name: 'A daughter', note: 'Several tellings give her a daughter, sometimes as a helper and sometimes as a second obstacle.' },
+      { relation: 'Servants', name: 'The three riders', note: 'In some variants, horsemen named for day, sun and night wait on her.' },
+    ],
+    timeline: [
+      { when: 'In print', event: 'Afanasyev’s nineteenth-century collection fixes the best-known variants; earlier manuscript and oral versions are not datable.' },
+      { when: 'In the tale', event: 'The hero is sent into the forest and finds her hut on chicken legs.' },
+      { when: 'The test', event: 'She sets impossible tasks, or offers help for a price.' },
+      { when: 'The outcome', event: 'The hero escapes with the object sought — or does not leave at all.' },
+    ],
+    story:
+      'Baba Yaga lives in the forest in a hut that stands on chicken legs and turns when spoken to. She flies in a mortar, sweeping her trail with a broom. In the best-known Russian tale, Vasilisa is sent to her for fire and is set a series of tasks; she succeeds with the help of a doll her mother gave her, and takes a skull-lantern home. Baba Yaga is not consistently a villain: she feeds some heroes, eats others, and in many tales gives exactly what is needed.',
+    lesserKnown: [
+      { layer: 'textual', text: 'Afanasyev’s collection is the textual anchor, but it is a nineteenth-century scholarly compilation of oral variants, edited and normalised; there is no single canonical Baba Yaga.' },
+      { layer: 'traditional', text: 'Her hut’s chicken legs and her mortar are the stable elements; her moral alignment is not. Some variants make her a mother figure, others a cannibal.' },
+      { layer: 'analysis', text: 'Propp classified her as the donor figure who tests the hero and supplies the magical agent — a structural role, not a personality.' },
+      { layer: 'inference', text: 'Comparisons with a prehistoric matriarchal goddess are popular but not supported by the sources; the tales are recorded folklore, and their prehistory is not reconstructable from them.' },
+    ],
+    variants: [
+      { tradition: 'Russian', difference: 'Vasilisa’s tale gives her a household of servants and a clear test-and-reward structure.' },
+      { tradition: 'Polish and Balkan', difference: 'Jezibaba and related figures are often more unambiguously hostile, and the hut imagery varies.' },
+    ],
+    analysis:
+      'Baba Yaga is a boundary figure: the forest is where the tale sends its hero to be changed, and she is the one who decides whether the change happens. Reading her as simply evil flattens the tales, which use her to test whether the hero can follow instructions, keep a bargain and leave.',
+  },
+  {
+    id: 'oshun',
+    name: 'Ọ̀ṣun (Oshun)',
+    tradition: 'Yoruba — orisha tradition of south-west Nigeria',
+    aliases: ['Oshun', 'Ochún', 'Osun'],
+    sources: [
+      'Oríkì (praise poetry) for Ọ̀ṣun, performed in her cult',
+      'Ifá divination verses (odù) in which she appears',
+      'Scholarly collections of Yoruba oral literature and Ifá verses',
+      'Cuban and Brazilian traditions, which preserve related but distinct forms',
+    ],
+    relationships: [
+      { with: 'Ọbàtálá', note: 'The creator orisha; in many accounts she is the one whose absence makes his creation incomplete.' },
+      { with: 'Ṣàngó', note: 'The thunder orisha; their relationship is told differently as marriage or rivalry in different localities.' },
+      { with: 'Yemọja', note: 'Mother of the waters, with whom she shares the river and the sea.' },
+      { with: 'Ọ̀yá', note: 'The wind, her fellow female orisha and often her rival.' },
+    ],
+    family: [
+      { relation: 'Divine kin', name: 'The orisha', note: 'A pantheon of distinct deities rather than a family in the Greek sense.' },
+      { relation: 'Realm', name: 'The Ọ̀ṣun river', note: 'Her physical presence; the river runs through Osogbo.' },
+      { relation: 'Fellow orisha', name: 'Ọ̀rúnmìlà', note: 'The orisha of wisdom and Ifá divination, whose verses preserve many of her stories.' },
+      { relation: 'Devotees', name: 'The Osogbo cult', note: 'Her priesthood and festival are living institutions, not only narrative.' },
+    ],
+    timeline: [
+      { when: 'Creation', event: 'The orisha are sent to make the world; without Ọ̀ṣun’s contribution it remains barren.' },
+      { when: 'The withdrawal', event: 'She withholds fertility, and the other orisha must persuade her to return.' },
+      { when: 'The river', event: 'Her cult centres on the Ọ̀ṣun river and the Osogbo grove.' },
+      { when: 'The diaspora', event: 'Carried to Cuba and Brazil, where she is known as Ochún and Oxum.' },
+    ],
+    story:
+      'Ọ̀ṣun is the orisha of the Ọ̀ṣun river, of fresh water, fertility, love and the sweetness that makes a life worth living. In the creation accounts the orisha come down to make the world, and without her the work is dry: she is the one who brings the water that lets things grow. When she is slighted she withdraws, and the world stops; the other orisha have to ask her back. Her cult is rooted in the river at Osogbo, and praise poetry in her name is one of the main ways the tradition keeps her.',
+    lesserKnown: [
+      { layer: 'textual', text: 'There is no single scripture: oríkì are performed, not fixed, and each lineage has its own versions. “Text” here means recited oral literature recorded by scholars, not a closed book.' },
+      { layer: 'traditional', text: 'Her colour is yellow and her metal is brass in many lineages, but the associations differ by house and by region, and the diaspora traditions add their own.' },
+      { layer: 'analysis', text: 'The creation accounts in which she withdraws are widely read as a statement about the indispensability of fertility and fresh water, and about the limits of power that ignores them.' },
+      { layer: 'inference', text: 'Equating her directly with the Greek Aphrodite, common in popular writing, drops the river, the fertility and the political role of the cult — it keeps only the love association.' },
+    ],
+    variants: [
+      { tradition: 'Yoruba (Nigeria)', difference: 'A river orisha with a cult, a grove and a body of praise poetry tied to a place.' },
+      { tradition: 'Cuban Lucumí', difference: 'Ochún is a fully developed orisha in a new initiatory system, with different ritual detail and a history shaped by the Atlantic slave trade.' },
+    ],
+    analysis:
+      'Ọ̀ṣun is a good corrective to the habit of reading every goddess as a love figure. In her own tradition she is water, fertility and the condition on which creation continues — and her story is as much about what happens when a community forgets to include her as it is about sweetness.',
+  },
 ];

@@ -323,7 +323,7 @@ async function main() {
       const shown = new Map<string, string[]>();
       for (let day = 0; day < 12; day += 1) {
         const summary = await runCuriosityRefresh({ now: IST_MIDNIGHT(day), fetchImpl: scripted.fetchImpl });
-        assert.ok(summary.daily.published, `day ${day} published nothing`);
+        assert.ok(summary.daily.published, `day ${day} published nothing: ${JSON.stringify(summary.daily)}`);
         for (const [category, id] of Object.entries(summary.daily.contentIds ?? {})) {
           shown.set(category, [...(shown.get(category) ?? []), String(id)]);
         }
@@ -797,10 +797,17 @@ async function main() {
       assert.deepEqual(reopened.book?.payload.title, published.book.published ? reopened.book?.payload.title : null);
       assert.ok(typeof reopened.book?.payload.title === 'string' && reopened.book.payload.title.length > 0, 'the book row did not round-trip');
       assert.equal(reopened.seen.length, ledger.length, 'the seen ledger did not round-trip');
-      // Four rows, not nine: the ledger tracks what *rotates*. The five fixed-corpus
-      // cards and the history event are not repeats by construction, so recording
-      // them would only grow a table that nothing reads.
-      assert.equal(reopened.seen.length, 4, 'the ledger should hold one row per rotating item');
+      // Every card now writes a row, not just the four pool-backed ones. That is the
+      // core of this upgrade: the ten fixed corpora previously had no durable memory,
+      // which is why they repeated on fixed clocks. AI World and Developer Radar add
+      // one row per item they show.
+      assert.equal(reopened.seen.length, ledger.length, 'the ledger did not round-trip');
+      assert.equal(
+        new Set(reopened.seen.map((record) => record.category)).size,
+        14,
+        `the ledger covers ${new Set(reopened.seen.map((record) => record.category)).size} of the 14 cards`,
+      );
+      assert.ok(reopened.seen.every((record) => record.title && record.fingerprint), 'a ledger row carries no identity metadata');
       assert.ok(reopened.seen.some((record) => record.category === 'book'), 'the book was not recorded as shown');
       assert.ok(reopened.seen.every((record) => record.on === '2026-10-19'), 'ledger rows must carry the publication day');
       databaseChecks += 1;
@@ -1023,10 +1030,18 @@ async function main() {
   {
     const store = useTempStore('history');
     try {
-      const wikipedia = (date: string) =>
+      // The mocked feed returns a *different* verified anniversary on each live day.
+      // That matters now: the selector correctly refuses to repeat one anniversary
+      // inside its 365-day window, so a fixed fixture would be testing the cooldown
+      // rather than the live path.
+      const wikipedia = (date: string, day: number) =>
         Response.json({
           selected: [
-            { year: 1969, text: 'Apollo 11 astronauts walked on the Moon.', pages: [{ title: 'Apollo_11', extract: 'The first crewed landing.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Apollo_11' } } }] },
+            {
+              year: 1900 + day,
+              text: `A verified event on ${date}.`,
+              pages: [{ title: `Verified_event_${day}`, extract: `The verified event for ${date}.`, content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/Verified_event_${day}` } } }],
+            },
             { year: 999999, text: 'An impossible year that must be ignored.', pages: [{ title: 'Nonsense', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Nonsense' } } }] },
             { year: 1800, text: 'No usable page link, so it cannot be published.', pages: [{ title: 'Orphan', extract: 'x'.repeat(20) }] },
           ],
@@ -1040,13 +1055,13 @@ async function main() {
         // as verified for this date. Odd days: it is unreachable, so the archive entry
         // must be published *labelled* instead. Both paths, one loop.
         const live = day % 2 === 0;
-        const historyFetch = live
-          ? ((async (input: RequestInfo | URL, init?: RequestInit) => {
+        const historyFetch = (live
+          ? (async (input: RequestInfo | URL, init?: RequestInit) => {
               const url = String(input);
-              if (url.includes('onthisday')) return wikipedia(date);
+              if (url.includes('onthisday')) return wikipedia(date, day);
               return fetchImpl(input as RequestInfo, init);
-            }) as unknown as typeof fetch)
-          : fetchImpl;
+            })
+          : fetchImpl) as typeof fetch;
         const briefing = await (async () => {
           setStateStoreForTesting(null);
           await runCuriosityRefresh({ now, fetchImpl: historyFetch, trigger: 'cron' });
@@ -1058,7 +1073,7 @@ async function main() {
           assert.equal(event.forThisDate, true, `the curated ${date} event lost its verification flag`);
           assert.equal(event.origin, 'curated');
         } else if (live) {
-          assert.equal(event.origin, 'live', 'a live anniversary was not marked as live');
+          assert.equal(event.origin, 'live', `a live anniversary was not marked as live on ${date}: ${JSON.stringify({ origin: event.origin, forThisDate: event.forThisDate, title: event.title, degraded: briefing.meta?.degraded ?? null, ids: briefing.meta?.contentIds })}`);
           assert.equal(event.forThisDate, true, 'a live anniversary was shown as unverified');
           assert.match(event.attribution ?? '', /Wikipedia/, 'the live event lost its attribution');
         } else {
@@ -1375,8 +1390,9 @@ async function main() {
     const allowed = [
       /^(lib|components\/curiosity|app\/api\/curiosity|app\/curiosity|public\/images\/curiosity|docs)\//,
       /^components\/settings\/(curiosity-refresh|settings-screen)\.tsx$/,
-      /^scripts\/[a-z-]*curiosity[a-z-]*\.(ts|tsx|mjs)$/,
-      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/009_curiosity_content\.sql)$/,
+      /^scripts\/(verify-)?curiosity[a-z-]*\.(ts|tsx|mjs)$/,
+      /^scripts\/verify-daily-content\.tsx$/,
+      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history)\.sql)$/,
       /^(\.github\/workflows\/curiosity-daily\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
     ];
     try {

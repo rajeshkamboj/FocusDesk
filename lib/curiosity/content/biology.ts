@@ -195,4 +195,84 @@ export const biologyConcepts: BiologyConcept[] = [
     question:
       'A field of grain feeds many more people than the same field’s grain fed to cattle. Where did the rest of the energy go, and is anything really lost from the animal that ate it?',
   },
+  {
+    id: 'osmosis-kidney',
+    topic: 'How the kidney reclaims water',
+    simple:
+      'Water moves across a membrane toward the side with more dissolved particles. The kidney uses that tendency deliberately: it pumps salts into the tissue around its collecting ducts so water is drawn back into the body instead of leaving in urine.',
+    deeper:
+      'The loop of Henle builds a salt gradient in the kidney’s inner tissue, and the collecting duct passes through it. Whether the duct lets water through depends on aquaporin channels, which are inserted when the hormone ADH signals that the body needs to conserve water. The result is concentrated urine on a dry day and dilute urine after drinking a lot.',
+    equation: 'Osmotic pressure π ≈ iMRT (van ’t Hoff), where i counts dissolved particles.',
+    connection:
+      'A salty meal makes you thirsty because the extra solute pulls water into the blood and raises its concentration; the kidney responds by conserving water and the brain by asking for more.',
+    surprising:
+      'The kidney filters your entire blood volume many times a day and returns almost all of the water, which is why a small change in the hormone signal can change urine concentration enormously.',
+    question: 'Why does the kidney need a salt gradient before it can reclaim water?',
+  },
+  {
+    id: 'enzyme-lactase',
+    topic: 'Why some adults cannot digest milk',
+    simple:
+      'Lactose is a sugar that needs the enzyme lactase to be split into glucose and galactose. Most people stop producing much lactase after childhood, so undigested lactose reaches the large intestine, where bacteria ferment it.',
+    deeper:
+      'The enzyme sits on the surface of the small intestine’s cells. When it is scarce, lactose stays in the gut, draws water in osmotically, and is fermented by bacteria producing gas and acids. Lactase persistence is a genetic trait common in populations with a long history of dairying, and it is the exception rather than the rule globally.',
+    connection:
+      'Lactose-free milk is ordinary milk with lactase added, and hard cheeses contain little lactose because the fermentation that makes them has already consumed it.',
+    surprising:
+      'Lactose intolerance is the default human condition; the ability to digest milk into adulthood is the trait that had to spread.',
+    question: 'Why do hard cheeses usually cause fewer symptoms than fresh milk?',
+  },
+  {
+    id: 'dna-replication-error',
+    topic: 'Why copying DNA produces mutations',
+    simple:
+      'DNA is copied by enzymes that read one strand and build its partner. The copying is extremely accurate but not perfect: occasionally the wrong base is inserted, and if repair fails, that change becomes a permanent mutation in the next generation of cells.',
+    deeper:
+      'Polymerase checks each base against the template and removes most mistakes with a proofreading activity. A second repair system corrects mismatches after copying. The residual error rate is about one in a billion bases per division. Mutations can be harmless, change a protein, or affect regulation; most cancers involve the accumulation of several such changes in one cell lineage.',
+    connection:
+      'UV light and tobacco smoke increase mutation rates by damaging bases, which is why both are linked to cancer and why sunscreen and cessation matter.',
+    surprising:
+      'Without proofreading and repair, the error rate would be roughly a thousand times higher — the accuracy of heredity is an active process, not a passive property of the bases.',
+    question: 'Why does a mutation in a skin cell usually not get passed to a child?',
+  },
+  {
+    id: 'nitrogen-fixation',
+    topic: 'How life gets nitrogen out of the air',
+    simple:
+      'Nitrogen gas is abundant in the atmosphere but almost inert. Bacteria that carry the enzyme nitrogenase can split it and combine the atoms with hydrogen to make ammonia, which living things can use to build proteins and DNA.',
+    deeper:
+      'Nitrogenase is poisoned by oxygen, so nitrogen-fixing bacteria protect it — in root nodules of legumes, in low-oxygen soil pockets, or in specialised cells of cyanobacteria. The reaction costs a lot of energy, so it is tightly regulated. Lightning also fixes a smaller amount of nitrogen, and industrial fertiliser production uses the Haber process to do chemically what the enzyme does biologically.',
+    equation: 'N₂ + 8H⁺ + 8e⁻ + 16ATP → 2NH₃ + H₂ + 16ADP + 16Pi (biological fixation).',
+    connection:
+      'Crop rotation with beans, peas and clover works because their root nodules host nitrogen-fixing bacteria, leaving the soil richer in usable nitrogen for the next crop.',
+    surprising:
+      'Nitrogenase also produces hydrogen gas as a by-product, and some bacteria carry a second enzyme to recover the energy in it.',
+    question: 'Why do legume farmers rotate crops instead of adding nitrogen fertiliser every season?',
+  },
+  {
+    id: 'circadian-rhythm',
+    topic: 'Why your body keeps its own time',
+    simple:
+      'Cells contain a molecular clock that cycles roughly every twenty-four hours. Light, meals and activity reset it, but it runs on its own even in constant darkness, controlling sleep, temperature, hormones and metabolism.',
+    deeper:
+      'In mammals the master clock sits in the hypothalamus and receives light signals from the retina. It coordinates peripheral clocks in organs through hormones and body temperature. The clock is built from feedback loops: proteins accumulate, inhibit their own production, and are degraded, so the cycle repeats. Individual genes and their timing differ between people, which is why some are natural early risers.',
+    connection:
+      'Shift work forces the clock and the schedule apart, and the mismatch is associated with higher risk of metabolic and sleep disorders — the body is not simply tired, its internal timing is inconsistent with its behaviour.',
+    surprising:
+      'Body temperature falls before sleep and rises before waking, so the clock is preparing the body for the transition rather than reacting to it.',
+    question: 'Why is a sudden shift in sleep schedule harder than a gradual one?',
+  },
+  {
+    id: 'endosymbiosis-mitochondria',
+    topic: 'Why your cells contain bacteria-like engines',
+    simple:
+      'Mitochondria have their own DNA, their own ribosomes and a double membrane. The evidence points to their origin as free-living bacteria that were engulfed by an ancestral cell and stayed, eventually becoming the cell’s power plant.',
+    deeper:
+      'The inner membrane carries the electron transport chain; the folded cristae increase its surface area. Mitochondrial DNA is inherited mostly from the mother and is small compared with bacterial genomes, because many genes moved to the nucleus over time. Chloroplasts in plants have a comparable origin from cyanobacteria.',
+    connection:
+      'Some antibiotics that target bacterial ribosomes can affect mitochondria, because the organelle’s ribosome is still bacterial in form — a reminder that it was once a separate organism.',
+    surprising:
+      'Mitochondrial DNA mutates faster than nuclear DNA and is inherited maternally in most animals, which is why it is used to trace maternal lineages.',
+    question: 'Why is mitochondrial DNA a useful record of maternal ancestry?',
+  },
 ];

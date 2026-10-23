@@ -7,6 +7,11 @@ import { LocalRepository } from '../lib/store/local-repository';
 import { defaultSettings } from '../lib/store/defaults';
 import { getDailyQuote } from '../lib/quotes';
 import { dailyEditorial } from '../lib/curiosity/content';
+import { mythCharacters } from '../lib/curiosity/content/mythology';
+import { chemistryConcepts } from '../lib/curiosity/content/chemistry';
+import { physicsConcepts } from '../lib/curiosity/content/physics';
+import { biologyConcepts } from '../lib/curiosity/content/biology';
+import { speakBetterLessons } from '../lib/curiosity/content/speak-better';
 import { getUserDisplayName } from '../lib/auth/display-name';
 import { ProgressSegments } from '../components/today/progress-segments';
 import { CuriosityScreen } from '../components/curiosity/curiosity-screen';
@@ -84,12 +89,16 @@ async function main() {
   }
   // 366 days is longer than either rotation, so every authored entry must appear,
   // and the two daily categories must not simply advance together.
-  assert.equal(speakBetterIds.size, 12, `only ${speakBetterIds.size} Speak Better lessons appear`);
-  assert.equal(mythologyIds.size, 12, `only ${mythologyIds.size} myth characters appear`);
-  assert.ok(dailyPairs.size >= 12, 'the Speak Better and Mythology rotations are locked together');
-  assert.equal(chemistryIds.size, 12, `only ${chemistryIds.size} chemistry concepts appear`);
-  assert.equal(physicsIds.size, 12, `only ${physicsIds.size} physics concepts appear`);
-  assert.equal(biologyIds.size, 12, `only ${biologyIds.size} biology concepts appear`);
+  // The corpus grew with this upgrade (mythology 12 → 24; each science 12 → 18),
+  // so the assertions compare against the pools rather than a literal that would
+  // silently forbid adding content — which is how a "diversity" test becomes a
+  // ceiling.
+  assert.equal(speakBetterIds.size, speakBetterLessons.length, `only ${speakBetterIds.size} of ${speakBetterLessons.length} Speak Better lessons appear`);
+  assert.equal(mythologyIds.size, mythCharacters.length, `only ${mythologyIds.size} of ${mythCharacters.length} myth characters appear`);
+  assert.ok(dailyPairs.size >= mythCharacters.length, 'the Speak Better and Mythology rotations are locked together');
+  assert.equal(chemistryIds.size, chemistryConcepts.length, `only ${chemistryIds.size} of ${chemistryConcepts.length} chemistry concepts appear`);
+  assert.equal(physicsIds.size, physicsConcepts.length, `only ${physicsIds.size} of ${physicsConcepts.length} physics concepts appear`);
+  assert.equal(biologyIds.size, biologyConcepts.length, `only ${biologyIds.size} of ${biologyConcepts.length} biology concepts appear`);
   // The Curiosity page renders every card from the briefing, so a content change
   // that quietly dropped or reordered a section would only show up on screen.
   // This renders the real screen and checks the briefing end to end: every card
@@ -168,6 +177,6 @@ async function main() {
   assert.equal(restored.general.displayName, 'Rajesh');
   assert.equal(restored.general.defaultTaskDuration, 45);
   assert.deepEqual(restored.notifications, defaultSettings.notifications);
-  console.log('PASS 366 daily selections (12 each of Speak Better lessons, myth characters, chemistry, physics and biology concepts; every claim layer-labelled; every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip');
+  console.log(`PASS 366 daily selections (${speakBetterLessons.length} Speak Better lessons, ${mythCharacters.length} myth characters, ${chemistryConcepts.length}/${physicsConcepts.length}/${biologyConcepts.length} chemistry/physics/biology concepts; every claim layer-labelled; every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip`);
 }
 main().catch((error) => { console.error(error); process.exit(1); });

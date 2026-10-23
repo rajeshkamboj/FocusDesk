@@ -8,10 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "curiosity:refresh": "npx tsx scripts/curiosity-refresh.ts",
+    "curiosity:discover": "npx tsx scripts/curiosity-refresh.ts --discover",
+    "curiosity:status": "npx tsx scripts/curiosity-refresh.ts --status",
     "curiosity:verify": "npx tsx scripts/verify-curiosity-automation.tsx",
     "curiosity:links": "node scripts/check-curiosity-links.mjs",
     "curiosity:dedupe": "npx tsx scripts/verify-curiosity-dedupe.ts",
-    "curiosity:content": "npx tsx scripts/verify-daily-content.tsx"
+    "curiosity:content": "npx tsx scripts/verify-daily-content.tsx",
+    "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

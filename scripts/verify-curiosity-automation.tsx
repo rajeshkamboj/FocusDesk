@@ -1265,7 +1265,13 @@ async function main() {
     assert.match(workflow, /action=status/, 'the workflow does not read the published record back');
     assert.match(workflow, /body\.status/, 'the workflow treated HTTP 200 as proof of publication');
     // No privileged value in a committed file, anywhere in the shipped config.
-    for (const file of ['vercel.json', '.github/workflows/curiosity-daily.yml', 'supabase/functions/curiosity-refresh/index.ts', '.env.example']) {
+    for (const file of [
+      'vercel.json',
+      '.github/workflows/curiosity-daily.yml',
+      '.github/workflows/curiosity-discovery.yml',
+      'supabase/functions/curiosity-refresh/index.ts',
+      '.env.example',
+    ]) {
       const text = readFileSync(file, 'utf8');
       assert.doesNotMatch(text, /(?:secret|key)\s*[:=]\s*['"]?(sk|srpat|eyJ)[A-Za-z0-9_-]{12,}/, `${file} appears to contain a credential`);
     }
@@ -1392,8 +1398,8 @@ async function main() {
       /^components\/settings\/(curiosity-refresh|settings-screen)\.tsx$/,
       /^scripts\/(verify-)?curiosity[a-z-]*\.(ts|tsx|mjs)$/,
       /^scripts\/verify-daily-content\.tsx$/,
-      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history)\.sql)$/,
-      /^(\.github\/workflows\/curiosity-daily\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
+      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history|11_curiosity_candidates)\.sql)$/,
+      /^(\.github\/workflows\/curiosity-(daily|discovery)\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
     ];
     try {
       const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();

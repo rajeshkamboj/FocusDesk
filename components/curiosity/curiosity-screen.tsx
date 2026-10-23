@@ -139,29 +139,58 @@ function RadarItem({ item }: { item: DeveloperDiscovery }) {
   );
 }
 
-function HistorySection({ event }: { event: HistoryEvent }) {
+function HistoryEntryItem({ event, priorityIndex }: { event: HistoryEvent; priorityIndex: number }) {
+  const categoryLabel = event.categoryLabel
+    ?? (event.category === 'sikh-history'
+      ? 'Sikh History'
+      : event.category === 'indian-history'
+        ? 'Indian History'
+        : event.category === 'world-history'
+          ? 'World History'
+          : null);
+  const dateDisplay = event.date && String(event.date) !== String(event.year)
+    ? `${event.date} · ${event.year}`
+    : String(event.year);
+
   return (
-    <div className="space-y-3">
+    <article
+      data-history-priority={priorityIndex}
+      data-history-category={event.category ?? 'history'}
+      data-history-id={event.id ?? ''}
+      className="space-y-3 border-b border-line py-5 first:pt-0 last:border-0 last:pb-0"
+    >
       <div className="flex gap-3.5">
         <VisualMark tone="bg-accent-soft text-accent">
           <IconCalendar width={18} height={18} />
         </VisualMark>
         <div className="min-w-0 flex-1">
-          {event.forThisDate === false ? (
-            /* The card is headed "Today in History". An item that is not tied to today
-               may only appear under that heading if it says so itself. */
-            <p className="mb-1.5 text-[11px] text-ink-3">
-              From the archive — not an event of this date.
-            </p>
-          ) : null}
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            {categoryLabel ? (
+              <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-accent-ink">
+                {priorityIndex} · {categoryLabel}
+              </span>
+            ) : null}
+            {event.forThisDate === false ? (
+              /* The card is headed "Today in History". An item that is not tied to today
+                 may only appear under that heading if it says so itself. */
+              <span className="text-[11px] text-ink-3">
+                From the archive — not an event of this date.
+              </span>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[17px] font-medium leading-snug text-ink">
               {event.title}
             </h3>
             <span className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-2">
-              {event.date} · {event.year}
+              {dateDisplay}
             </span>
           </div>
+          {event.calendarNote ? (
+            <p className="mt-1.5 text-[11.5px] italic leading-relaxed text-ink-3">
+              {event.calendarNote}
+            </p>
+          ) : null}
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
             {event.explanation}
           </p>
@@ -174,14 +203,35 @@ function HistorySection({ event }: { event: HistoryEvent }) {
           {event.significance}
         </p>
         {event.url ? (
-          <p className="mt-2 text-[12.5px]">
+          <p className="mt-2 break-words text-[12.5px]">
             <LinkOut href={event.url}>Read more about this milestone →</LinkOut>
             {event.url.startsWith('https://en.wikipedia.org/') ? (
-              <span className="mt-1 block text-[11px] text-ink-2">Source: Wikipedia contributors · <LinkOut href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</LinkOut></span>
+              <span className="mt-1 block text-[11px] text-ink-2">
+                {event.attribution ? `${event.attribution} · ` : 'Source: Wikipedia contributors · '}
+                <LinkOut href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</LinkOut>
+              </span>
+            ) : event.attribution || event.sourceName ? (
+              <span className="mt-1 block text-[11px] text-ink-3">
+                {event.attribution ?? `Source: ${event.sourceName}`}
+              </span>
             ) : null}
           </p>
         ) : null}
       </div>
+    </article>
+  );
+}
+
+function HistorySection({ events }: { events: HistoryEvent[] }) {
+  return (
+    <div>
+      {events.map((event, idx) => (
+        <HistoryEntryItem
+          key={event.id ?? `${event.category ?? idx}-${event.year}-${event.title}`}
+          event={event}
+          priorityIndex={idx + 1}
+        />
+      ))}
     </div>
   );
 }
@@ -368,8 +418,8 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         {/* ---- Group: the existing daily highlights ------------------- */}
         <SectionGroup flush label="Daily highlights" hint="history, AI world and today’s picks" />
 
-        {/* 1. Today in History */}
-        {briefing.history ? (
+        {/* 1. Today in History (1. Sikh History -> 2. Indian History -> 3. World History) */}
+        {(briefing.historyEntries && briefing.historyEntries.length > 0) || briefing.history ? (
           <section>
             <SectionCard
               label={
@@ -378,7 +428,13 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
                 </>
               }
             >
-              <HistorySection event={briefing.history} />
+              <HistorySection
+                events={
+                  briefing.historyEntries && briefing.historyEntries.length > 0
+                    ? briefing.historyEntries
+                    : (briefing.history ? [briefing.history] : [])
+                }
+              />
             </SectionCard>
           </section>
         ) : (<SectionCard label="Today in History"><p className="text-sm text-ink-2">Today’s historical source is temporarily unavailable. Please check back later.</p></SectionCard>)}

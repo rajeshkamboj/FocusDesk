@@ -152,6 +152,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
     learning: fallback.learning,
     literature: fallback.literature,
     history: fallback.history ?? curatedHistoryArchive(date),
+    historyEntries: fallback.historyEntries,
     sharpener: fallback.sharpener,
     speakBetter: fallback.speakBetter,
     mythology: fallback.mythology,

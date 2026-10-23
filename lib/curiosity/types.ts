@@ -88,24 +88,154 @@ export type DeveloperDiscovery = {
   origin?: 'live' | 'curated';
 };
 
+/* ------------------------------------------------------------------ */
+/* Today in History — priority categories and event model              */
+/* ------------------------------------------------------------------ */
+
+/** Strict display & selection priority order for Today in History: 1 → 2 → 3. */
+export const HISTORY_CATEGORY_ORDER = [
+  'sikh-history',
+  'indian-history',
+  'world-history',
+] as const;
+
+export type HistoryCategory = (typeof HISTORY_CATEGORY_ORDER)[number];
+
+export const HISTORY_CATEGORY_LABELS: Record<HistoryCategory, string> = {
+  'sikh-history': 'Sikh History',
+  'indian-history': 'Indian History',
+  'world-history': 'World History',
+};
+
+export type EventDatePrecision = 'exact' | 'month-year' | 'year' | 'approximate' | 'disputed' | 'none';
+
 export interface HistoryEvent {
+  /** Stable canonical event identity (e.g. `hist-sikh-1699-04-13-khalsa`). */
+  id?: string;
+  /** History tradition/scope category in priority order: Sikh → Indian → World. */
+  category?: HistoryCategory;
+  /** Display label for the category ("Sikh History" | "Indian History" | "World History"). */
+  categoryLabel?: string;
+  /** Month/day display text (e.g. "April 13") or period label where month/day is not fixed. */
   date: string;
+  /** Historical year or period string (e.g. 1699, "c. 261 BCE"). */
   year: number | string;
+  /** Calendar month (1–12) when historically supported. */
+  month?: number;
+  /** Calendar day (1–31) when historically supported. */
+  day?: number;
+  /** Explicit dating precision so disputed or approximate accounts are never flattened. */
+  datePrecision?: EventDatePrecision;
+  /** Historiographical or calendar conversion note (e.g. Nanakshahi / Bikrami / Julian). */
+  calendarNote?: string;
   title: string;
   explanation: string;
   significance: string;
   url?: string;
+  /** Publisher or primary/scholarly work name. */
+  sourceName?: string;
+  /** Licence identifier when adapted from open-content sources (e.g. "CC BY-SA 4.0"). */
+  license?: string;
   /**
-   * Was this event verified as belonging to the briefing's date? An archive entry
-   * shown because nothing was verified for today carries `false`, and the card has to
-   * say so — an anniversary presented under "Today in History" that is not one is a
-   * false statement, not a soft failure.
+   * Was this event verified as belonging to the briefing's calendar date?
+   * An archive/milestone fallback shown when no verified anniversary exists for today
+   * carries `false`, and the card states so openly rather than fabricating an anniversary.
    */
   forThisDate?: boolean;
-  /** Where the event came from: the live anniversaries feed, or this repository. */
+  /** How this event was matched for the briefing date. */
+  dateMatch?: 'exact-date' | 'leap-day-observed' | 'archive-fallback';
+  /** Where the event came from: live discovery/feed, or curated scholarly corpus. */
   origin?: 'live' | 'curated';
-  /** Kept with the text when a source's own attribution is required. */
+  /** Kept with the text when source attribution is shown to the reader. */
   attribution?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Persistent Knowledge Reservoir types                                */
+/* ------------------------------------------------------------------ */
+
+export const RESERVOIR_CATEGORIES = [
+  'sikh-history',
+  'indian-history',
+  'world-history',
+  'mythology',
+  'chemistry',
+  'physics',
+  'biology',
+  'one-thing',
+  'learn-something',
+  'literature',
+  'book',
+  'ai-world',
+  'developer-radar',
+] as const;
+
+export type ReservoirCategory = (typeof RESERVOIR_CATEGORIES)[number];
+
+export type CandidateValidationStatus = 'valid' | 'rejected' | 'pending' | 'needs-review';
+
+export type DiscoveryTrigger = 'cron' | 'admin' | 'cli' | 'publish-replenish';
+
+/**
+ * A persistent candidate record in `curiosity_candidates` (or `.curiosity/candidates.json`).
+ * Kept strictly separate from `curiosity_seen` (publication history).
+ */
+export interface KnowledgeCandidate {
+  id: string;
+  /** Stable upstream entity ID (Wikidata QID, MediaWiki page ID/slug, or curated slug). */
+  entityId: string;
+  canonicalUrl: string;
+  category: ReservoirCategory;
+  subcategory?: string;
+  title: string;
+  description: string;
+  significance?: string;
+  sourceName: string;
+  attribution?: string;
+  license?: string;
+  aliases: string[];
+  normalizedIdentity: string;
+  fingerprint: string;
+  signature?: string;
+  subjects: string[];
+  eventYear?: number;
+  eventYearLabel?: string;
+  eventMonth?: number;
+  eventDay?: number;
+  eventDatePrecision: EventDatePrecision;
+  calendarNote?: string;
+  payload?: Record<string, unknown>;
+  validationStatus: CandidateValidationStatus;
+  validationNotes?: string[];
+  eligible: boolean;
+  discoveredAt: string;
+  updatedAt: string;
+}
+
+export interface DiscoveryRunSummary {
+  ranAt: string;
+  trigger: DiscoveryTrigger;
+  categoriesChecked: ReservoirCategory[];
+  lowStockCategories: ReservoirCategory[];
+  eligibleByCategory: Partial<Record<ReservoirCategory, number>>;
+  totalByCategory: Partial<Record<ReservoirCategory, number>>;
+  newDiscovered: number;
+  updatedExisting: number;
+  duplicateRejections: number;
+  validationFailures: number;
+  sourceFailures: number;
+  cooldownRelaxations: number;
+  notes: string[];
+}
+
+export interface ReservoirStatusSummary {
+  storeKind: 'supabase' | 'file';
+  eligibleByCategory: Record<ReservoirCategory, number>;
+  totalByCategory: Record<ReservoirCategory, number>;
+  lowStockThresholds: Record<ReservoirCategory, number>;
+  targetPoolSizes: Record<ReservoirCategory, number>;
+  lowStockCategories: ReservoirCategory[];
+  lastDiscoveryRun: Omit<DiscoveryRunSummary, 'totalByCategory' | 'updatedExisting'> | null;
 }
 
 export interface LiteratureItem {
@@ -264,33 +394,15 @@ export type BiologyConcept = ScienceConcept;
 /* One Book — a candidate from the pool, plus the resolved record      */
 /* ------------------------------------------------------------------ */
 
-/**
- * What this repository asserts about a book. Everything here is authored
- * editorial: a title, an author, and two short paragraphs we wrote.
- *
- * It deliberately holds **no** cover, no rating, no publication year and no
- * availability claim. Those belong to the catalogue, so they are fetched from
- * Open Library at publish time (see `openlibrary.ts`) and are simply omitted
- * when the catalogue does not provide them.
- */
 export interface BookCandidate {
   title: string;
   author: string;
   synopsis: string;
   why: string;
-  /**
-   * An optional publisher/author page we also authored. When Open Library
-   * resolves, its work record becomes the primary link and this is dropped.
-   */
   url?: string;
   subjects?: string[];
 }
 
-/**
- * The published book card. Fields are optional because they are only ever
- * present when Open Library actually returned them — a missing `coverUrl`
- * means no cover exists for this record, not that the book has no cover.
- */
 export interface BookRecommendation extends BookCandidate {
   id: string;
   /** The link the card shows: the Open Library work record when resolved. */
@@ -332,14 +444,6 @@ export type CuriosityContentKey =
 
 export type PublishedContentIds = Partial<Record<CuriosityContentKey, string>>;
 
-/**
- * `shared`       — every instance and every restart reads the same record (the database).
- * `single-host`  — survives a restart of this machine, invisible to any other instance.
- * `instance-only`— written where the deployment filesystem is read-only, so it dies with
- *                  the instance; useful, and not persistence.
- * `unproven`     — nothing has been written yet from this process, so the store has not
- *                  had to discover whether its directory is writable.
- */
 export type CuriosityDurability = 'shared' | 'single-host' | 'instance-only' | 'unproven';
 
 /** How the content a card is showing arrived. */
@@ -358,43 +462,34 @@ export interface CuriosityPublicationMeta {
   contentIds: PublishedContentIds;
   /** Sections whose live source failed while this snapshot was built. */
   degraded?: string[];
-  /**
-   * How each card's content got here, computed by the server so the components can
-   * stay presentational: `new` from today's successful fetch, `cached` from an earlier
-   * successful fetch, `curated` from this repository, `unavailable` when neither
-   * applies. A reader should be able to tell without hovering over anything.
-   */
   sectionOrigins?: Partial<Record<'history' | 'aiWorld' | 'developerRadar' | 'book', CuriositySectionOrigin>>;
-  /**
-   * Whether this snapshot is still there after a restart, and whether another instance
-   * would see it. Reported, not assumed: the file store is `single-host` on a machine
-   * with a writable disk, `instance-only` on a read-only deployment filesystem, and the
-   * database store is `shared`.
-   */
   durability?: CuriosityDurability;
   /** The publication day of the One Book record, and the day it next turns over. */
   bookPublishedOn?: string;
   bookNextChangeOn?: string;
 }
 
-
 export type CuriosityBriefing = {
   date: string;
-  /**
-   * A Thought for Today, when a published snapshot carries one.
-   *
-   * Optional on purpose: the quote used to be selected in the browser and there
-   * is nothing wrong with a briefing that omits it. When present, the publisher
-   * chose it through the same anti-repetition ledger as the other cards, so the
-   * same line cannot come back the next week under a different date.
-   */
   quote?: { text: string; author: string };
   aiWorld: CuriosityNewsItem[];
   developerRadar: DeveloperDiscovery[];
   book: BookRecommendation;
   oneThing: OneThingItem;
   learning: LearningItem;
+  /**
+   * Lead history event (kept for full compatibility with pre-upgrade snapshots and callers).
+   * When `historyEntries` is populated, `history` equals `historyEntries[0] ?? null`.
+   */
   history: HistoryEvent | null;
+  /**
+   * Today in History entries ordered strictly by priority:
+   *   1. Sikh History
+   *   2. Indian History
+   *   3. World History
+   * Pre-upgrade snapshots that omit `historyEntries` fall back cleanly to `[history]`.
+   */
+  historyEntries?: HistoryEvent[];
   literature: LiteratureItem;
   sharpener: BrainSharpener;
   speakBetter: SpeakBetterLesson;

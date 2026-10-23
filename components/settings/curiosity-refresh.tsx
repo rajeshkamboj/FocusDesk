@@ -57,6 +57,19 @@ type Status = {
   } | null;
   book: { published: boolean; date?: string; publishedAt?: string; contentId?: string; source?: string; nextChangeAfter?: string } | null;
   pool: Record<string, { eligible: number; total: number }>;
+  reservoir?: {
+    storeKind: string;
+    eligibleByCategory: Record<string, number>;
+    totalByCategory: Record<string, number>;
+    lowStockCategories: string[];
+    lastDiscoveryRun: {
+      ranAt: string;
+      newDiscovered: number;
+      duplicateRejections: number;
+      validationFailures: number;
+      sourceFailures: number;
+    } | null;
+  };
   runs: { at: string; trigger: string; ok: boolean; detail: string }[];
   triggeredBy?: string;
 };
@@ -99,7 +112,7 @@ export function CuriosityRefreshSettings() {
   const [result, setResult] = useState<Summary | null>(null);
   const [probes, setProbes] = useState<ProbeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'status' | 'daily' | 'book' | 'probe' | null>(null);
+  const [busy, setBusy] = useState<'status' | 'daily' | 'book' | 'probe' | 'discover' | null>(null);
 
   /**
    * The caller's own Supabase access token, when there is a session. It is the
@@ -187,6 +200,29 @@ export function CuriosityRefreshSettings() {
     }
   };
 
+  const replenishPool = async () => {
+    setBusy('discover');
+    setError(null);
+    try {
+      const discovered = (await call('action=discover&lowStockOnly=1', 'POST')) as unknown as {
+        newDiscovered?: number;
+        totalEligible?: number;
+        triggeredBy?: string;
+      };
+      setResult({
+        status: 'discovered',
+        date: status?.today ?? '',
+        triggeredBy: discovered?.triggeredBy,
+        detail: `Added ${discovered?.newDiscovered ?? 0} verified candidate(s); ${discovered?.totalEligible ?? 0} eligible across categories.`,
+      });
+      setStatus((await call('action=status')) as unknown as Status);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Discovery failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const lastAttempt = status?.runs?.[0] ?? null;
   const schedulerLine = status
     ? status.scheduler.cronSecretConfigured
@@ -212,6 +248,9 @@ export function CuriosityRefreshSettings() {
           </Button>
           <Button variant="ghost" onClick={() => void checkSources()} disabled={busy !== null}>
             {busy === 'probe' ? 'Checking sources…' : 'Check sources'}
+          </Button>
+          <Button variant="ghost" onClick={() => void replenishPool()} disabled={busy !== null}>
+            {busy === 'discover' ? 'Replenishing…' : 'Replenish pool'}
           </Button>
         </div>
 
@@ -260,6 +299,14 @@ export function CuriosityRefreshSettings() {
                   .map(([category, counts]) => `${category} ${counts.eligible}/${counts.total}`)
                   .join(' · ')}
               />
+              {status.reservoir ? (
+                <Row
+                  label="Reservoir"
+                  value={['sikh-history', 'indian-history', 'world-history', 'chemistry', 'physics', 'biology', 'mythology']
+                    .map((category) => `${category} ${status.reservoir?.eligibleByCategory[category] ?? 0}/${status.reservoir?.totalByCategory[category] ?? 0}`)
+                    .join(' · ')}
+                />
+              ) : null}
               <Row label="Last attempt" value={lastAttempt ? `${formatPublicationInstant(lastAttempt.at)} · ${lastAttempt.ok ? 'ok' : 'failed'} — ${lastAttempt.detail}` : 'nothing has run in this record'} />
               <Row label="Schedule" value={schedulerLine ?? ''} />
               <Row

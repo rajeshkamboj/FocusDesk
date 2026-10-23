@@ -24,21 +24,6 @@ import type {
 } from './types';
 import type { Quote } from '@/lib/quotes';
 
-/**
- * A card-agnostic candidate.
- *
- * Every builder below turns one authored or fetched item into the same six
- * facts the selection service needs: which card it belongs to, what it is called,
- * what its text is, where it can be checked, which subjects it occupies, and a
- * version that changes exactly when the content does. The payload (`item`) is
- * untouched, so the selection layer can never mutate what a card renders.
- *
- * The distinction the brief asks for — a new item versus an edited old one — is
- * carried by `id` + `version`: the id is stable across edits (so the cooldown
- * still applies), while the version and signature change (so a genuinely
- * different article is not mistaken for the old one). Selection treats a
- * changed version of a *published* id as a repeat of the same item.
- */
 export interface ContentCandidate<T = unknown> {
   card: CuriosityCardKey;
   id: string;
@@ -55,7 +40,6 @@ export interface ContentCandidate<T = unknown> {
   item: T;
 }
 
-/** Shared finalization: fingerprint, signature and version all derive from the same text. */
 function finalize<T>(candidate: Omit<ContentCandidate<T>, 'text'> & { text: string }): ContentCandidate<T> {
   const text = candidate.text.trim();
   return {
@@ -65,12 +49,10 @@ function finalize<T>(candidate: Omit<ContentCandidate<T>, 'text'> & { text: stri
   };
 }
 
-/** The signature a candidate would store if published. Exported for tests and the validator. */
 export function candidateSignature(candidate: ContentCandidate): string {
   return signatureText(`${candidate.title} ${candidate.text}`);
 }
 
-/** The fingerprint a candidate would store if published. */
 export function candidateFingerprint(candidate: ContentCandidate): string {
   return fingerprint(candidate.title, candidate.text);
 }
@@ -79,14 +61,6 @@ export function candidateFingerprint(candidate: ContentCandidate): string {
 /* Pool-backed cards                                                   */
 /* ------------------------------------------------------------------ */
 
-/**
- * One Thing, Learn Something, Literature, One Book.
- *
- * The pool entry already carries the stable id, the source and the provenance;
- * the only new work is turning the card's own fields into comparable text. The
- * `item.url` is preferred over `entry.source.url` for identity because it is the
- * link the reader is shown, and the cooldown should follow what was seen.
- */
 export function candidateFromPool(card: CuriosityCardKey, entry: CuriosityPoolEntry<unknown>): ContentCandidate<unknown> {
   const item = entry.item as OneThingItem & LearningItem & LiteratureItem & BookCandidate;
   const title = item.title ?? item.topic ?? entry.id;
@@ -117,7 +91,6 @@ export function candidateFromPool(card: CuriosityCardKey, entry: CuriosityPoolEn
   });
 }
 
-/** Tags that describe a whole discipline rather than an item; never used as subjects. */
 const GENERIC_TAGS = new Set(['physics', 'chemistry', 'biology', 'science', 'technology', 'engineering', 'history']);
 
 /* ------------------------------------------------------------------ */
@@ -189,13 +162,6 @@ export function candidateFromSharpener(sharpener: BrainSharpener): ContentCandid
   });
 }
 
-/**
- * A Thought for Today.
- *
- * The quote corpus has no ids, so the identity is derived from the words and the
- * attribution: re-punctuating a quote does not make it new, and publishing the
- * same line under two spellings of the author's name does not either.
- */
 export function candidateFromQuote(quote: Quote): ContentCandidate<Quote> {
   const title = quote.text;
   const subjects = [`author:${quote.author}`, `quote:${normalizeTitle(quote.text).slice(0, 60)}`];
@@ -211,29 +177,34 @@ export function candidateFromQuote(quote: Quote): ContentCandidate<Quote> {
 }
 
 /**
- * Today in History.
- *
- * The identity is the event, not the day: the same anniversary must not return
- * a year later under the same heading, while a *different* event on the same date
- * is allowed. Year and title are part of both the id and the fingerprint, so an
- * edited explanation of the same event keeps the id and the cooldown.
+ * Today in History candidate wrapper. Preserves canonical reservoir event ids,
+ * category source attribution, aliases and subject keys across all three priority
+ * categories (`sikh-history`, `indian-history`, `world-history`).
  */
-export function candidateFromHistory(event: HistoryEvent, sourceId?: string): ContentCandidate<HistoryEvent> {
+export function candidateFromHistory(
+  event: HistoryEvent,
+  sourceId?: string,
+  extraSubjects?: readonly string[],
+): ContentCandidate<HistoryEvent> {
   const titleKey = normalizeTitle(event.title);
-  const id = sourceId ?? `history-${event.year}-${idFromText(event.title).slice(0, 10)}`;
+  const id = sourceId ?? event.id ?? `history-${event.year}-${idFromText(event.title).slice(0, 10)}`;
+  const sourceLabel = event.sourceName ?? event.attribution;
   return finalize({
     card: 'history',
     id,
     title: event.title,
-    text: [event.title, String(event.year), event.explanation, event.significance].join('\n'),
+    text: [event.title, String(event.year), event.explanation].join('\n'),
     ...(event.url ? { url: event.url } : {}),
-    ...(event.attribution ? { sourceName: event.attribution } : {}),
-    subjects: [`event:${titleKey}`, `year:${event.year}-${titleKey.slice(0, 24)}`],
+    ...(sourceLabel ? { sourceName: sourceLabel } : {}),
+    subjects: [
+      `event:${titleKey}`,
+      `year:${event.year}-${titleKey.slice(0, 24)}`,
+      ...(extraSubjects ?? []),
+    ],
     item: event,
   });
 }
 
-/** An archive entry shown when nothing is verified for the date. Labelled, never presented as today's. */
 export function candidateFromHistoryArchive(event: HistoryEvent, archiveId: string): ContentCandidate<HistoryEvent> {
   return candidateFromHistory(event, archiveId);
 }
@@ -285,16 +256,6 @@ export function candidateFromBook(book: BookRecommendation | BookCandidate, id: 
   });
 }
 
-/**
- * The subject keys a candidate would block, in the exact form the ledger index
- * stores (`sub:<group>:<subject>`).
- *
- * The prefix is part of the key, not decoration: an earlier version returned the
- * unprefixed form here while `history.identityKeys` stored the prefixed one, and
- * the result was a subject check that silently never matched. The two functions
- * now agree by construction, and `verify-curiosity-dedupe` asserts a cross-card
- * rejection by subject rather than by title.
- */
 export function candidateSubjectKeys(candidate: ContentCandidate): string[] {
   const group = policyFor(candidate.card).subjectGroup;
   return (candidate.subjects ?? [])
@@ -303,7 +264,6 @@ export function candidateSubjectKeys(candidate: ContentCandidate): string[] {
     .map((key) => `sub:${key}`);
 }
 
-/** Every key the ledger would record for a published candidate. */
 export function candidateLedgerKeys(candidate: ContentCandidate): string[] {
   return [
     `id:${candidate.card}|${candidate.id}`,

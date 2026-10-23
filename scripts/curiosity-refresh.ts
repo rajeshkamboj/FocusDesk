@@ -27,6 +27,8 @@
  */
 
 import { getCuriosityStatus, runCuriosityRefresh, type RefreshScope } from '../lib/curiosity/job';
+import { runKnowledgeDiscovery } from '../lib/curiosity/discovery';
+import { RESERVOIR_CATEGORIES, type ReservoirCategory } from '../lib/curiosity/types';
 import type { RefreshTrigger } from '../lib/curiosity/state';
 import { CURIOUSITY_CATEGORIES, poolFor } from '../lib/curiosity/pool';
 import { backfillPool } from '../lib/curiosity/content-db';
@@ -47,6 +49,27 @@ async function main(): Promise<number> {
   if (has('status')) {
     const status = await getCuriosityStatus();
     console.log(JSON.stringify(status, null, 2));
+    return 0;
+  }
+
+  if (has('discover')) {
+    const rawCats = flag('categories');
+    const categories = rawCats
+      ? rawCats
+          .split(',')
+          .map((c) => c.trim())
+          .filter((c): c is ReservoirCategory => (RESERVOIR_CATEGORIES as readonly string[]).includes(c))
+      : undefined;
+    const at = flag('at');
+    const now = at ? new Date(at) : new Date();
+    const summary = await runKnowledgeDiscovery({
+      now,
+      categories,
+      lowStockOnly: has('low-stock-only'),
+      fullSweep: has('full-sweep'),
+      trigger: (flag('trigger') as 'cron' | 'admin' | 'cli') ?? 'cli',
+    });
+    console.log(JSON.stringify(summary, null, 2));
     return 0;
   }
 

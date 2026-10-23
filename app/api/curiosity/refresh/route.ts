@@ -1,5 +1,7 @@
 import { authorizeRefresh } from '@/lib/curiosity/refresh-auth';
 import { normalizeScope, runCuriosityRefresh, getCuriosityStatus } from '@/lib/curiosity/job';
+import { runKnowledgeDiscovery } from '@/lib/curiosity/discovery';
+import { RESERVOIR_CATEGORIES, type ReservoirCategory } from '@/lib/curiosity/types';
 import { publicationDate } from '@/lib/curiosity/schedule';
 import { probeSources } from '@/lib/curiosity/sources';
 import { clearBriefingMemo } from '@/lib/curiosity/server';
@@ -50,6 +52,22 @@ async function handle(request: Request) {
       { checkedAt: new Date().toISOString(), probes, store: status.store, scheduler: status.scheduler, triggeredBy: authorization.via },
       { headers: { ...NO_STORE } },
     );
+  }
+
+  if (params.get('action') === 'discover') {
+    const rawCats = params.get('categories');
+    const categories = rawCats
+      ? rawCats
+          .split(',')
+          .map((c) => c.trim())
+          .filter((c): c is ReservoirCategory => (RESERVOIR_CATEGORIES as readonly string[]).includes(c))
+      : undefined;
+    const summary = await runKnowledgeDiscovery({
+      categories,
+      lowStockOnly: params.get('lowStockOnly') === '1' || params.get('lowStockOnly') === 'true',
+      trigger: authorization.via === 'cron-secret' ? 'cron' : 'admin',
+    });
+    return Response.json({ ...summary, triggeredBy: authorization.via }, { headers: { ...NO_STORE } });
   }
 
   const summary = await runCuriosityRefresh({

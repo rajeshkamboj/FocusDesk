@@ -1,15 +1,18 @@
-import type {
-  BookCandidate,
-  CuriosityCategory,
-  CuriosityPoolEntry,
-  BrainSharpener,
-  CuriosityBriefing,
-  CuriosityNewsItem,
-  DeveloperDiscovery,
-  HistoryEvent,
-  LearningItem,
-  LiteratureItem,
-  OneThingItem,
+import {
+  HISTORY_CATEGORY_LABELS,
+  HISTORY_CATEGORY_ORDER,
+  type BookCandidate,
+  type CuriosityCategory,
+  type CuriosityPoolEntry,
+  type BrainSharpener,
+  type CuriosityBriefing,
+  type CuriosityNewsItem,
+  type DeveloperDiscovery,
+  type HistoryCategory,
+  type HistoryEvent,
+  type LearningItem,
+  type LiteratureItem,
+  type OneThingItem,
 } from './types';
 import { dayNumber } from './schedule';
 import { selectFromPool } from './pool';
@@ -21,6 +24,12 @@ import { physicsConcepts } from './content/physics';
 import { biologyConcepts } from './content/biology';
 import { aiBackgroundLibrary } from './content/ai-background';
 import { radarFallbackShelf } from './content/radar-fallback';
+import { sikhHistorySeed, type SeedHistoryRecord } from './content/history-sikh';
+import { indianHistorySeed } from './content/history-indian';
+import { worldHistorySeed } from './content/history-world';
+
+export { sikhHistorySeed, indianHistorySeed, worldHistorySeed };
+export type { SeedHistoryRecord };
 
 
 
@@ -304,8 +313,11 @@ export function curatedRadar(date: string): { items: DeveloperDiscovery[]; ids: 
  * curated corpus or states something untrue.
  */
 export function curatedHistoryArchive(date: string): HistoryEvent {
-  const event = rotate(historyEvents, date, 1)[0];
-  return { ...event, forThisDate: false, origin: 'curated' };
+  const record = rotate(sikhHistorySeed, date, 1)[0];
+  return seedHistoryToEvent(record, 'sikh-history', {
+    forThisDate: false,
+    dateMatch: 'archive-fallback',
+  });
 }
 
 /**
@@ -317,11 +329,146 @@ export function curatedHistoryArchive(date: string): HistoryEvent {
  * whose date is not the date the card would claim, and republishing it under
  * "Today in History" would be a false statement.
  */
+export const seedHistoryByCategory: Record<HistoryCategory, readonly SeedHistoryRecord[]> = {
+  'sikh-history': sikhHistorySeed,
+  'indian-history': indianHistorySeed,
+  'world-history': worldHistorySeed,
+};
+
+export function isIsoLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+export function parseIsoCalendarDate(date: string): { year: number; month: number; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (!Number.isInteger(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const maxDays = month === 2
+    ? (isIsoLeapYear(year) ? 29 : 28)
+    : ([4, 6, 9, 11].includes(month) ? 30 : 31);
+  if (day > maxDays) return null;
+  return { year, month, day };
+}
+
+export function seedHistoryToEvent(
+  record: SeedHistoryRecord,
+  category: HistoryCategory,
+  opts: {
+    forThisDate: boolean;
+    dateMatch: 'exact-date' | 'leap-day-observed' | 'archive-fallback';
+    extraCalendarNote?: string;
+  },
+): HistoryEvent {
+  const calendarNote = [record.calendarNote, opts.extraCalendarNote]
+    .filter(Boolean)
+    .join(' ');
+  return {
+    id: record.id,
+    category,
+    categoryLabel: HISTORY_CATEGORY_LABELS[category],
+    date: record.dateLabel,
+    year: record.year,
+    ...(record.month !== undefined ? { month: record.month } : {}),
+    ...(record.day !== undefined ? { day: record.day } : {}),
+    datePrecision: record.datePrecision,
+    ...(calendarNote ? { calendarNote } : {}),
+    title: record.title,
+    explanation: record.explanation,
+    significance: record.significance,
+    url: record.url,
+    sourceName: record.sourceName,
+    ...(record.license ? { license: record.license } : {}),
+    forThisDate: opts.forThisDate,
+    dateMatch: opts.dateMatch,
+    origin: 'curated',
+    attribution: record.attribution,
+  };
+}
+
 export function curatedHistoryMatches(date: string): HistoryEvent[] {
+  const parsed = parseIsoCalendarDate(date);
+  const matches: HistoryEvent[] = [];
+  const seenUrls = new Set<string>();
+
+  if (parsed) {
+    for (const category of HISTORY_CATEGORY_ORDER) {
+      for (const record of seedHistoryByCategory[category]) {
+        if (record.month === parsed.month && record.day === parsed.day) {
+          seenUrls.add(record.url);
+          matches.push(seedHistoryToEvent(record, category, { forThisDate: true, dateMatch: 'exact-date' }));
+        }
+      }
+    }
+  }
+
   const key = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-  return historyEvents
-    .filter((event) => event.date === key && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible')
-    .map((event) => ({ ...event, forThisDate: true, origin: 'curated' as const }));
+  for (const event of historyEvents) {
+    if (event.date === key && event.title !== 'Johannes Gutenberg completes the Gutenberg Bible' && (!event.url || !seenUrls.has(event.url))) {
+      matches.push({
+        ...event,
+        category: 'world-history',
+        categoryLabel: HISTORY_CATEGORY_LABELS['world-history'],
+        forThisDate: true,
+        dateMatch: 'exact-date',
+        origin: 'curated',
+      });
+    }
+  }
+  return matches;
+}
+
+/**
+ * Deterministic 3-entry Today in History triad for zero-credential/offline mode,
+ * ordered strictly: 1. Sikh History -> 2. Indian History -> 3. World History.
+ * Exact calendar anniversaries carry `forThisDate: true`; archive milestones carry
+ * `forThisDate: false` so a non-anniversary event is never presented as today's date.
+ */
+export function fallbackHistoryTriad(date: string, safeDayOverride?: number): HistoryEvent[] {
+  const parsed = parseIsoCalendarDate(date);
+  const parsedMs = Date.parse(`${date}T00:00:00Z`);
+  const safeDay = safeDayOverride ?? (Number.isFinite(parsedMs) ? Math.abs(Math.floor(parsedMs / 86_400_000)) : 0);
+  const usedIds = new Set<string>();
+  const usedUrls = new Set<string>();
+
+  return HISTORY_CATEGORY_ORDER.map((category, slotIdx) => {
+    const corpus = seedHistoryByCategory[category];
+    if (parsed) {
+      const exact = corpus.filter(
+        (r) => r.month === parsed.month && r.day === parsed.day && !usedIds.has(r.id) && !usedUrls.has(r.url),
+      );
+      if (exact.length > 0) {
+        const chosen = exact[safeDay % exact.length];
+        usedIds.add(chosen.id);
+        usedUrls.add(chosen.url);
+        return seedHistoryToEvent(chosen, category, { forThisDate: true, dateMatch: 'exact-date' });
+      }
+      if (!isIsoLeapYear(parsed.year) && parsed.month === 2 && parsed.day === 28) {
+        const leapOnly = corpus.filter(
+          (r) => r.month === 2 && r.day === 29 && !usedIds.has(r.id) && !usedUrls.has(r.url),
+        );
+        if (leapOnly.length > 0) {
+          const chosen = leapOnly[safeDay % leapOnly.length];
+          usedIds.add(chosen.id);
+          usedUrls.add(chosen.url);
+          return seedHistoryToEvent(chosen, category, {
+            forThisDate: false,
+            dateMatch: 'leap-day-observed',
+            extraCalendarNote: 'Occurred on leap day (February 29); surfaced on February 28 in a non-leap year.',
+          });
+        }
+      }
+    }
+
+    const available = corpus.filter((r) => !usedIds.has(r.id) && !usedUrls.has(r.url));
+    const pool = available.length > 0 ? available : corpus;
+    const chosen = pool[(safeDay + slotIdx * 7) % pool.length];
+    usedIds.add(chosen.id);
+    usedUrls.add(chosen.url);
+    return seedHistoryToEvent(chosen, category, { forThisDate: false, dateMatch: 'archive-fallback' });
+  });
 }
 
 function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolEntry<T> {
@@ -336,6 +483,7 @@ export function dailyEditorial(date: string): Pick<
   | 'oneThing'
   | 'learning'
   | 'history'
+  | 'historyEntries'
   | 'literature'
   | 'sharpener'
   | 'speakBetter'
@@ -367,8 +515,9 @@ export function dailyEditorial(date: string): Pick<
     oneThing: oneThing.item,
     learning: learning.item,
     // A date-matched curated event is a verified statement about today, so it says so;
-    // the archive rotation used when nothing is verified carries `forThisDate: false`.
+    // `historyEntries` always carries the full ordered Sikh -> Indian -> World triad.
     history: curatedHistoryMatches(date)[0] ?? null,
+    historyEntries: fallbackHistoryTriad(date, safeDay),
     literature: literature.item,
     sharpener: brainSharpeners[safeDay % brainSharpeners.length],
     speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],

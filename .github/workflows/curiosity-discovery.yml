@@ -1,0 +1,121 @@
+name: Curiosity Knowledge Pool Discovery
+
+# Replenishes the persistent candidate reservoir (`curiosity_candidates`) ahead
+# of the daily midnight IST snapshot (`curiosity-daily.yml` at 30 18 * * * UTC).
+#
+# Schedule: 12:00 UTC daily = 17:30 Asia/Kolkata (6.5 hours before midnight IST).
+#
+# Execution modes:
+#   1. Direct runner execution (preferred when Supabase secrets are configured in
+#      GitHub Actions): runs `npx tsx scripts/curiosity-refresh.ts --discover` on
+#      the runner so multi-page Wikimedia/Wikidata pagination is never constrained
+#      by serverless HTTP timeouts.
+#   2. Authenticated app endpoint trigger (automatic when only CURIOSITY_APP_URL +
+#      CURIOSITY_CRON_SECRET are configured, matching curiosity-daily.yml).
+
+on:
+  schedule:
+    - cron: '00 12 * * *'
+  workflow_dispatch:
+    inputs:
+      categories:
+        description: 'Optional comma-separated categories (e.g. sikh-history,indian-history,world-history)'
+        required: false
+        type: string
+      low_stock_only:
+        description: 'Only replenish categories below LOW_STOCK_THRESHOLDS'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curiosity-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      CURIOSITY_CRON_SECRET: ${{ secrets.CURIOSITY_CRON_SECRET }}
+      APP_URL: ${{ vars.CURIOSITY_APP_URL }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      INPUT_CATEGORIES: ${{ inputs.categories }}
+      INPUT_LOW_STOCK: ${{ inputs.low_stock_only }}
+
+    steps:
+      - name: Checkout repository
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        run: npm ci
+
+      - name: Replenish candidate reservoir via CLI runner
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        run: |
+          set -euo pipefail
+          ARGS=("--discover" "--trigger=cron")
+          if [ -n "${INPUT_CATEGORIES}" ]; then
+            ARGS+=("--categories=${INPUT_CATEGORIES}")
+          fi
+          if [ "${INPUT_LOW_STOCK}" = "true" ]; then
+            ARGS+=("--low-stock-only")
+          fi
+          npx tsx scripts/curiosity-refresh.ts "${ARGS[@]}"
+
+      - name: Replenish candidate reservoir via authenticated app endpoint
+        if: ${{ (env.SUPABASE_SECRET_KEY == '' || env.NEXT_PUBLIC_SUPABASE_URL == '') }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL}" ]; then
+            echo "::error::Neither Supabase runner secrets nor repository variable CURIOSITY_APP_URL are set."
+            exit 1
+          fi
+          if [ -z "${CURIOSITY_CRON_SECRET}" ]; then
+            echo "::error::Repository secret CURIOSITY_CRON_SECRET is not set."
+            exit 1
+          fi
+
+          QUERY="action=discover"
+          if [ -n "${INPUT_CATEGORIES}" ]; then
+            QUERY="${QUERY}&categories=${INPUT_CATEGORIES}"
+          fi
+          if [ "${INPUT_LOW_STOCK}" = "true" ]; then
+            QUERY="${QUERY}&lowStockOnly=1"
+          fi
+          ENDPOINT="${APP_URL%/}/api/curiosity/refresh?${QUERY}"
+          RESPONSE_FILE="$(mktemp)"
+
+          HTTP_STATUS="$(curl --silent --show-error \
+            --max-time 180 \
+            --retry 2 --retry-delay 5 --retry-connrefused \
+            -X POST \
+            -H "Authorization: Bearer ${CURIOSITY_CRON_SECRET}" \
+            -H "Accept: application/json" \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            "${ENDPOINT}")"
+
+          echo "HTTP ${HTTP_STATUS} from ${ENDPOINT%\?*}"
+          cat "${RESPONSE_FILE}"
+          echo
+
+          if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -ge 300 ]; then
+            echo "::error::Curiosity discovery returned HTTP ${HTTP_STATUS}."
+            exit 1
+          fi

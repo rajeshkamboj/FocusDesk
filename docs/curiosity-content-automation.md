@@ -437,3 +437,28 @@ minute; the note carries `Retry-After`), *answered with text/html, not a feed* (
 moved), and *answered but listed nothing* (a quiet day, waiting is the fix). The probe is
 admin-only because it is the one read path allowed to touch the network, and it measures
 reachability from the server that publishes, not from a browser.
+
+## Repetition
+
+Every card now goes through one selection service before it can be published, with a
+recorded, per-card window (365 days for an exact repeat, 180 for a mythology character, 90
+for a science concept, 30 for a recurring subject on a sibling card). The history that makes
+those windows enforceable is the same `curiosity_seen` ledger this document already
+describes, extended by `010_curiosity_dedupe_history.sql` to carry title, canonical URL,
+text fingerprint, shingle signature, subject keys and source.
+
+Two consequences are worth knowing when reading a run:
+
+- A repeated item is the **last** option, not the first. The selector prefers never-published
+  candidates, then the least-recently used one, and records which window had to give on the
+  day's `degraded` list. A card is never left empty to honour a window.
+- A same-day re-run is a re-check, not a second discovery: it reproduces the same ids and
+  writes no new ledger rows.
+
+```bash
+npm run curiosity:dedupe    # 14 checks: identity, cooldowns, exhaustion, concurrency, persistence
+npm run curiosity:content   # the full-page render and every authored claim
+```
+
+The per-card audit, the window table, the migration steps and the remaining limitations are
+in [`curiosity-repetition-audit.md`](./curiosity-repetition-audit.md).

@@ -4,6 +4,7 @@ import { catchUpOnRender, currentBook } from './job';
 import { addPublicationDays, publicationDate } from './schedule';
 import { BOOK_INTERVAL_DAYS } from './schedule';
 import { getStateStore, type CuriosityState, type PublishedDaily } from './state';
+import { getDailyQuote } from '../quotes';
 import type { CuriosityBriefing, CuriosityDurability } from './types';
 
 /**
@@ -143,6 +144,10 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
     // as missing. No date is printed on these, because none of them is news.
     aiWorld: fallback.aiWorld,
     developerRadar: fallback.developerRadar,
+    // The quote is included in a published snapshot (so the publisher can enforce a
+    // cooldown on it); the built-in fallback still derives it from the date, which is
+    // the pre-existing deterministic behaviour and never empty.
+    quote: getDailyQuote(date),
     oneThing: fallback.oneThing,
     learning: fallback.learning,
     literature: fallback.literature,

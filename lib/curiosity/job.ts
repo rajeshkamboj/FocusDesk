@@ -1,16 +1,75 @@
-import { curatedFallbackIds, curatedHistoryArchive, dailyEditorial } from './content';
+import {
+  CURATED_PER_DAY,
+  brainSharpeners,
+  curatedHistoryArchive,
+  curatedHistoryMatches,
+  historyEvents,
+} from './content';
 import { loadDatabasePool } from './content-db';
-import { eligibleEntries, isCuriosityCategory, mergePool, poolFor, selectFromPool } from './pool';
+import { eligibleEntries, mergePool, poolFor, selectFromPool } from './pool';
 import { buildRecommendation, lookupBook } from './openlibrary';
-import { fetchDeveloperRadar, fetchHistory, fetchNews, type SourceNote } from './sources';
+import { fetchDeveloperRadar, fetchHistoryCandidates, fetchNews, type SourceNote } from './sources';
 import { addPublicationDays, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
-import { emptyState, getStateStore, recentSeenIds, type RefreshTrigger, type CuriosityState, type DailyPayload } from './state';
+import {
+  emptyState,
+  getStateStore,
+  recentSeenIds,
+  type RefreshTrigger,
+  type CuriosityState,
+  type DailyPayload,
+  type SeenRecord,
+} from './state';
+import type { CuriosityCardKey } from './catalog';
+import {
+  buildHistoryIndex,
+  publicationRecords,
+  toSeenRecord,
+  type HistoryIndex,
+} from './history';
+import { selectMany, selectCandidate } from './selection';
+import {
+  candidateFingerprint,
+  candidateFromHistory,
+  candidateFromHistoryArchive,
+  candidateFromMyth,
+  candidateFromNews,
+  candidateFromPool,
+  candidateFromQuote,
+  candidateFromRadar,
+  candidateFromScience,
+  candidateFromSharpener,
+  candidateFromSpeakBetter,
+  candidateSignature,
+  type ContentCandidate,
+} from './candidates';
+import { speakBetterLessons } from './content/speak-better';
+import { mythCharacters } from './content/mythology';
+import { chemistryConcepts } from './content/chemistry';
+import { physicsConcepts } from './content/physics';
+import { biologyConcepts } from './content/biology';
+import { aiBackgroundLibrary } from './content/ai-background';
+import { radarFallbackShelf } from './content/radar-fallback';
+import {
+  describeDiscovery,
+  discoverMythologyQueue,
+  discoverSciences,
+  resolveMythologyEntity,
+  type ScienceDiscipline,
+} from './discovery';
+import { DAILY_QUOTES } from '../quotes';
+import { idFromText } from './dedupe';
 import { sectionOrigins, type SectionOrigins } from './origins';
 import type {
   BookCandidate,
+  BrainSharpener,
   CuriosityDurability,
+  CuriosityNewsItem,
+  DeveloperDiscovery,
+  HistoryEvent,
+  MythCharacter,
+  ScienceConcept,
+  SpeakBetterLesson,
   CuriositySectionOrigin,
-  CuriosityBriefing,
   BookRecommendation,
   CuriosityCategory,
   CuriosityPoolEntry,
@@ -172,6 +231,68 @@ export function currentBook(state: CuriosityState, date: string): BookRecommenda
 /* The job                                                             */
 /* ------------------------------------------------------------------ */
 
+
+/* ------------------------------------------------------------------ */
+/* The anti-repetition layer, wired into the publisher                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Per-card rotation offsets.
+ *
+ * These are the same offsets the render fallback has always used, now applied to
+ * the *fresh* set rather than to the whole pool. Keeping them means two cards
+ * that share a pool shape do not advance in lockstep, while the selection service
+ * remains the thing that decides eligibility.
+ */
+const CARD_OFFSETS: Record<CuriosityCardKey, number> = {
+  quote: 0,
+  history: 0,
+  'ai-world': 0,
+  'developer-radar': 0,
+  'one-thing': 0,
+  literature: 5,
+  'learn-something': 11,
+  book: 2,
+  'speak-better': 5,
+  mythology: 2,
+  chemistry: 7,
+  physics: 11,
+  biology: 3,
+  sharpener: 0,
+};
+
+/** What a card's choice carries: the payload, its id, and the candidate behind both. */
+type Chosen = { id: string; item: unknown; candidate?: ContentCandidate };
+
+/**
+ * The ledger row for one published item.
+ *
+ * The fingerprint and signature are computed from the payload the reader is
+ * about to see, not from the source's raw response, so an item edited between
+ * fetch and publish is recorded as what was actually shown.
+ */
+export function ledgerRecord(candidate: ContentCandidate, date: string): SeenRecord {
+  return toSeenRecord({
+    card: candidate.card,
+    id: candidate.id,
+    on: date,
+    title: candidate.title,
+    ...(candidate.url ? { url: candidate.url } : {}),
+    fingerprint: candidateFingerprint(candidate),
+    signature: candidateSignature(candidate),
+    ...(candidate.subjects?.length ? { subjects: candidate.subjects } : {}),
+    ...(candidate.sourceName ? { source: candidate.sourceName } : {}),
+    ...(candidate.version ? { version: candidate.version } : {}),
+  });
+}
+
+/** Curated concepts for a discipline, before discovery is merged in. */
+function curatedScience(discipline: ScienceDiscipline) {
+  const concepts =
+    discipline === 'chemistry' ? chemistryConcepts : discipline === 'physics' ? physicsConcepts : biologyConcepts;
+  return concepts.map((concept) => candidateFromScience(discipline, concept));
+}
+
 export async function runCuriosityRefresh(
   options: {
     scope?: RefreshScope;
@@ -219,6 +340,20 @@ export async function runCuriosityRefresh(
     const patch: Partial<CuriosityState> = {};
     const seenRecords: CuriosityState['seen'] = [];
     const publishedAt = now.toISOString();
+    // Built once per run, from the full retained ledger: every cooldown check in
+    // this run reads this index, so two cards cannot disagree about what was
+    // published last week.
+    //
+    // Today's own rows are excluded when today is being re-published. A forced
+    // re-run is not a second discovery: it re-checks the live sources for the same
+    // day, and the items published earlier today must remain eligible so the
+    // snapshot does not change under a reader who is already looking at it. No new
+    // ledger rows are written for that path, so this cannot become a backdoor to
+    // publishing the same item twice.
+    const republishingSameDay = state.daily?.date === date;
+    const historyIndex: HistoryIndex = buildHistoryIndex(
+      publicationRecords(state.seen).filter((record) => !republishingSameDay || record.on !== date),
+    );
 
     /* ---- One Book, every three days ---------------------------------- */
     const wantBook = scope === 'book' || scope === 'all';
@@ -232,7 +367,21 @@ export async function runCuriosityRefresh(
     } else if (wantBook && !bookDue) {
       book = { published: false, reason: 'interval', contentId: state.book?.contentId, source: state.book?.payload.source, detail: `Next change ${addPublicationDays(state.book?.date ?? date, BOOK_INTERVAL_DAYS)} (every ${BOOK_INTERVAL_DAYS} days).` };
     } else if (wantBook) {
-      const entry = pickEntry<BookCandidate>(POOL_CATEGORY_BY_CARD.book, date, state, pools);
+      // The book is selected through the same service as every other card, which
+      // is what makes a book that reappears after 40 days — the old rotation's
+      // behaviour with 25 entries — impossible while any unread one remains.
+      const bookOutcome = selectCandidate(
+        pools.book.map((entry) => candidateFromPool('book', entry)),
+        { card: 'book', date, index: historyIndex, offset: CARD_OFFSETS.book },
+      );
+      const entry = bookOutcome.ok && bookOutcome.candidate
+        ? (pools.book.find((candidateEntry) => candidateEntry.id === bookOutcome.candidate?.id) as CuriosityPoolEntry<BookCandidate> | undefined)
+        : undefined;
+      if (!entry) {
+        // Nothing unread is left in the book pool: keep the recommendation the reader
+        // already has rather than republishing a recent one under a new day key.
+        book = { published: false, reason: 'failed', detail: `No unread book candidate for ${date}; the previous recommendation is kept.` };
+      } else {
       const { id } = entry;
       const lookup = options.offline
         ? ({ status: 'unresolved' as const, note: 'Offline run: Open Library was not contacted.', book: curatedBookFor(entry) } as const)
@@ -263,106 +412,293 @@ export async function runCuriosityRefresh(
           degraded: lookup.status === 'unresolved' ? [`openlibrary: ${lookup.note}`] : [],
           trigger,
         };
-        seenRecords.push({ category: 'book', id, on: date });
+        seenRecords.push(ledgerRecord(candidateFromPool('book', entry), date));
         book = { published: true, contentId: id, source: recommendation.source, cover: Boolean(recommendation.coverUrl), detail: lookup.status === 'unresolved' ? 'Published from the curated record; Open Library returned no matching work.' : 'Published with Open Library metadata.' };
+      }
       }
     }
 
     /* ---- Daily cards -------------------------------------------------- */
     const wantDaily = scope === 'daily' || scope === 'all';
     // Re-publishing today's date (the admin button, a retried workflow) refreshes
-    // the live sections and keeps the editorial picks: a day's briefing must not
-    // change under a reader who is looking at it.
+    // the live sections and keeps every editorial pick: a day's briefing must not
+    // change under a reader who is looking at it. The selection layer enforces the
+    // same rule on its own, but reusing the published payload is stronger — it does
+    // not depend on the ledger having been written yet.
     const republishingToday = state.daily?.date === date ? state.daily : null;
     const dailyDue = wantDaily && isDailyDue(now, state.daily?.date, { force: options.force });
     if (wantDaily && !dailyDue) {
       daily = { published: false, reason: 'already-published', contentIds: state.daily?.contentIds, detail: `Already published for ${date}.` };
     } else if (wantDaily) {
-      const editorial = dailyEditorial(date);
-      const fresh = selectDailyEditorial(date, state, pools);
-      const picks = republishingToday
-        ? {
-            oneThing: { item: republishingToday.payload.oneThing, id: republishingToday.contentIds['one-thing'] ?? '' },
-            literature: { item: republishingToday.payload.literature, id: republishingToday.contentIds.literature ?? '' },
-            learning: { item: republishingToday.payload.learning, id: republishingToday.contentIds['learn-something'] ?? '' },
-          }
-        : fresh;
       const degraded: string[] = [];
+      const reusing = Boolean(republishingToday);
+      const previousPayload = republishingToday?.payload ?? null;
+      const previousIds = republishingToday?.contentIds ?? {};
+      const reserved = new Set<string>();
+      const selectionNotes: string[] = [];
+      const discoveryNotes: string[] = [];
 
+      /**
+       * One selector for every card in this run.
+       *
+       * `reserved` carries the subjects already used today, so two cards cannot
+       * publish the same concept under different labels. Every relaxed window
+       * reported by the selector becomes a note on the published day.
+       */
+      const pick = <T,>(
+        card: CuriosityCardKey,
+        candidates: ContentCandidate<T>[],
+        count = 1,
+        allowRelaxation = true,
+      ): ContentCandidate<T>[] => {
+        const result = selectMany<T>(
+          candidates,
+          {
+            card,
+            date,
+            index: historyIndex,
+            reservedSubjects: reserved,
+            offset: CARD_OFFSETS[card] ?? 0,
+            ...(allowRelaxation ? {} : { policy: { allowRelaxation: false } }),
+          },
+          count,
+        );
+        selectionNotes.push(...result.warnings);
+        return result.candidates;
+      };
+
+      const choose = (card: CuriosityCardKey, candidates: ContentCandidate<unknown>[]): Chosen => {
+        const [candidate] = pick(card, candidates, 1);
+        if (!candidate) {
+          // Nothing usable means the pool is empty or every item is excluded. The
+          // throw happens inside the lease, so the previous day stays published and
+          // the run reports the card by name. An empty card is never written.
+          throw new RangeError(`refusing to publish ${date}: no usable ${card} candidate — every item is inside its exclusion window or the pool is empty`);
+        }
+        return { id: candidate.id, item: candidate.item, candidate };
+      };
+
+      const reusePick = (id: string | undefined, item: unknown): Chosen => ({ id: id ?? '', item });
+
+      /* ---- Pool-backed editorial cards --------------------------- */
+      const oneThingChoice = reusing
+        ? reusePick(previousIds['one-thing'], previousPayload?.oneThing)
+        : choose('one-thing', pools['one-thing'].map((entry) => candidateFromPool('one-thing', entry)));
+      const literatureChoice = reusing
+        ? reusePick(previousIds.literature, previousPayload?.literature)
+        : choose('literature', pools.literature.map((entry) => candidateFromPool('literature', entry)));
+      const learningChoice = reusing
+        ? reusePick(previousIds['learn-something'], previousPayload?.learning)
+        : choose('learn-something', pools['learn-something'].map((entry) => candidateFromPool('learn-something', entry)));
+
+      /* ---- A Thought for Today ----------------------------------- */
+      // The quote used to be chosen in the browser from a fixed list, so it repeated
+      // on a fifty-one day clock and nothing recorded that it had been shown. It is
+      // now published like any other card and carries the same cooldown.
+      const quoteChoice = reusing
+        ? reusePick(previousIds.quote, previousPayload?.quote)
+        : choose('quote', DAILY_QUOTES.map((quote) => candidateFromQuote(quote)));
+
+      /* ---- Speak Better and Brain Sharpener ---------------------- */
+      const speakBetterChoice = reusing
+        ? reusePick(previousIds['speak-better'], previousPayload?.speakBetter)
+        : choose('speak-better', speakBetterLessons.map((lesson) => candidateFromSpeakBetter(lesson)));
+      const sharpenerChoice = reusing
+        ? reusePick(previousIds.sharpener, previousPayload?.sharpener)
+        : choose('sharpener', brainSharpeners.map((sharpener) => candidateFromSharpener(sharpener)));
+
+      /* ---- Mythology -------------------------------------------- */
+      const mythologyChoice = reusing
+        ? reusePick(previousIds.mythology, previousPayload?.mythology)
+        : choose('mythology', mythCharacters.map((character) => candidateFromMyth(character)));
+      if (!reusing && mythologyChoice.candidate) {
+        // Enrich the *chosen* character only: one or two Wikidata requests a day, and
+        // the entity id and aliases are what stop a figure returning as a variant name.
+        const { character: enriched, note } = await resolveMythologyEntity(mythologyChoice.item as MythCharacter, { fetchImpl });
+        if (note) discoveryNotes.push(`mythology: ${note}`);
+        const enrichedCandidate = candidateFromMyth(enriched);
+        mythologyChoice.item = enriched;
+        mythologyChoice.candidate = enrichedCandidate;
+      }
+
+      /* ---- Science: authored corpus plus today's discovery ------- */
+      const discovery = options.offline
+        ? ({
+            chemistry: { discipline: 'chemistry' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
+            physics: { discipline: 'physics' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
+            biology: { discipline: 'biology' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
+          } as Record<ScienceDiscipline, Awaited<ReturnType<typeof discoverSciences>>[ScienceDiscipline]>)
+        : await discoverSciences(date, { fetchImpl });
+      for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+        if (discovery[discipline].note) discoveryNotes.push(describeDiscovery(discovery[discipline]));
+      }
+
+      // Mythology cannot be published from a lead paragraph — the card needs a
+      // story, a family, a timeline and evidence-labelled claims — so discovery's
+      // output for it is an *authoring queue*: named figures the curated corpus does
+      // not cover yet, read from the tradition that rotates by day. It is reported
+      // on the run so the queue is visible, and never becomes card content.
+      const mythQueue = options.offline
+        ? { queue: [], note: 'offline run' }
+        : await discoverMythologyQueue(date, mythCharacters, { fetchImpl });
+      const authoringQueue = mythQueue.queue.length
+        ? `Mythology authoring queue (${mythQueue.tradition ?? 'unavailable'}): ${mythQueue.queue.slice(0, 6).map((entry) => entry.title).join(', ')}${mythQueue.queue.length > 6 ? ` (+${mythQueue.queue.length - 6} more)` : ''}`
+        : null;
+      if (mythQueue.note && !mythQueue.queue.length) discoveryNotes.push(`mythology: ${mythQueue.note}`);
+
+      const chemistryChoice = reusing
+        ? reusePick(previousIds.chemistry, previousPayload?.chemistry)
+        : choose('chemistry', [...curatedScience('chemistry'), ...discovery.chemistry.candidates]);
+      const physicsChoice = reusing
+        ? reusePick(previousIds.physics, previousPayload?.physics)
+        : choose('physics', [...curatedScience('physics'), ...discovery.physics.candidates]);
+      const biologyChoice = reusing
+        ? reusePick(previousIds.biology, previousPayload?.biology)
+        : choose('biology', [...curatedScience('biology'), ...discovery.biology.candidates]);
+
+      /* ---- Today in History -------------------------------------- */
+      // Three tiers, in order: verified anniversaries for this date (live first, then
+      // the authored corpus), then an archive entry explicitly labelled as *not*
+      // belonging to this date. An anniversary that is not one is never presented
+      // as one, and yesterday's event is never carried over.
+      let historyChoice: Chosen;
+      if (reusing) {
+        historyChoice = reusePick(previousIds.history, previousPayload?.history);
+      } else {
+        const historyNote: SourceNote = {};
+        const live = options.offline
+          ? []
+          : (await fetchHistoryCandidates(date, fetchImpl, historyNote)).map((event) => candidateFromHistory(event));
+        const verified = [...live, ...curatedHistoryMatches(date).map((event) => candidateFromHistory(event))];
+        const [verifiedChoice] = verified.length ? pick<HistoryEvent>('history', verified, 1, false) : [];
+        if (verifiedChoice) {
+          historyChoice = { id: verifiedChoice.id, item: verifiedChoice.item, candidate: verifiedChoice };
+        } else {
+          const archive = historyEvents.map((event) =>
+            candidateFromHistoryArchive(
+              { ...event, forThisDate: false, origin: 'curated' as const },
+              `history-archive-${String(event.year)}-${idFromText(event.title)}`,
+            ),
+          );
+          const [archiveChoice] = pick<HistoryEvent>('history', archive, 1, false);
+          if (archiveChoice) {
+            historyChoice = { id: archiveChoice.id, item: archiveChoice.item, candidate: archiveChoice };
+            degraded.push(
+              `history: no unseen verified anniversary for ${date}${historyNote.text ? ` (${historyNote.text})` : ''}; published a curated archive entry, labelled as not belonging to this date`,
+            );
+          } else {
+            // The archive corpus has now been shown in full. A dated anniversary that
+            // is not today's cannot be substituted, and leaving the card empty breaks
+            // the day — so the archive rotation is allowed to come round again, with
+            // its label (`forThisDate: false`) intact and the repetition recorded.
+            const event = curatedHistoryArchive(date);
+            const candidate = candidateFromHistoryArchive(
+              event,
+              `history-archive-${String(event.year)}-${idFromText(event.title)}`,
+            );
+            historyChoice = { id: candidate.id, item: candidate.item, candidate };
+            degraded.push(
+              `history: no unseen verified anniversary for ${date}${historyNote.text ? ` (${historyNote.text})` : ''}, and every archive entry has been shown inside its cooldown; repeating the least-recently used archive entry, labelled as not belonging to this date`,
+            );
+          }
+        }
+      }
+
+      /* ---- AI World and Developer Radar -------------------------- */
       const newsNote: SourceNote = {};
       const radarNote: SourceNote = {};
-      const historyNote: SourceNote = {};
       const [news, radar] = options.offline
-        ? [[] as CuriosityBriefing['aiWorld'], [] as CuriosityBriefing['developerRadar']]
-        : [await fetchNews(fetchImpl, newsNote), await fetchDeveloperRadar(fetchImpl, radarNote)];
+        ? [[] as CuriosityNewsItem[], [] as DeveloperDiscovery[]]
+        : await Promise.all([fetchNews(fetchImpl, newsNote), fetchDeveloperRadar(fetchImpl, radarNote)]);
 
-      // Where each section's content came from, in this order and never past the last
-      // one: today's live source, the last items that did answer (kept with their own
-      // dates and links, so a cached item is still a true statement), then this
-      // repository's curated shelf. An unreachable network is a reason to switch
-      // source, never a reason to publish an empty card.
-      const previousPayload = republishingToday?.payload ?? state.daily?.payload ?? null;
-      const choose = <T extends { url?: string }>(
-        label: string,
-        live: T[],
-        previous: T[] | undefined,
-        curated: T[],
-        cause?: string,
-      ): { value: T[]; origin: CuriositySectionOrigin } => {
-        const why = cause ? ` (${cause})` : '';
-        if (live.length) return { value: live, origin: 'new' };
-        if (previous?.length) {
-          degraded.push(`${label}: nothing usable from the live source${why}; kept the ${previous.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
-          return { value: previous, origin: 'cached' };
-        }
-        degraded.push(`${label}: nothing usable from the live source${why}; published ${curated.length} curated item(s) in its place`);
-        return { value: curated, origin: 'curated' };
-      };
-      const aiWorldChoice = choose('aiWorld', news, previousPayload?.aiWorld, editorial.aiWorld, newsNote.text);
-      const radarChoice = choose('developerRadar', radar, previousPayload?.developerRadar, editorial.developerRadar, radarNote.text);
+      const liveNews = news.length
+        ? pick('ai-world', news.map((item) => candidateFromNews(item)), Math.min(news.length, 10), false)
+        : [];
+      const liveRadar = radar.length
+        ? pick('developer-radar', radar.map((item) => candidateFromRadar(item)), Math.min(radar.length, 3), false)
+        : [];
 
-      // The curated date-matched event wins; the live anniversaries feed only
-      // fills a day the corpus does not already cover.
-      //
-      // Unlike the rolling lists, history is *not* carried over from a previous
-      // day. A news item is labelled with its own date, so yesterday's entry is still
-      // true today; "Today in History" showing another day's anniversary would be a
-      // wrong statement, not merely a stale one. So an unverified day falls back to a
-      // curated entry that says plainly that it is from the archive.
-      let history = editorial.history;
-      if (!history && !options.offline) history = await fetchHistory(date, fetchImpl, historyNote);
-      if (!history) {
-        history = curatedHistoryArchive(date);
-        degraded.push(`history: no verified event for ${date}${historyNote.text ? ` (${historyNote.text})` : ' and no live source was consulted'}; published a curated archive entry, labelled as not belonging to this date`);
+      const curatedNews = aiBackgroundLibrary.map((entry) => candidateFromNews(entry.item));
+      const curatedRadarItems = radarFallbackShelf.map((entry) => candidateFromRadar(entry.item));
+
+      /**
+       * Precedence for a live card, unchanged from the original publisher and now
+       * enforced by the selector rather than by the shape of an array:
+       *   1. today's live items that pass the cooldown;
+       *   2. the items the previous run successfully published (kept with their own
+       *      dates and links, so a cached item is still a true statement);
+       *   3. this repository's curated shelf, chosen through the same ledger.
+       * A card is never left empty, and a fallback is always labelled.
+       */
+      let aiWorldChoices: ContentCandidate<CuriosityNewsItem>[] = liveNews;
+      let radarChoices: ContentCandidate<DeveloperDiscovery>[] = liveRadar;
+      let aiWorldOrigin: CuriositySectionOrigin = liveNews.length ? 'new' : 'unavailable';
+      let radarOrigin: CuriositySectionOrigin = liveRadar.length ? 'new' : 'unavailable';
+      let aiWorldItems: CuriosityNewsItem[] = aiWorldChoices.map((candidate) => candidate.item);
+      let radarItems: DeveloperDiscovery[] = radarChoices.map((candidate) => candidate.item);
+
+      if (!aiWorldItems.length && previousPayload?.aiWorld.length) {
+        aiWorldItems = previousPayload.aiWorld;
+        aiWorldOrigin = 'cached';
+        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept the ${previousPayload.aiWorld.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+      } else if (!aiWorldItems.length) {
+        aiWorldChoices = pick('ai-world', curatedNews, CURATED_PER_DAY);
+        aiWorldItems = aiWorldChoices.map((candidate) => candidate.item);
+        aiWorldOrigin = aiWorldItems.length ? 'curated' : 'unavailable';
+        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; published ${aiWorldItems.length} curated background item(s)`);
+      }
+
+      if (!radarItems.length && previousPayload?.developerRadar.length) {
+        radarItems = previousPayload.developerRadar;
+        radarOrigin = 'cached';
+        degraded.push(`developerRadar: nothing usable from the live source${radarNote.text ? ` (${radarNote.text})` : ''}; kept the ${previousPayload.developerRadar.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+      } else if (!radarItems.length) {
+        radarChoices = pick('developer-radar', curatedRadarItems, CURATED_PER_DAY);
+        radarItems = radarChoices.map((candidate) => candidate.item);
+        radarOrigin = radarItems.length ? 'curated' : 'unavailable';
+        degraded.push(`developerRadar: nothing usable from the live source${radarNote.text ? ` (${radarNote.text})` : ''}; published ${radarItems.length} curated shelf item(s)`);
+      }
+
+      if (!aiWorldItems.length && !previousPayload?.aiWorld.length) {
+        // Last resort: the deterministic shelf slice, still labelled curated. This
+        // can only be reached when the shelf itself is empty, which is a content bug.
+        throw new RangeError(`refusing to publish ${date}: no AI World content from any source`);
+      }
+      if (!radarItems.length && !previousPayload?.developerRadar.length) {
+        throw new RangeError(`refusing to publish ${date}: no Developer Radar content from any source`);
       }
 
       const payload: DailyPayload = {
-        aiWorld: [...aiWorldChoice.value],
-        developerRadar: [...radarChoice.value],
-        oneThing: picks.oneThing.item,
-        learning: picks.learning.item,
-        literature: picks.literature.item,
-        history,
-        sharpener: editorial.sharpener,
-        speakBetter: editorial.speakBetter,
-        mythology: editorial.mythology,
-        chemistry: editorial.chemistry,
-        physics: editorial.physics,
-        biology: editorial.biology,
+        aiWorld: [...aiWorldItems],
+        developerRadar: [...radarItems],
+        oneThing: oneThingChoice.item as OneThingItem,
+        learning: learningChoice.item as LearningItem,
+        literature: literatureChoice.item as LiteratureItem,
+        quote: quoteChoice.item as { text: string; author: string },
+        history: historyChoice.item as HistoryEvent,
+        sharpener: sharpenerChoice.item as BrainSharpener,
+        speakBetter: speakBetterChoice.item as SpeakBetterLesson,
+        mythology: mythologyChoice.item as MythCharacter,
+        chemistry: chemistryChoice.item as ScienceConcept,
+        physics: physicsChoice.item as ScienceConcept,
+        biology: biologyChoice.item as ScienceConcept,
       };
+
+      const idsFor = (choices: ContentCandidate<unknown>[]) => choices.map((candidate) => candidate.id).join('+');
       const contentIds: PublishedContentIds = {
-        'one-thing': picks.oneThing.id,
-        literature: picks.literature.id,
-        'learn-something': picks.learning.id,
-        'speak-better': payload.speakBetter.id,
-        mythology: payload.mythology.id,
-        chemistry: payload.chemistry.id,
-        physics: payload.physics.id,
-        biology: payload.biology.id,
-        sharpener: payload.sharpener.id,
-        ...(history ? { history: history.forThisDate === false ? `history-archive-${date}` : `history-${date}` } : {}),
-        ...(aiWorldChoice.origin === 'curated' ? { 'ai-world': curatedFallbackIds(date).aiWorld } : {}),
-        ...(radarChoice.origin === 'curated' ? { 'developer-radar': curatedFallbackIds(date).developerRadar } : {}),
+        'one-thing': oneThingChoice.id,
+        literature: literatureChoice.id,
+        'learn-something': learningChoice.id,
+        quote: quoteChoice.id,
+        'speak-better': speakBetterChoice.id,
+        mythology: mythologyChoice.id,
+        chemistry: chemistryChoice.id,
+        physics: physicsChoice.id,
+        biology: biologyChoice.id,
+        sharpener: sharpenerChoice.id,
+        history: historyChoice.id,
+        'ai-world': aiWorldOrigin === 'cached' ? previousIds['ai-world'] ?? '' : idsFor(aiWorldChoices),
+        'developer-radar': radarOrigin === 'cached' ? previousIds['developer-radar'] ?? '' : idsFor(radarChoices),
       };
 
       // Validate the whole snapshot before it can be seen by anyone. A payload that
@@ -373,6 +709,36 @@ export async function runCuriosityRefresh(
         throw new RangeError(`refusing to publish ${date}: ${invalid.join('; ')}`);
       }
 
+      // Ledger rows are written only for what this run actually chose. A same-day
+      // re-run reuses the published picks and therefore adds no history: the day is
+      // already recorded, and a second row would be a duplicate publication.
+      if (!reusing) {
+        for (const choice of [
+          oneThingChoice,
+          literatureChoice,
+          learningChoice,
+          quoteChoice,
+          speakBetterChoice,
+          sharpenerChoice,
+          mythologyChoice,
+          chemistryChoice,
+          physicsChoice,
+          biologyChoice,
+          historyChoice,
+        ]) {
+          if (choice.candidate) seenRecords.push(ledgerRecord(choice.candidate, date));
+        }
+        if (aiWorldOrigin !== 'cached') for (const candidate of aiWorldChoices) seenRecords.push(ledgerRecord(candidate, date));
+        if (radarOrigin !== 'cached') for (const candidate of radarChoices) seenRecords.push(ledgerRecord(candidate, date));
+      }
+
+      // A relaxed cooldown or a failed discovery pass is part of the day's record,
+      // not just the console: Settings → Data shows these, and the workflow prints
+      // them. Silence about a fallback is what the brief calls presenting stale
+      // content as newly discovered.
+      degraded.push(...selectionNotes);
+      if (!reusing && discoveryNotes.length) degraded.push(...discoveryNotes.map((note) => `discovery: ${note}`));
+
       patch.daily = {
         date,
         publishedAt,
@@ -381,14 +747,19 @@ export async function runCuriosityRefresh(
         degraded,
         trigger,
       };
-      if (!republishingToday) {
-        for (const [category, entryId] of Object.entries(contentIds)) {
-          if (entryId && category !== 'history' && isCuriosityCategory(category)) {
-            seenRecords.push({ category, id: String(entryId), on: date });
-          }
-        }
-      }
-      daily = { published: true, contentIds, degraded, detail: degraded.length ? `Published with ${degraded.length} section(s) on retained or fallback content.` : 'Published all sections from live sources.' };
+      daily = {
+        published: true,
+        contentIds,
+        degraded,
+        detail: [
+          degraded.length
+            ? `Published with ${degraded.length} note(s): retained, relaxed or fallback content.`
+            : 'Published all sections from live sources.',
+          authoringQueue,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      };
     }
 
     if (!patch.daily && !patch.book) return null;
@@ -571,6 +942,31 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
     check(`${key}.id`, !blank(card?.id));
   }
   check('mythology.story', !blank(payload.mythology?.story));
+
+  // A Thought for Today: optional, but if it is present it must be a complete
+  // attribution — an anonymous quotation is unattributable, and the card renders
+  // the author as the caption.
+  if (payload.quote) {
+    check('quote.text', !blank(payload.quote.text));
+    check('quote.author', !blank(payload.quote.author));
+  }
+
+  // The three science cards now accept discovered content as well as authored
+  // content, so the gate is explicit about every field the card renders, and about
+  // attribution: a discovered card without a source link would be a claim with no
+  // way to check it.
+  for (const key of ['chemistry', 'physics', 'biology'] as const) {
+    const concept = payload[key];
+    check(`${key}.topic`, !blank(concept?.topic));
+    check(`${key}.simple`, !blank(concept?.simple));
+    check(`${key}.connection`, !blank(concept?.connection));
+    check(`${key}.surprising`, !blank(concept?.surprising));
+    check(`${key}.question`, !blank(concept?.question));
+    if (concept?.origin === 'wikipedia') {
+      check(`${key}.source url`, !invalidUrl(concept?.source?.url));
+      check(`${key}.source name`, !blank(concept?.source?.name));
+    }
+  }
 
   return problems;
 }

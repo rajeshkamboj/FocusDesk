@@ -315,7 +315,9 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
 export function CuriosityScreen({ briefing: initialBriefing }: { briefing: CuriosityBriefing }) {
   const date = useLocalDate(initialBriefing.date);
   const [briefing, setBriefing] = useState(initialBriefing);
-  const dailyQuote = useMemo(() => getDailyQuote(date), [date]);
+  // A published snapshot carries the quote the publisher chose (and recorded in the
+  // ledger); the date-derived quote remains the fallback so the panel is never empty.
+  const dailyQuote = useMemo(() => briefing.quote ?? getDailyQuote(date), [briefing.quote, date]);
   useEffect(() => {
     if (date === briefing.date) return;
     const controller = new AbortController();

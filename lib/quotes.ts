@@ -207,6 +207,102 @@ export const DAILY_QUOTES: Quote[] = [
     text: 'Waste no more time arguing about what a good man should be. Be one.',
     author: 'Marcus Aurelius',
   },
+  {
+    text: 'No man is an island, entire of itself.',
+    author: 'John Donne',
+  },
+  {
+    text: 'Knowledge is power.',
+    author: 'Francis Bacon',
+  },
+  {
+    text: 'Reading maketh a full man; conference a ready man; and writing an exact man.',
+    author: 'Francis Bacon',
+  },
+  {
+    text: 'If I have seen further it is by standing on the shoulders of Giants.',
+    author: 'Isaac Newton',
+  },
+  {
+    text: 'I think, therefore I am.',
+    author: 'René Descartes',
+  },
+  {
+    text: 'Man is born free, and everywhere he is in chains.',
+    author: 'Jean-Jacques Rousseau',
+  },
+  {
+    text: 'To be, or not to be, that is the question.',
+    author: 'William Shakespeare',
+  },
+  {
+    text: 'All the world’s a stage, and all the men and women merely players.',
+    author: 'William Shakespeare',
+  },
+  {
+    text: 'There are more things in heaven and earth, Horatio, than are dreamt of in your philosophy.',
+    author: 'William Shakespeare',
+  },
+  {
+    text: 'What is past is prologue.',
+    author: 'William Shakespeare',
+  },
+  {
+    text: 'Knowledge comes, but wisdom lingers.',
+    author: 'Alfred, Lord Tennyson',
+  },
+  {
+    text: '’Tis better to have loved and lost than never to have loved at all.',
+    author: 'Alfred, Lord Tennyson',
+  },
+  {
+    text: 'A thing of beauty is a joy for ever.',
+    author: 'John Keats',
+  },
+  {
+    text: 'Beauty is truth, truth beauty — that is all ye know on earth, and all ye need to know.',
+    author: 'John Keats',
+  },
+  {
+    text: 'If winter comes, can spring be far behind?',
+    author: 'Percy Bysshe Shelley',
+  },
+  {
+    text: 'The child is father of the man.',
+    author: 'William Wordsworth',
+  },
+  {
+    text: 'Our life is frittered away by detail. Simplify, simplify.',
+    author: 'Henry David Thoreau',
+  },
+  {
+    text: 'If a man does not keep pace with his companions, perhaps it is because he hears a different drummer.',
+    author: 'Henry David Thoreau',
+  },
+  {
+    text: 'Do I contradict myself? Very well then I contradict myself, (I am large, I contain multitudes.)',
+    author: 'Walt Whitman',
+  },
+  {
+    text: 'I am no bird; and no net ensnares me.',
+    author: 'Charlotte Brontë',
+  },
+  {
+    text: 'The truth is rarely pure and never simple.',
+    author: 'Oscar Wilde',
+  },
+  {
+    text: 'We are all in the gutter, but some of us are looking at the stars.',
+    author: 'Oscar Wilde',
+  },
+  {
+    text: 'Experience is the name everyone gives to their mistakes.',
+    author: 'Oscar Wilde',
+  },
+  {
+    text: 'Fortune favours the bold.',
+    author: 'Virgil',
+  },
 ];
 
 /**

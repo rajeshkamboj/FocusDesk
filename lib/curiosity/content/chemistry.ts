@@ -192,4 +192,86 @@ export const chemistryConcepts: ChemistryConcept[] = [
     question:
       'Heating removed only water and the colour changed completely. What does that tell you about where the colour of a salt comes from?',
   },
+  {
+    id: 'catalyst-activation-energy',
+    topic: 'Why a catalyst is not used up',
+    simple:
+      'A catalyst speeds up a reaction without being consumed by it. It does this by offering a different route from reactants to products — one with a lower activation energy — so more collisions at ordinary temperatures have enough energy to react.',
+    deeper:
+      'The catalyst takes part in the mechanism: it binds a reactant, makes a bond easier to break, and then releases the product and returns to its original form. Because it is regenerated, a small amount can convert a very large amount of material. Enzymes are catalysts with a folded protein pocket shaped for one substrate; industrial catalysts are often metal surfaces that adsorb molecules and weaken their bonds.',
+    equation: 'rate ∝ exp(−Eₐ / RT): lowering Eₐ raises the rate at any given temperature.',
+    connection:
+      'Every catalytic converter on a car uses platinum, palladium or rhodium to turn carbon monoxide and nitrogen oxides into less harmful gases, which is why the metals are recovered from old exhausts.',
+    surprising:
+      'A catalyst changes the rate but not the final equilibrium position: it makes the same reaction reach the same balance faster, which is why industrial chemists still have to choose conditions carefully.',
+    question: 'If a catalyst lowers the activation energy, why does it not also make the reverse reaction faster?',
+  },
+  {
+    id: 'ph-buffer-blood',
+    topic: 'Why blood keeps its pH almost constant',
+    simple:
+      'Blood holds its pH between about 7.35 and 7.45 even as you eat, exercise and produce acid. It does this with buffers — mixtures of a weak acid and its conjugate base that absorb added acid or base without letting the pH move much.',
+    deeper:
+      'The main buffer is carbonic acid and bicarbonate. Extra acid is neutralised by bicarbonate, producing carbon dioxide that the lungs exhale; extra base is absorbed by carbonic acid. Proteins and phosphate buffers also contribute. The lungs and kidneys regulate the components, so blood pH is a chemical equilibrium held in place by two organs.',
+    equation: 'CO₂ + H₂O ⇌ H₂CO₃ ⇌ H⁺ + HCO₃⁻',
+    connection:
+      'A blood gas test measures bicarbonate and dissolved carbon dioxide precisely because the buffer pair reports both a breathing problem and a metabolic one.',
+    surprising:
+      'A person breathing too fast can raise blood pH without any acid being lost: exhaling more carbon dioxide pulls the equilibrium to the left and leaves fewer hydrogen ions behind.',
+    question: 'Why can hyperventilation change blood pH before the kidneys have done anything at all?',
+  },
+  {
+    id: 'saponification-soap',
+    topic: 'How soap actually washes',
+    simple:
+      'Soap is made by boiling fat or oil with a strong base. The reaction breaks each fat molecule into glycerol and three fatty-acid salts. Those salts have a water-loving head and an oil-loving tail, which is exactly what lets water carry grease away.',
+    deeper:
+      'In water the soap molecules gather into micelles, with tails inward around a droplet of oil and heads outward facing the water. The droplet becomes water-soluble and rinses off. The reaction is called saponification, and it is a hydrolysis of an ester by a base. Hard water leaves scum because calcium and magnesium ions bind the soap and take it out of action.',
+    connection:
+      'The same chemistry makes soap from wood ash and animal fat in traditional recipes — the ash supplies the alkali, and the process needs no synthetic ingredient at all.',
+    surprising:
+      'Soap works better in soft water not because it is stronger, but because dissolved calcium and magnesium do not steal it before it reaches the grease.',
+    question: 'Why does a soap that lathers poorly in hard water still clean, but need much more of it?',
+  },
+  {
+    id: 'electrochemical-cell',
+    topic: 'Why a battery runs down',
+    simple:
+      'A battery converts chemical energy into electrical energy by separating two reactions that want to exchange electrons. The electrons travel through the external circuit instead of meeting directly, and that detour is the current.',
+    deeper:
+      'At the negative electrode a material is oxidised and gives up electrons; at the positive electrode another material is reduced and takes them. An electrolyte lets ions move inside the cell to keep charge balanced. The cell voltage is set by the difference in reduction potentials, and it falls as reactants are consumed and products build up. Rechargeable cells reverse the reactions when current is forced backwards.',
+    equation: 'For a Daniell cell: Zn(s) → Zn²⁺ + 2e⁻ at the anode; Cu²⁺ + 2e⁻ → Cu(s) at the cathode.',
+    connection:
+      'Lithium-ion cells in phones and cars work on this principle: lithium ions shuttle between a graphite electrode and a metal-oxide electrode while electrons take the long way round through your device.',
+    surprising:
+      'A battery is not empty in the sense of having no energy left; it has reached an equilibrium where the two half-reactions can no longer drive a useful current.',
+    question: 'Why does a new battery read its full voltage with a voltmeter but fail to run a motor?',
+  },
+  {
+    id: 'alloy-steel',
+    topic: 'Why adding a little carbon transforms iron',
+    simple:
+      'Steel is iron with a small amount of carbon, usually under two per cent. The carbon atoms do not simply fill gaps: they change how the iron crystals deform, which is why steel is far stronger than pure iron.',
+    deeper:
+      'Iron atoms rearrange into different crystal structures at different temperatures; carbon fits into the gaps of some and not others. Rapid cooling traps carbon in a distorted structure called martensite, making the metal hard but brittle; slower cooling lets it form softer phases. Alloying with chromium adds corrosion resistance, and nickel or manganese changes toughness.',
+    connection:
+      'A kitchen knife, a bridge cable and a car body are all steel, but their carbon content and heat treatment are chosen for different combinations of hardness, strength and flexibility.',
+    surprising:
+      'Pure iron is actually softer than many steels yet also more ductile; the same carbon that makes steel strong can make it brittle if the cooling is wrong.',
+    question: 'Why can two steels with identical carbon content behave completely differently after heat treatment?',
+  },
+  {
+    id: 'le-chatelier-equilibrium',
+    topic: 'Why a reaction resists being pushed',
+    simple:
+      'A reversible reaction at equilibrium is not static: both directions continue at the same rate. If you change the conditions, the system shifts in the direction that partly opposes the change. That is Le Chatelier’s principle.',
+    deeper:
+      'Adding more reactant pushes the reaction toward products; removing a product pulls it the same way. Raising the pressure favours the side with fewer gas molecules. Raising the temperature favours the endothermic direction, because the system absorbs some of the added heat. The principle is a consequence of the equilibrium constant and reaction quotient, not a separate law.',
+    equation: 'K = [products] / [reactants] at equilibrium; Q ≠ K means the system will shift.',
+    connection:
+      'The Haber process for ammonia is run at high pressure and a compromise temperature because the reaction is exothermic and produces fewer gas molecules — both facts come straight from this principle.',
+    surprising:
+      'A catalyst does not shift the equilibrium at all: it speeds up both directions equally, so the same mixture is reached sooner rather than differently.',
+    question: 'Why does a compromise temperature matter for an exothermic industrial reaction?',
+  },
 ];

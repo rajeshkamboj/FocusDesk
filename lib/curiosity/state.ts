@@ -3,6 +3,7 @@ import { access, constants, mkdir, readFile, rename, unlink, writeFile } from 'n
 import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
 import type { BookRecommendation, CuriosityBriefing, CuriosityCategory, CuriosityDurability, PublishedContentIds } from './types';
+import { LEGACY_SEEN_CATEGORIES } from './catalog';
 
 /**
  * The published record: what was published, when, from which content ids, and
@@ -66,7 +67,34 @@ export type PublishedBook = {
   trigger: RefreshTrigger;
 };
 
-export type SeenRecord = { category: CuriosityCategory; id: string; on: string };
+/**
+ * One row of the publication ledger.
+ *
+ * `category` is a card key (see `catalog.ts`) — a superset of the four pool
+ * categories this type used to hold, which is why the field is typed as a string
+ * with a documented meaning rather than the narrow union. Rows written before the
+ * enrichment have only the first three fields; everything else is optional and is
+ * simply absent for them.
+ */
+export type SeenRecord = {
+  category: string;
+  id: string;
+  on: string;
+  /** The item's title at publication time, for duplicate-title detection. */
+  title?: string;
+  /** Canonical URL the reader was sent to. */
+  url?: string;
+  /** Stable hash of normalized title + body. */
+  fingerprint?: string;
+  /** Compact shingle signature, for near-duplicate detection. */
+  signature?: string;
+  /** Entity/subject keys this item occupied. */
+  subjects?: string[];
+  /** Where the text came from, recorded so attribution survives in the ledger. */
+  source?: string;
+  /** Content version: changes only when the wording changes. */
+  version?: string;
+};
 export type RunRecord = { at: string; trigger: RefreshTrigger; ok: boolean; detail: string };
 
 export type CuriosityState = {
@@ -79,9 +107,19 @@ export type CuriosityState = {
 
 export const emptyState = (): CuriosityState => ({ version: 1, daily: null, book: null, seen: [], runs: [] });
 
-/** Rows kept per ledger, so the state file cannot grow without bound. */
-export const MAX_SEEN_RECORDS = 400;
+/**
+ * Rows kept in the ledger.
+ *
+ * Fourteen cards × 365 days is ~5,100 rows a year, and the cooldown needs a year
+ * of history, so the old cap of 400 was itself a repetition bug: after a few
+ * weeks the ledger forgot the very items it was supposed to exclude. The cap is
+ * now three years' worth, which keeps a file-store document a few megabytes at
+ * worst and never truncates inside a cooldown window.
+ */
+export const MAX_SEEN_RECORDS = 20_000;
 export const MAX_RUN_RECORDS = 25;
+/** Retention window for publication history: three years, twice the longest cooldown. */
+export const MAX_SEEN_AGE_DAYS = 1095;
 
 /**
  * A job decides *what* to persist and the store decides *whether it may*.
@@ -131,11 +169,19 @@ export function isState(value: unknown): value is CuriosityState {
 /** Trims and orders the ledgers; both stores persist through this. */
 export function normalizeState(input: Partial<CuriosityState> | null | undefined): CuriosityState {
   const state = isState(input) ? input : emptyState();
+  const seen = Array.isArray(state.seen) ? state.seen : [];
+  // Age pruning is relative to the newest record, not to the wall clock, so the
+  // same document normalises identically on two machines and a test with a fixed
+  // date does not depend on when it ran.
+  let newest = '';
+  for (const record of seen) if (record.on > newest) newest = record.on;
+  const cutoff = newest ? new Date(Date.parse(`${newest}T00:00:00Z`) - MAX_SEEN_AGE_DAYS * 86_400_000).toISOString().slice(0, 10) : '';
+  const retained = cutoff ? seen.filter((record) => record.on >= cutoff) : seen;
   return {
     version: 1,
     daily: state.daily ?? null,
     book: state.book ?? null,
-    seen: Array.isArray(state.seen) ? state.seen.slice(-MAX_SEEN_RECORDS) : [],
+    seen: retained.slice(-MAX_SEEN_RECORDS),
     runs: Array.isArray(state.runs) ? state.runs.slice(-MAX_RUN_RECORDS) : [],
   };
 }
@@ -432,7 +478,7 @@ export class SupabaseStateStore implements CuriosityStateStore {
     try {
       const [briefings, seen] = await Promise.all([
         this.select('curiosity_briefings?order=date_key.desc&select=kind,date_key,published_at,content_ids,payload,degraded,trigger&limit=60'),
-        this.select('curiosity_seen?order=shown_on.desc&select=category,content_id,shown_on&limit=400'),
+        this.readLedger(),
       ]);
       const daily = briefings.find((row) => row.kind === 'daily');
       const book = briefings.find((row) => row.kind === 'book');
@@ -440,9 +486,7 @@ export class SupabaseStateStore implements CuriosityStateStore {
         version: 1,
         daily: daily ? hydrateDaily(daily) : null,
         book: book ? hydrateBook(book) : null,
-        seen: seen
-          .map((row) => ({ category: String(row.category) as CuriosityCategory, id: String(row.content_id), on: String(row.shown_on) }))
-          .reverse(),
+        seen: seen.map(hydrateSeen).reverse(),
         runs: [],
       });
     } catch {
@@ -453,14 +497,62 @@ export class SupabaseStateStore implements CuriosityStateStore {
     }
   }
 
-  private async select(query: string, key = this.readKey): Promise<Record<string, unknown>[]> {
+  /**
+   * The publication ledger, newest first.
+   *
+   * Three things changed from the original four-hundred-row read, and all three
+   * were repetition bugs rather than scale concerns:
+   *
+   *  - **Enough rows.** 400 rows is four or five weeks across fourteen cards, so
+   *    a 365-day cooldown could not be enforced against the database at all.
+   *    Pages of 1,000 up to 8,000 records cover three years.
+   *  - **The identity columns**, when the deployment has applied migration 010.
+   *    A pre-010 table is detected from the 400 response and the read degrades to
+   *    the three original columns — the selection layer then falls back to
+   *    id-only history, which is a documented, visible degradation.
+   *  - **`offset` paging**, because PostgREST caps a response at 1,000 rows by
+   *    default and silently truncating history is the failure mode this change
+   *    exists to remove.
+   */
+  private async readLedger(): Promise<Record<string, unknown>[]> {
+    const enriched = 'category,content_id,shown_on,title,url,fingerprint,signature,subjects,source,version';
+    const legacy = 'category,content_id,shown_on';
+    let columns = enriched;
+    const rows: Record<string, unknown>[] = [];
+    for (let page = 0; page < 8; page += 1) {
+      const result = await this.selectRaw(`curiosity_seen?order=shown_on.desc&select=${columns}&limit=1000&offset=${page * 1000}`);
+      if (!result.ok) {
+        // The first page failing the enriched projection is the pre-010 table;
+        // anything later is a transport failure, and partial history is better
+        // than none because the lease and the snapshot still prevent duplicates.
+        if (page === 0 && columns !== legacy && (result.status === 400 || result.status === 404)) {
+          columns = legacy;
+          continue;
+        }
+        if (page === 0) throw new Error(`Supabase ledger read failed (${result.status})`);
+        break;
+      }
+      rows.push(...result.rows);
+      if (result.rows.length < 1000) break;
+    }
+    return rows;
+  }
+
+  private async selectRaw(query: string, key = this.readKey): Promise<{ ok: boolean; status: number; rows: Record<string, unknown>[] }> {
     const response = await fetch(`${this.url}/rest/v1/${query}`, {
       headers: this.headers(key),
       cache: 'no-store',
-      signal: AbortSignal.timeout(6_000),
+      signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) throw new Error(`Supabase read failed (${response.status})`);
-    return (await response.json()) as Record<string, unknown>[];
+    if (!response.ok) return { ok: false, status: response.status, rows: [] };
+    const body = (await response.json()) as unknown;
+    return { ok: true, status: response.status, rows: Array.isArray(body) ? (body as Record<string, unknown>[]) : [] };
+  }
+
+  private async select(query: string, key = this.readKey): Promise<Record<string, unknown>[]> {
+    const result = await this.selectRaw(query, key);
+    if (!result.ok) throw new Error(`Supabase read failed (${result.status})`);
+    return result.rows;
   }
 
   private async rpc(name: string, args: Record<string, unknown>) {
@@ -510,35 +602,106 @@ export class SupabaseStateStore implements CuriosityStateStore {
     }
   }
 
+  /**
+   * Persist a state document.
+   *
+   * Write order is part of the correctness argument and is the reverse of the
+   * original: the **ledger first, the snapshot second**.
+   *
+   *  - Ledger-then-snapshot means a crash between the two records that an item
+   *    was published when the reader never saw it. The cost is one item skipped
+   *    by the rotation — the safe direction.
+   *  - Snapshot-then-ledger (the old order) meant a crash could publish a day
+   *    whose items were never recorded, and the next run would happily pick them
+   *    again. That is precisely the "why did I read this last week" failure.
+   *
+   * The ledger write also degrades instead of failing the publish: an
+   * unmigrated table (no identity columns, narrower category CHECK) is retried
+   * with the original columns and the legacy category list. History for the new
+   * cards is lost until the migration is applied; the day is not.
+   */
   private async persist(state: CuriosityState): Promise<void> {
+    await this.writeLedger(state.seen);
+
     const rows: Record<string, unknown>[] = [];
     if (state.daily) rows.push(toBriefingRow('daily', state.daily));
     if (state.book) rows.push(toBriefingRow('book', state.book));
     if (rows.length) {
-      await fetch(`${this.url}/rest/v1/curiosity_briefings`, {
+      const response = await fetch(`${this.url}/rest/v1/curiosity_briefings`, {
         method: 'POST',
-        headers: { ...this.headers(this.writeKey), 'prefer': 'resolution=merge-duplicates,return=minimal' },
+        headers: { ...this.headers(this.writeKey), prefer: 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(rows),
         signal: AbortSignal.timeout(8_000),
-      }).then(async (response) => {
-        if (!response.ok) throw new Error(`Supabase briefing write failed (${response.status})`);
       });
+      if (!response.ok) throw new Error(`Supabase briefing write failed (${response.status})`);
     }
-    const seen = state.seen.slice(-MAX_SEEN_RECORDS).map((record) => ({ category: record.category, content_id: record.id, shown_on: record.on }));
-    if (seen.length) {
-      await fetch(`${this.url}/rest/v1/curiosity_seen`, {
+  }
+
+  private async writeLedger(records: readonly SeenRecord[]): Promise<void> {
+    if (!records.length) return;
+    const enriched = records.slice(-MAX_SEEN_RECORDS).map((record) => ({
+      category: record.category,
+      content_id: record.id,
+      shown_on: record.on,
+      ...(record.title ? { title: record.title } : {}),
+      ...(record.url ? { url: record.url } : {}),
+      ...(record.fingerprint ? { fingerprint: record.fingerprint } : {}),
+      ...(record.signature ? { signature: record.signature } : {}),
+      ...(record.subjects?.length ? { subjects: record.subjects } : {}),
+      ...(record.source ? { source: record.source } : {}),
+      ...(record.version ? { version: record.version } : {}),
+    }));
+    const post = async (body: unknown) =>
+      fetch(`${this.url}/rest/v1/curiosity_seen`, {
         method: 'POST',
-        headers: { ...this.headers(this.writeKey), 'prefer': 'resolution=ignore-duplicates,return=minimal' },
-        body: JSON.stringify(seen),
+        headers: { ...this.headers(this.writeKey), prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(8_000),
-      }).then(async (response) => {
-        if (!response.ok) throw new Error(`Supabase ledger write failed (${response.status})`);
       });
+
+    let response = await post(enriched);
+    if (response.ok) return;
+
+    // Pre-010 table: no identity columns, and a category CHECK that only accepts
+    // the original ten keys. Retry with the original shape before giving up.
+    if (response.status === 400 || response.status === 409 || response.status === 422) {
+      const legacy = records
+        .filter((record) => LEGACY_SEEN_CATEGORIES.includes(record.category))
+        .slice(-MAX_SEEN_RECORDS)
+        .map((record) => ({ category: record.category, content_id: record.id, shown_on: record.on }));
+      if (legacy.length) {
+        response = await post(legacy);
+        if (response.ok) return;
+      }
     }
+    throw new Error(`Supabase ledger write failed (${response.status})`);
   }
 }
 
 type BriefingRow = Record<string, unknown>;
+
+/**
+ * A ledger row back into a `SeenRecord`.
+ *
+ * `subjects`, `title` and the signature are only present on rows written after
+ * migration 010; an older row is still a usable id-and-day record, which is why
+ * every extra field is read defensively rather than required.
+ */
+export function hydrateSeen(row: BriefingRow): SeenRecord {
+  const subjects = Array.isArray(row.subjects) ? row.subjects.map(String).filter(Boolean) : undefined;
+  return {
+    category: String(row.category),
+    id: String(row.content_id),
+    on: String(row.shown_on).slice(0, 10),
+    ...(typeof row.title === 'string' && row.title ? { title: row.title } : {}),
+    ...(typeof row.url === 'string' && row.url ? { url: row.url } : {}),
+    ...(typeof row.fingerprint === 'string' && row.fingerprint ? { fingerprint: row.fingerprint } : {}),
+    ...(typeof row.signature === 'string' && row.signature ? { signature: row.signature } : {}),
+    ...(subjects?.length ? { subjects } : {}),
+    ...(typeof row.source === 'string' && row.source ? { source: row.source } : {}),
+    ...(typeof row.version === 'string' && row.version ? { version: row.version } : {}),
+  };
+}
 
 function toBriefingRow(kind: 'daily' | 'book', published: PublishedDaily | PublishedBook): BriefingRow {
   const bookOnly = 'contentId' in published ? published.contentId : null;

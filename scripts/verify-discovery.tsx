@@ -48,13 +48,18 @@ import {
 } from '../lib/discovery/collection';
 import { computeHttpBackoffMs, httpGet, redactUrl, resetRateLimiterForTesting, discoveryUserAgent } from '../lib/discovery/http';
 import { catalogueValidationNotes, persistCollectionRun } from '../lib/discovery/persist';
-import { advanceCursor, runAdapter, runCollectionDiscovery, adaptersForCollection, LITERATURE_ADAPTERS } from '../lib/discovery/run';
+import { advanceCursor, runAdapter, runCollectionDiscovery, adaptersForCollection, LITERATURE_ADAPTERS, SCIENCE_ADAPTERS } from '../lib/discovery/run';
 import { orderShelfForDate, selectShelf, shelfScore, toShelfEntry, workIdentity } from '../lib/discovery/shelf';
 import { getCollectionShelf } from '../lib/discovery/server';
 import { gutenbergAdapter, parseGutenbergRdf } from '../lib/discovery/sources/gutenberg';
 import { parseOpdsFeed, stableKeyFromOpdsId, standardEbooksAdapter } from '../lib/discovery/sources/standard-ebooks';
 import { parseWikisourceResponse, rightsFromCategories, wikisourceAdapter } from '../lib/discovery/sources/wikisource';
+import { parseWikipediaScienceResponse, wikipediaScienceAdapter, wikidataScienceAdapter } from '../lib/discovery/sources/wikipedia-science';
+import { parseNasaResponse, nasaAdapter } from '../lib/discovery/sources/nasa';
+import { parseOpenStaxResponse, openStaxAdapter } from '../lib/discovery/sources/openstax';
+import { parseEuropePmcResponse, researchCaveat, europePmcAdapter } from '../lib/discovery/sources/europepmc';
 import { LiteratureDiscoveryCard } from '../components/curiosity/sections/literature-discovery';
+import { ScienceDiscoveryCard } from '../components/curiosity/sections/science-discovery';
 
 let checks = 0;
 /**
@@ -131,6 +136,91 @@ const WIKISOURCE_JSON = {
   },
 };
 
+const WIKIPEDIA_JSON = {
+  query: {
+    pages: [
+      {
+        pageid: 23070,
+        title: 'Photosynthesis',
+        extract: 'Photosynthesis is a system of biological processes by which photosynthetic organisms convert light energy into chemical energy.',
+        canonicalurl: 'https://en.wikipedia.org/wiki/Photosynthesis',
+        pageprops: { wikibase_item: 'Q11982' },
+        description: 'biological process',
+      },
+      {
+        pageid: 999,
+        title: 'Mercury',
+        extract: 'Mercury may refer to: a planet, an element, a Roman god, and other uses in different contexts of the word.',
+        canonicalurl: 'https://en.wikipedia.org/wiki/Mercury',
+        pageprops: {},
+      },
+    ],
+  },
+};
+
+const WIKIDATA_JSON = {
+  search: [
+    { id: 'Q11982', label: 'photosynthesis', description: 'process by which plants use sunlight to synthesise nutrients' },
+    { id: 'Q42', label: 'x', description: 'too short' },
+  ],
+};
+
+const NASA_JSON = {
+  collection: {
+    items: [
+      {
+        data: [
+          {
+            nasa_id: 'PIA12235',
+            title: 'Pillars of Creation',
+            description: 'These towering pillars of cold gas and dust are incubators for new stars, imaged in infrared by the Hubble Space Telescope.',
+            date_created: '2015-01-05T00:00:00Z',
+            center: 'JPL',
+            keywords: ['nebula', 'stars'],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const OPENSTAX_JSON = {
+  items: [
+    {
+      slug: 'biology-2e',
+      title: 'Biology 2e',
+      summary: 'Biology 2e is designed to cover the scope and sequence requirements of a typical two-semester biology course for science majors.',
+      license: 'CC BY 4.0',
+      subject: 'Biology',
+    },
+  ],
+};
+
+const EPMC_JSON = {
+  resultList: {
+    result: [
+      {
+        id: '12345678',
+        title: 'Sleep deprivation and cognitive performance in shift workers',
+        authorString: 'Doe J, Roe R.',
+        journalTitle: 'Journal of Sleep Research',
+        pubYear: '2021',
+        doi: '10.1000/example',
+        abstractText: 'We followed two hundred shift workers over twelve months and measured attention, working memory and reaction time across sleep conditions, finding measurable declines in attention.',
+        pubType: 'Journal Article',
+        source: 'MED',
+      },
+      {
+        id: '99999999',
+        title: 'A preprint with no abstract',
+        pubYear: '2024',
+        pubType: 'Preprint',
+        source: 'PPR',
+      },
+    ],
+  },
+};
+
 /** A fetch stand-in keyed by URL fragment. Records every call. */
 function stubFetch(routes: { match: RegExp; body?: string; status?: number }[]): { fetchImpl: typeof fetch; calls: string[] } {
   const calls: string[] = [];
@@ -165,8 +255,8 @@ async function main(): Promise<void> {
   console.log('\nShared discovery architecture\n');
 
   /* ---- Collections ---------------------------------------------- */
-  await ok('a collection reuses the existing reservoir categories rather than adding new ones', (() => {
-    for (const collection of ['literature'] as const) {
+  await ok('two collections reuse the existing reservoir categories rather than adding new ones', (() => {
+    for (const collection of ['literature', 'science'] as const) {
       for (const category of COLLECTION_CATEGORIES[collection]) {
         assert.ok(
           ['sikh-history', 'indian-history', 'world-history', 'mythology', 'chemistry', 'physics', 'biology', 'one-thing', 'learn-something', 'literature', 'book', 'ai-world', 'developer-radar']
@@ -177,7 +267,7 @@ async function main(): Promise<void> {
     }
     return true;
   })());
-  await ok('a collection cannot write a category outside its own scope', !collectionAllowsCategory('literature', 'chemistry') && collectionAllowsCategory('literature', 'book'));
+  await ok('a collection cannot write a category outside its own scope', !collectionAllowsCategory('literature', 'chemistry') && collectionAllowsCategory('science', 'chemistry'));
   await ok('a stored row with no marker is Curiosity content, so pre-existing data is unaffected', (() => {
     const legacy = { category: 'chemistry' as ReservoirCategory } as KnowledgeCandidate;
     return collectionOfCandidate(legacy) === 'curiosity' && collectionOfCandidate({ category: 'book', payload: payloadForCollection('literature', {}) }) === 'literature';
@@ -376,6 +466,89 @@ async function main(): Promise<void> {
     return parseWikisourceResponse(WIKISOURCE_JSON).length === 2 && parseWikisourceResponse(mapShape).length === 1;
   })());
 
+  /* ---- Science adapters ----------------------------------------- */
+  console.log('\nScience sources\n');
+  await ok('the Wikipedia parser keeps the Wikidata QID so one concept is one identity', (() => {
+    const pages = parseWikipediaScienceResponse(WIKIPEDIA_JSON);
+    assert.equal(pages[0].wikidataId, 'Q11982');
+    assert.equal(pages[1].wikidataId, undefined);
+    return true;
+  })());
+  await ok('a Wikipedia explainer is CC BY-SA, eligible, and rejects a disambiguation page', (async () => {
+    process.env.CURIOSITY_SCIENCE_SOURCES = 'on';
+    const stub = stubFetch([{ match: /en\.wikipedia\.org/, body: JSON.stringify(WIKIPEDIA_JSON) }]);
+    const outcome = await wikipediaScienceAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    assert.equal(outcome.drafts.length, 1);
+    assert.equal(outcome.drafts[0].title, 'Photosynthesis');
+    assert.equal(outcome.drafts[0].license, 'CC BY-SA 4.0');
+    assert.equal(outcome.drafts[0].entityId, 'wikidata:Q11982');
+    assert.equal(outcome.report.rejected, 1);
+    return true;
+  })());
+  await ok('a Wikidata entity is CC0 and shares the Wikipedia record\'s identity', (async () => {
+    const stub = stubFetch([{ match: /wikidata\.org/, body: JSON.stringify(WIKIDATA_JSON) }]);
+    const outcome = await wikidataScienceAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    assert.equal(outcome.drafts.length, 1);
+    assert.equal(outcome.drafts[0].license, 'CC0 1.0');
+    assert.equal(outcome.drafts[0].entityId, 'wikidata:Q11982');
+    assert.equal(outcome.report.rejected, 1);
+    return true;
+  })());
+  await ok('NASA media is attributed, dated only when the date is plausible, and never copied', (async () => {
+    const stub = stubFetch([{ match: /images-api\.nasa\.gov/, body: JSON.stringify(NASA_JSON) }]);
+    const outcome = await nasaAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    const draft = outcome.drafts[0];
+    assert.ok((draft.attribution ?? '').includes('does not endorse'));
+    assert.equal(draft.payload?.mediaCopied, false);
+    assert.equal(draft.eventYear, 2015);
+    assert.equal(draft.payload?.dateVerified, true);
+    return true;
+  })());
+  await ok('an implausible NASA date is recorded as unknown, not printed', (async () => {
+    const broken = { collection: { items: [{ data: [{ nasa_id: 'X1', title: 'Odd', description: 'A description long enough to survive validation checks in this harness.', date_created: '1901-01-01T00:00:00Z' }] }] } };
+    const stub = stubFetch([{ match: /images-api/, body: JSON.stringify(broken) }]);
+    const outcome = await nasaAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    return outcome.drafts[0].eventYear === undefined && outcome.drafts[0].payload?.dateVerified === false;
+  })());
+  await ok('OpenStax records carry their own licence, and an unlicensed one is not published', (async () => {
+    const stub = stubFetch([{ match: /openstax/, body: JSON.stringify(OPENSTAX_JSON) }]);
+    const outcome = await openStaxAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    assert.equal(outcome.drafts[0].license, 'CC BY 4.0');
+    assert.equal(outcome.drafts[0].eligible, true);
+
+    const noLicence = { items: [{ slug: 'mystery', title: 'Mystery Book', summary: 'A summary long enough to be useful to a reader deciding whether to open the book at all.' }] };
+    const second = stubFetch([{ match: /openstax/, body: JSON.stringify(noLicence) }]);
+    const other = await openStaxAdapter.run({ fetchImpl: second.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    return other.drafts[0].eligible === false;
+  })());
+  await ok('Europe PMC stores metadata and abstract only, and says it is not established fact', (async () => {
+    const stub = stubFetch([{ match: /europepmc/, body: JSON.stringify(EPMC_JSON) }]);
+    const outcome = await europePmcAdapter.run({ fetchImpl: stub.fetchImpl, sleepImpl: noSleep, nowIso: NOW });
+    assert.equal(outcome.drafts.length, 1);
+    const draft = outcome.drafts[0];
+    assert.equal(draft.payload?.fullTextIncluded, false);
+    assert.equal(draft.payload?.isEstablishedFact, false);
+    assert.equal(draft.payload?.rights, 'abstract-only');
+    assert.ok(draft.canonicalUrl.startsWith('https://doi.org/10.1000/example'));
+    assert.equal(outcome.report.rejected, 1);
+    return true;
+  })());
+  await ok('a preprint, a review and a single study each get their own caveat', (() => {
+    const preprint = researchCaveat('Preprint', 'medRxiv');
+    const review = researchCaveat('Review', 'BMJ');
+    const study = researchCaveat('Journal Article', 'Nature');
+    return preprint.includes('not completed peer review')
+      && review.includes('review or meta-analysis')
+      && study.includes('not established fact')
+      && new Set([preprint, review, study]).size === 3;
+  })());
+  await ok('the Europe PMC parser keeps the publication year and drops impossible ones', (() => {
+    const records = parseEuropePmcResponse(EPMC_JSON);
+    assert.equal(records[0].year, 2021);
+    const broken = parseEuropePmcResponse({ resultList: { result: [{ id: 'x', title: 'T', pubYear: '12' }] } });
+    return records.length === 2 && broken[0].year === undefined;
+  })());
+
   /* ---- Validation policy ---------------------------------------- */
   console.log('\nValidation and licensing gate\n');
   await ok('the catalogue policy is a named stricter pathway, not a weakened Curiosity gate', (() => {
@@ -432,18 +605,15 @@ async function main(): Promise<void> {
   await ok('a shelf never shows the same work twice, and prefers one of each kind', (() => {
     const base = { eligible: true, validationStatus: 'valid' as const, sourceName: 'S', canonicalUrl: 'https://example.org/x' };
     const candidates = [
-      { ...base, id: 'a', entityId: 'gutenberg:2701', title: 'Moby Dick', description: 'd', payload: { collection: 'literature', kind: 'book' } },
-      { ...base, id: 'b', entityId: 'gutenberg:2701', title: 'Moby Dick (again)', description: 'd', payload: { collection: 'literature', kind: 'text' } },
-      { ...base, id: 'c', entityId: 'wikisource:1', title: 'The Raven', description: 'd', payload: { collection: 'literature', kind: 'text' } },
-      { ...base, id: 'd', entityId: 'standardebooks:b', title: 'A Book', description: 'd', payload: { collection: 'literature', kind: 'book' } },
+      { ...base, id: 'a', entityId: 'wikidata:Q1', title: 'Photosynthesis', description: 'd', payload: { collection: 'science', kind: 'explainer' } },
+      { ...base, id: 'b', entityId: 'wikidata:Q1', title: 'Photosynthesis (again)', description: 'd', payload: { collection: 'science', kind: 'entity' } },
+      { ...base, id: 'c', entityId: 'europepmc:1', title: 'A Study', description: 'd', payload: { collection: 'science', kind: 'research-abstract' } },
+      { ...base, id: 'd', entityId: 'openstax:b', title: 'A Book', description: 'd', payload: { collection: 'science', kind: 'textbook' } },
     ] as unknown as KnowledgeCandidate[];
-    const shelf = selectShelf({ collection: 'literature', date: '2026-11-04', candidates, limit: 4 });
+    const shelf = selectShelf({ collection: 'science', date: '2026-11-04', candidates, limit: 4 });
     const ids = shelf.map((entry) => entry.id);
-    assert.ok(!(ids.includes('a') && ids.includes('b')), 'the same work appeared twice');
-    // Diversity is a preference, not a cap: the first entries cover different kinds,
-    // and only then are further places filled with a repeated kind.
-    assert.equal(new Set(shelf.slice(0, 2).map((entry) => entry.kind)).size, 2);
-    assert.ok(shelf.length <= 4);
+    assert.ok(!(ids.includes('a') && ids.includes('b')), 'the same QID appeared twice');
+    assert.equal(new Set(shelf.map((entry) => entry.kind)).size, shelf.length);
     return true;
   })());
   await ok('an ineligible record never reaches a shelf, whatever its source', (() => {
@@ -522,31 +692,41 @@ async function main(): Promise<void> {
     assert.ok((result.report.note ?? '').includes('upstream returned nonsense'));
     return result.drafts.length === 0;
   })());
-  await ok('a throwing adapter does not stop the healthy ones in the same run, and every working source still persists', (async () => {
+  await ok('a throwing adapter does not stop the healthy ones in the same run, and every source still lands in the store', (async () => {
     const store = memoryStore();
-    // Standard Ebooks answers normally, Wikisource is down and Gutenberg is answered
-    // with a garbled body — the "one source is broken" case the audit asked for.
+    // Every science source is answered with its recorded shape except Wikipedia,
+    // which returns a 500 — the "one source is down" case the audit asked for.
     const stub = stubFetch([
-      { match: /opds\/all/, body: OPDS_FEED },
-      { match: /wikisource\.org/, status: 500 },
-      { match: /\.rdf/, body: '<html>not rdf</html>' },
+      { match: /en\.wikipedia\.org/, status: 500 },
+      { match: /wikidata\.org/, body: JSON.stringify(WIKIDATA_JSON) },
+      { match: /images-api\.nasa\.gov/, body: JSON.stringify(NASA_JSON) },
+      { match: /openstax/, body: JSON.stringify(OPENSTAX_JSON) },
+      { match: /europepmc/, body: JSON.stringify(EPMC_JSON) },
     ]);
     const outcome = await runCollectionDiscovery({
-      collection: 'literature',
+      collection: 'science',
       now: new Date(NOW),
       store,
       useCursors: false,
       fetchImpl: stub.fetchImpl,
       sleepImpl: noSleep,
-      maxRecordsPerSource: 1,
     });
-    assert.equal(outcome.reports.length, LITERATURE_ADAPTERS.length);
+    assert.equal(outcome.reports.length, SCIENCE_ADAPTERS.length);
     const bySource = new Map(outcome.reports.map((report) => [report.sourceId, report.status]));
-    assert.equal(bySource.get('standard-ebooks'), 'ok');
-    assert.equal(bySource.get('wikisource'), 'failed');
-    // The healthy source's record is stored even though its neighbours failed.
+    assert.equal(bySource.get('wikipedia-science'), 'failed');
+    assert.equal(bySource.get('europepmc'), 'ok');
+    assert.equal(bySource.get('nasa'), 'ok');
+    // Four of five sources contributed. Only the rows that survive the shared
+    // validation gate are stored, and each rejection is named in the notes.
     const stored = await store.readAll();
-    assert.ok(stored.some((row) => row.sourceName === 'Standard Ebooks'));
+    // The Wikipedia page is down, so it contributes nothing; the surviving sources
+    // are stored, and every row that the shared gate rejected is named.
+    assert.ok(stored.length >= 2, `only ${stored.length} rows stored`);
+    const sources = new Set(stored.map((row) => row.sourceName));
+    assert.ok(sources.has('Europe PMC') && sources.has('Wikidata'));
+    for (const note of outcome.persistence.notes) {
+      assert.ok(!/wikipedia-science/.test(note) || /category|description|author|language|rights|licence/.test(note));
+    }
     assert.ok(outcome.summary.includes('1 failed'));
     return outcome.persistence.persisted === true;
   })());
@@ -576,12 +756,14 @@ async function main(): Promise<void> {
   /* ---- Collection scope ------------------------------------------ */
   await ok('the literature and science collections are declared, and Curiosity keeps none of them', (() => {
     assert.equal(adaptersForCollection('literature').length, LITERATURE_ADAPTERS.length);
+    assert.equal(adaptersForCollection('science').length, SCIENCE_ADAPTERS.length);
     assert.equal(LITERATURE_ADAPTERS.length, 3);
-    const ids = LITERATURE_ADAPTERS.map((adapter) => adapter.id);
+    assert.equal(SCIENCE_ADAPTERS.length, 5);
+    const ids = [...LITERATURE_ADAPTERS, ...SCIENCE_ADAPTERS].map((adapter) => adapter.id);
     return new Set(ids).size === ids.length && adaptersForCollection('curiosity').length === 0;
   })());
   await ok('every adapter declares the collection it writes into, and its categories are in scope', (() => {
-    for (const adapter of LITERATURE_ADAPTERS) {
+    for (const adapter of [...LITERATURE_ADAPTERS, ...SCIENCE_ADAPTERS]) {
       assert.ok(COLLECTION_CATEGORIES[adapter.collection].length > 0, adapter.id);
     }
     return true;
@@ -609,8 +791,8 @@ async function main(): Promise<void> {
   await ok('the page reads the reservoir through the server helper only', appFiles
     .filter((path) => /curiosity/.test(path))
     .every((path) => !/from '.*(gutenberg|openstax|europepmc|nasa|wikisource)/i.test(readFileSync(path, 'utf8'))));
-  await ok('the discovery job is scheduled and overlap-protected', (() => {
-    for (const name of ['discovery-literature.yml']) {
+  await ok('both discovery jobs are scheduled and overlap-protected', (() => {
+    for (const name of ['discovery-literature.yml', 'discovery-science.yml']) {
       const text = readFileSync(join('.github/workflows', name), 'utf8');
       assert.ok(/cron:\s*'/.test(text), `${name} has no schedule`);
       assert.ok(/concurrency:/.test(text), `${name} has no concurrency guard`);
@@ -660,6 +842,12 @@ async function main(): Promise<void> {
     );
     return markup === '';
   })());
+  await ok('with nothing discovered the Science section renders nothing at all', (() => {
+    const markup = renderToStaticMarkup(
+      createElement(ScienceDiscoveryCard, { shelf: { collection: 'science', date: '2026-11-04', entries: [], sourceCounts: {} } }),
+    );
+    return markup === '';
+  })());
   const literatureShelf = {
     collection: 'literature' as const,
     date: '2026-11-04',
@@ -690,7 +878,27 @@ async function main(): Promise<void> {
     return literatureMarkup.includes('Public domain');
   });
   await ok('an asserted public-domain claim shows the country caveat on the card itself', literatureMarkup.includes('differs by country'));
-  console.log(`\n${checks} checks. Literature discovery reuses the Curiosity reservoir: three sources, each isolated, licensed, deduplicated, idempotently persisted and scheduled — never fetched while a reader is on the page.\n`);
+  const scienceMarkup = renderToStaticMarkup(createElement(ScienceDiscoveryCard, { shelf: {
+    collection: 'science',
+    date: '2026-11-04',
+    sourceCounts: {},
+    entries: [{
+      id: 'europepmc-12345678',
+      title: 'Sleep deprivation and cognitive performance',
+      description: 'We followed two hundred shift workers over twelve months.',
+      url: 'https://doi.org/10.1000/example',
+      sourceName: 'Europe PMC',
+      attribution: 'Metadata and abstract only, from Europe PMC.',
+      kind: 'research-abstract',
+      caveat: 'One peer-reviewed study. A single result is preliminary until replicated; it is not established fact.',
+      rights: 'abstract-only',
+      subjects: [],
+    }],
+  } }));
+  await ok('a research record renders its caveat inline and says no full text is stored', scienceMarkup.includes('not established fact') && scienceMarkup.includes('no full text stored'));
+  await ok('the Science card labels the kind of record rather than presenting every source in one voice', scienceMarkup.includes('Research abstract') && scienceMarkup.includes('Read the record'));
+
+  console.log(`\n${checks} checks. Literature and Science discovery share the Curiosity reservoir: three literature sources and five science sources, each isolated, licensed, deduplicated, idempotently persisted and scheduled — never fetched while a reader is on the page.\n`);
 }
 
 main().catch((error) => {

@@ -51,7 +51,7 @@ export interface CollectionShelfEntry {
 }
 
 export interface ShelfOptions {
-  collection: Extract<KnowledgeCollection, 'literature'>;
+  collection: Extract<KnowledgeCollection, 'literature' | 'science'>;
   date: string;
   candidates: readonly KnowledgeCandidate[];
   /** Ids shown recently, most recent first. */
@@ -104,7 +104,7 @@ export function workIdentity(candidate: KnowledgeCandidate): string {
 }
 
 export function selectShelf(options: ShelfOptions): CollectionShelfEntry[] {
-  const limit = Math.max(1, Math.min(options.limit ?? 3, 8));
+  const limit = Math.max(1, Math.min(options.limit ?? (options.collection === 'literature' ? 3 : 4), 8));
   const recent = new Set(options.recentIds ?? []);
 
   const pool = options.candidates

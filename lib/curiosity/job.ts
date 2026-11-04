@@ -6,7 +6,7 @@ import { loadDatabasePool } from './content-db';
 import { eligibleEntries, mergePool, poolFor, selectFromPool } from './pool';
 import { buildRecommendation, lookupBook } from './openlibrary';
 import { fetchDeveloperRadar, fetchNews, type SourceNote } from './sources';
-import { addPublicationDays, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
+import { addPublicationDays, dayNumber, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import {
   emptyState,
   getLastStateReadFailure,
@@ -35,10 +35,21 @@ import {
   candidateFromScience,
   candidateFromSharpener,
   candidateFromSpeakBetter,
+  candidateFromLiterature,
   candidateSignature,
   type ContentCandidate,
 } from './candidates';
 import { speakBetterLessons } from './content/speak-better';
+import {
+  SPEAK_BETTER_B2_LESSONS,
+  SPEAK_BETTER_C1_LESSONS,
+  SPEAK_BETTER_C2_LESSONS,
+} from './speak-better';
+import { selectDailyLesson, bandOf } from './speak-better-daily';
+import { enrichLesson } from '../discovery/enrichment/speak-better';
+import { puzzlePoolForDate, selectDailyPuzzle, scorePuzzle, verifyPuzzle } from './puzzles';
+import { selectDiscoveredLiterature } from './literature-selection';
+import { researchCandidateEligibleToday } from '../discovery/science';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
@@ -170,6 +181,40 @@ function curatedBookFor(entry: CuriosityPoolEntry<BookCandidate>): BookRecommend
 export function currentBook(state: CuriosityState, date: string): BookRecommendation {
   if (state.book?.payload) return state.book.payload;
   return curatedBookFor(pickEntry<BookCandidate>(POOL_CATEGORY_BY_CARD.book, date, emptyState()));
+}
+
+/**
+ * Publish-time research ranking.
+ *
+ * A stored research record outranks a curated explainer, and a higher significance
+ * score outranks a lower one; everything else keeps the ledger's date rotation as
+ * its tie-break. This is the only place the publisher uses `rank`, so a card whose
+ * pool has no research records behaves exactly as it did before.
+ */
+function scienceRank(candidate: ContentCandidate): number {
+  const concept = candidate.item as ScienceConcept;
+  if (concept.origin === 'research') return 1_000 + (concept.research?.significanceScore ?? 0);
+  if (concept.origin === 'wikipedia') return 100;
+  return 10;
+}
+
+/** Publication ids for one card, most recent first, over a bounded window. */
+function recentCardIds(state: CuriosityState, card: string, lookbackDays = 45): string[] {
+  const seen = [...state.seen]
+    .filter((record) => record.category === card)
+    .sort((a, b) => (a.on < b.on ? 1 : -1));
+  const ids: string[] = [];
+  let lastDate: string | null = null;
+  let days = 0;
+  for (const record of seen) {
+    if (record.on !== lastDate) {
+      days += 1;
+      lastDate = record.on;
+    }
+    if (days > lookbackDays) break;
+    if (!ids.includes(record.id)) ids.push(record.id);
+  }
+  return ids;
 }
 
 const CARD_OFFSETS: Record<CuriosityCardKey, number> = {
@@ -324,6 +369,7 @@ export async function runCuriosityRefresh(
         candidates: ContentCandidate<T>[],
         count = 1,
         allowRelaxation = true,
+        rank?: (candidate: ContentCandidate<T>) => number,
       ): ContentCandidate<T>[] => {
         const result = selectMany<T>(
           candidates,
@@ -334,6 +380,7 @@ export async function runCuriosityRefresh(
             reservedSubjects: reserved,
             offset: CARD_OFFSETS[card] ?? 0,
             ...(allowRelaxation ? {} : { policy: { allowRelaxation: false } }),
+            ...(rank ? { rank: rank as (candidate: ContentCandidate) => number } : {}),
           },
           count,
         );
@@ -341,8 +388,12 @@ export async function runCuriosityRefresh(
         return result.candidates;
       };
 
-      const choose = (card: CuriosityCardKey, candidates: ContentCandidate<unknown>[]): Chosen => {
-        const [candidate] = pick(card, candidates, 1);
+      const choose = (
+        card: CuriosityCardKey,
+        candidates: ContentCandidate<unknown>[],
+        rank?: (candidate: ContentCandidate<unknown>) => number,
+      ): Chosen => {
+        const [candidate] = pick(card, candidates, 1, true, rank);
         if (!candidate) {
           throw new RangeError(`refusing to publish ${date}: no usable ${card} candidate — every item is inside its exclusion window or the pool is empty`);
         }
@@ -355,9 +406,41 @@ export async function runCuriosityRefresh(
       const oneThingChoice = reusing
         ? reusePick(previousIds['one-thing'], previousPayload?.oneThing)
         : choose('one-thing', pools['one-thing'].map((entry) => candidateFromPool('one-thing', entry)));
+      /**
+       * The daily reading: a discovered, rights-verified work from the reservoir
+       * when one is available, and the authored pool otherwise. Both go through the
+       * same ledger, and `literatureRanked` makes the discovered work win when the
+       * ledger allows either — which is the whole point of connecting the pipeline
+       * to the card. The card labels which one it is showing.
+       */
+      const discoveredLiterature = options.offline
+        ? []
+        : selectDiscoveredLiterature(reservoirCandidates, {
+            date,
+            recentIds: recentCardIds(state, 'literature', 120),
+            limit: 3,
+          });
+      const literatureCandidates: ContentCandidate<LiteratureItem>[] = [
+        ...discoveredLiterature.map((pick) => candidateFromLiterature(pick.item, pick.id)),
+        ...pools.literature.map((entry) => candidateFromPool('literature', entry) as ContentCandidate<LiteratureItem>),
+      ];
+      const literatureRank = (candidate: ContentCandidate) =>
+        (candidate.item as LiteratureItem).origin === 'discovered' ? 100 : 1;
       const literatureChoice = reusing
         ? reusePick(previousIds.literature, previousPayload?.literature)
-        : choose('literature', pools.literature.map((entry) => candidateFromPool('literature', entry)));
+        : choose('literature', literatureCandidates, literatureRank);
+      const literatureIsDiscovered = (literatureChoice.item as LiteratureItem)?.origin === 'discovered';
+      if (!reusing) {
+        if (discoveredLiterature.length === 0) {
+          degraded.push(
+            'literature: no eligible discovered work in the library today; published a curated reading with its recorded rights basis',
+          );
+        } else if (!literatureIsDiscovered) {
+          degraded.push(
+            'literature: a discovered work was available but every one was inside its repeat window; published a curated reading instead',
+          );
+        }
+      }
       const learningChoice = reusing
         ? reusePick(previousIds['learn-something'], previousPayload?.learning)
         : choose('learn-something', pools['learn-something'].map((entry) => candidateFromPool('learn-something', entry)));
@@ -368,12 +451,80 @@ export async function runCuriosityRefresh(
         : choose('quote', DAILY_QUOTES.map((quote) => candidateFromQuote(quote)));
 
       /* ---- Speak Better and Brain Sharpener ---------------------- */
+      /**
+       * Speak Better: B2 and C1 every day, a C2 lesson one day in five.
+       *
+       * The whole advanced curriculum is the pool, so the ledger can still refuse a
+       * repeat; `speakBetterRank` puts today's chosen lesson first. Enrichment (a
+       * dictionary sense and the words a term travels with) happens here, at publish
+       * time, never on a reader's page load, and is recorded on the lesson so the
+       * card can say whether it was enriched.
+       */
+      const advancedLessons = [
+        ...SPEAK_BETTER_B2_LESSONS,
+        ...SPEAK_BETTER_C1_LESSONS,
+        ...SPEAK_BETTER_C2_LESSONS,
+      ];
+      const spoken = selectDailyLesson(advancedLessons, {
+        date,
+        recentLessonIds: recentCardIds(state, 'speak-better', 30),
+      });
+      const chosenLesson = spoken?.lesson ?? speakBetterLessons[0];
+      const speakBetterPool: SpeakBetterLesson[] = advancedLessons.length ? advancedLessons : [...speakBetterLessons];
+      let speakBetterItem: SpeakBetterLesson = chosenLesson;
+      if (!reusing) {
+        if (spoken && spoken.basis.length) selectionNotes.push(`speak-better: ${spoken.basis.join('; ')}`);
+        if (!options.offline) {
+          const enriched = await enrichLesson(chosenLesson, { fetchImpl });
+          speakBetterItem = enriched.lesson;
+          if (enriched.enrichedWords === 0) {
+            degraded.push(
+              `speak-better: dictionary enrichment unavailable (${enriched.lesson.enrichment?.detail ?? 'no usable response'}); showing the authored lesson`,
+            );
+          }
+        }
+      }
+      const speakBetterRank = (candidate: ContentCandidate) =>
+        candidate.id === chosenLesson.id ? 100 : bandOf(candidate.item as SpeakBetterLesson) === 'C1' ? 2 : 1;
       const speakBetterChoice = reusing
         ? reusePick(previousIds['speak-better'], previousPayload?.speakBetter)
-        : choose('speak-better', speakBetterLessons.map((lesson) => candidateFromSpeakBetter(lesson)));
+        : choose(
+            'speak-better',
+            speakBetterPool.map((lesson) =>
+              candidateFromSpeakBetter(lesson.id === chosenLesson.id ? speakBetterItem : lesson),
+            ),
+            speakBetterRank,
+          );
+      /**
+       * Brain Sharpener: the authored bank plus procedural puzzles for this date.
+       *
+       * `selectDailyPuzzle` chooses by category rotation, difficulty variety and the
+       * publication ledger; the chosen puzzle is then ranked first through the same
+       * selection gate every other card uses, so a repeat inside the card's window
+       * cannot slip through. Every puzzle in the pool has passed `verifyPuzzle`.
+       */
+      const puzzlePool = puzzlePoolForDate(date, brainSharpeners).filter((puzzle) => verifyPuzzle(puzzle).ok);
+      const puzzleDay = selectDailyPuzzle({
+        date,
+        pool: puzzlePool,
+        recentIds: recentCardIds(state, 'sharpener', 365),
+      });
+      const chosenPuzzle = puzzleDay?.puzzle ?? brainSharpeners[0];
+      if (!reusing && puzzleDay) {
+        selectionNotes.push(`sharpener: ${puzzleDay.basis.join('; ')}`);
+      }
+      const sharpenerRank = (candidate: ContentCandidate) =>
+        candidate.id === chosenPuzzle.id
+          ? 1_000
+          : scorePuzzle(
+              candidate.item as BrainSharpener,
+              Math.abs(dayNumber(date)),
+              new Set(),
+              new Set(recentCardIds(state, 'sharpener', 365)),
+            );
       const sharpenerChoice = reusing
         ? reusePick(previousIds.sharpener, previousPayload?.sharpener)
-        : choose('sharpener', brainSharpeners.map((sharpener) => candidateFromSharpener(sharpener)));
+        : choose('sharpener', puzzlePool.map((puzzle) => candidateFromSharpener(puzzle)), sharpenerRank);
 
       /* ---- Mythology -------------------------------------------- */
       const mythologyChoice = reusing
@@ -414,15 +565,68 @@ export async function runCuriosityRefresh(
         : null;
       if (mythQueue.note && !mythQueue.queue.length) discoveryNotes.push(`mythology: ${mythQueue.note}`);
 
+      /**
+       * Recent, scored research records from the reservoir.
+       *
+       * These are written by the scheduled science discovery job, not fetched here:
+       * a publish reads the store exactly as it does for every other card. Freshness
+       * is re-checked at publish time because a stored record can age, and only
+       * peer-reviewed or preprint records may appear.
+       */
+      const researchScience = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] =>
+        reservoirCandidates
+          .filter((c) => c.category === discipline && c.eligible && c.validationStatus === 'valid')
+          .filter((c) => researchCandidateEligibleToday(c.payload as { science?: { publishedOn?: string; provenance?: string; significanceScore?: number } }, date))
+          .sort((a, b) => {
+            const left = (a.payload?.science as { significanceScore?: number } | undefined)?.significanceScore ?? 0;
+            const right = (b.payload?.science as { significanceScore?: number } | undefined)?.significanceScore ?? 0;
+            return right - left;
+          })
+          .slice(0, 8)
+          .map((c) => candidateToScienceConcept(c))
+          .filter((c): c is ScienceConcept => c !== null)
+          .map((concept) => candidateFromScience(discipline, concept));
+
+      const scienceLegs = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] => [
+        ...researchScience(discipline),
+        ...reservoirScience(discipline),
+        ...curatedScience(discipline),
+        ...discovery[discipline].candidates,
+      ];
+
       const chemistryChoice = reusing
         ? reusePick(previousIds.chemistry, previousPayload?.chemistry)
-        : choose('chemistry', [...curatedScience('chemistry'), ...reservoirScience('chemistry'), ...discovery.chemistry.candidates]);
+        : choose('chemistry', scienceLegs('chemistry'), scienceRank);
       const physicsChoice = reusing
         ? reusePick(previousIds.physics, previousPayload?.physics)
-        : choose('physics', [...curatedScience('physics'), ...reservoirScience('physics'), ...discovery.physics.candidates]);
+        : choose('physics', scienceLegs('physics'), scienceRank);
       const biologyChoice = reusing
         ? reusePick(previousIds.biology, previousPayload?.biology)
-        : choose('biology', [...curatedScience('biology'), ...reservoirScience('biology'), ...discovery.biology.candidates]);
+        : choose('biology', scienceLegs('biology'), scienceRank);
+
+      /*
+        Provenance is a promise to the reader, so it is checked after selection: if a
+        discipline is showing anything other than a scored research record, the cause
+        is recorded on the day rather than hidden. The card itself prints the label.
+      */
+      if (!reusing) {
+        for (const [discipline, choice] of [
+          ['chemistry', chemistryChoice],
+          ['physics', physicsChoice],
+          ['biology', biologyChoice],
+        ] as const) {
+          const concept = choice.item as ScienceConcept;
+          if (concept.origin === 'research') {
+            selectionNotes.push(
+              `${discipline}: research record (${concept.provenanceLabel ?? concept.provenance ?? 'unlabelled'}, ${concept.publishedOn ?? 'date not supplied'}, score ${concept.research?.significanceScore ?? 0})`,
+            );
+          } else if (researchScience(discipline).length === 0) {
+            degraded.push(
+              `${discipline}: no qualified recent research record in the library; showing ${concept.origin === 'wikipedia' ? 'an encyclopedia concept' : 'a curated concept'} instead`,
+            );
+          }
+        }
+      }
 
       /* ---- Today in History (1. Sikh -> 2. Indian -> 3. World) --- */
       let historyEntries: HistoryEvent[];
@@ -494,10 +698,35 @@ export async function runCuriosityRefresh(
       let aiWorldItems: CuriosityNewsItem[] = aiWorldChoices.map((candidate) => candidate.item);
       let radarItems: DeveloperDiscovery[] = radarChoices.map((candidate) => candidate.item);
 
+      /*
+        Reservoir last-good: the discovery job stores the headlines and repositories
+        it last saw. If today's live fetch returns nothing and there is no previous
+        day to borrow from, these are a better fallback than a static shelf — they
+        were real items from real sources, just not today's. They are labelled
+        `cached`, and the card says so.
+      */
+      const reservoirNews = reservoirCandidates
+        .filter((c) => c.category === 'ai-world' && c.eligible && c.validationStatus === 'valid')
+        .filter((c) => c.payload?.article && typeof c.payload.article === 'object')
+        .slice(-10)
+        .map((c) => c.payload?.article as CuriosityNewsItem)
+        .reverse();
+
+      const reservoirRadar = reservoirCandidates
+        .filter((c) => c.category === 'developer-radar' && c.eligible && c.validationStatus === 'valid')
+        .filter((c) => c.payload?.repo && typeof c.payload.repo === 'object')
+        .slice(-6)
+        .map((c) => c.payload?.repo as DeveloperDiscovery)
+        .reverse();
+
       if (!aiWorldItems.length && previousPayload?.aiWorld.length) {
         aiWorldItems = previousPayload.aiWorld;
         aiWorldOrigin = 'cached';
         degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept the ${previousPayload.aiWorld.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+      } else if (!aiWorldItems.length && reservoirNews.length) {
+        aiWorldItems = reservoirNews.slice(0, 10);
+        aiWorldOrigin = 'cached';
+        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept ${aiWorldItems.length} item(s) stored by the last discovery run`);
       } else if (!aiWorldItems.length) {
         aiWorldChoices = pick('ai-world', curatedNews, CURATED_PER_DAY);
         aiWorldItems = aiWorldChoices.map((candidate) => candidate.item);
@@ -509,6 +738,10 @@ export async function runCuriosityRefresh(
         radarItems = previousPayload.developerRadar;
         radarOrigin = 'cached';
         degraded.push(`developerRadar: nothing usable from the live source${radarNote.text ? ` (${radarNote.text})` : ''}; kept the ${previousPayload.developerRadar.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+      } else if (!radarItems.length && reservoirRadar.length) {
+        radarItems = reservoirRadar.slice(0, 3);
+        radarOrigin = 'cached';
+        degraded.push(`developerRadar: nothing usable from the live source${radarNote.text ? ` (${radarNote.text})` : ''}; kept ${radarItems.length} item(s) stored by the last discovery run`);
       } else if (!radarItems.length) {
         radarChoices = pick('developer-radar', curatedRadarItems, CURATED_PER_DAY);
         radarItems = radarChoices.map((candidate) => candidate.item);
@@ -533,7 +766,14 @@ export async function runCuriosityRefresh(
         history: primaryHistory,
         historyEntries: [...historyEntries],
         sharpener: sharpenerChoice.item as BrainSharpener,
+        sharpenerAlternatives: puzzlePool
+          .filter((puzzle) => puzzle.id !== chosenPuzzle.id)
+          .filter((puzzle) => verifyPuzzle(puzzle).ok)
+          .slice(0, 3),
         speakBetter: speakBetterChoice.item as SpeakBetterLesson,
+        speakBetterAlternatives: speakBetterPool
+          .filter((lesson) => lesson.id !== chosenLesson.id)
+          .slice(0, 2),
         mythology: mythologyChoice.item as MythCharacter,
         chemistry: chemistryChoice.item as ScienceConcept,
         physics: physicsChoice.item as ScienceConcept,
@@ -553,8 +793,12 @@ export async function runCuriosityRefresh(
         biology: biologyChoice.id,
         sharpener: sharpenerChoice.id,
         history: historyCombinedId,
-        'ai-world': aiWorldOrigin === 'cached' ? previousIds['ai-world'] ?? '' : idsFor(aiWorldChoices),
-        'developer-radar': radarOrigin === 'cached' ? previousIds['developer-radar'] ?? '' : idsFor(radarChoices),
+        'ai-world': aiWorldOrigin === 'cached'
+          ? (previousIds['ai-world'] || aiWorldItems.map((item) => `cached:${item.source}:${item.title}`).join('+'))
+          : idsFor(aiWorldChoices),
+        'developer-radar': radarOrigin === 'cached'
+          ? (previousIds['developer-radar'] || radarItems.map((item) => `cached:${item.name}`).join('+'))
+          : idsFor(radarChoices),
       };
 
       const invalid = invalidDailyFields(payload);
@@ -723,8 +967,17 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
   check('learning.topic', !blank(payload.learning?.topic));
   check('learning.explanation', !blank(payload.learning?.explanation));
   check('literature.title', !blank(payload.literature?.title));
-  check('literature.passage', !blank(payload.literature?.passage));
+  check('literature.author', !blank(payload.literature?.author));
   check('literature.whyItMatters', !blank(payload.literature?.whyItMatters));
+  // A link-only selection deliberately reproduces no text; it must instead carry an
+  // original note and a rights basis. A quoted selection must carry the passage.
+  if (payload.literature?.excerptKind === 'link-only') {
+    check('literature.context (link-only selections carry a note, not a quotation)', !blank(payload.literature?.context));
+    check('literature.rights (a link-only selection states its rights basis)', Boolean(payload.literature?.rights));
+    check('literature carries no passage when link-only', (payload.literature?.passage ?? '') === '');
+  } else {
+    check('literature.passage', !blank(payload.literature?.passage));
+  }
 
   check('aiWorld has items', (payload.aiWorld?.length ?? 0) > 0);
   payload.aiWorld?.forEach((item, index) => {
@@ -796,6 +1049,23 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
     if (concept?.origin === 'wikipedia') {
       check(`${key}.source url`, !invalidUrl(concept?.source?.url));
       check(`${key}.source name`, !blank(concept?.source?.name));
+    }
+    if (concept?.origin === 'research') {
+      check(`${key}.source url`, !invalidUrl(concept?.source?.url));
+      check(`${key}.provenance`, !blank(concept?.provenance));
+      check(`${key}.provenanceLabel`, !blank(concept?.provenanceLabel));
+      check(`${key}.publishedOn`, !blank(concept?.publishedOn));
+      check(`${key}.research basis`, (concept?.research?.significanceBasis?.length ?? 0) > 0);
+      // The label and the record may not disagree: a preprint can never be printed
+      // as peer-reviewed, whatever a caller constructs.
+      check(
+        `${key} peer-review label matches the record`,
+        concept?.provenance !== 'peer-reviewed' || concept?.research?.peerReviewed === true,
+      );
+      check(
+        `${key} preprint labelled as such`,
+        concept?.provenance !== 'preprint' || concept?.research?.peerReviewed === false,
+      );
     }
   }
 

@@ -256,6 +256,29 @@ export function candidateFromBook(book: BookRecommendation | BookCandidate, id: 
   });
 }
 
+/**
+ * A reading selection — either a curated pool entry or a discovered, link-only work
+ * from the literature collection. One wrapper for both, so the ledger records the
+ * same identity either way.
+ */
+export function candidateFromLiterature(item: LiteratureItem, id: string): ContentCandidate<LiteratureItem> {
+  const subjects = [
+    `work:${item.title}`,
+    `author:${item.author}`,
+    item.origin === 'discovered' ? 'origin:discovered' : 'origin:curated',
+  ].filter(Boolean);
+  return finalize({
+    card: 'literature',
+    id,
+    title: item.title,
+    text: [item.title, item.author, item.context ?? item.passage, item.whyItMatters].filter(Boolean).join('\n'),
+    ...(item.url ? { url: item.url } : {}),
+    ...(item.sourceName ? { sourceName: item.sourceName } : {}),
+    subjects,
+    item,
+  });
+}
+
 export function candidateSubjectKeys(candidate: ContentCandidate): string[] {
   const group = policyFor(candidate.card).subjectGroup;
   return (candidate.subjects ?? [])

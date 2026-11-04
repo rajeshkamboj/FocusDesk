@@ -1393,7 +1393,12 @@ async function main() {
         assert.ok(!placeholder.test(text), `${where}: placeholder prose shipped as content`);
         for (const key of Object.keys(item)) {
           const value = item[key];
-          if (typeof value === 'string') assert.ok(value.trim().length > 0, `${where}.${key}: empty string`);
+          // A `link-only` reading carries no excerpt on purpose — the source's terms
+          // forbid one — so an empty passage is the honest value, not missing content.
+          const linkOnlyPassage = key === 'passage' && item.excerptKind === 'link-only';
+          if (typeof value === 'string' && !linkOnlyPassage) {
+            assert.ok(value.trim().length > 0, `${where}.${key}: empty string`);
+          }
           if (/(url|link)$/i.test(key) && typeof value === 'string' && value.length) {
             assert.match(value, /^https:\/\/\S+$/, `${where}.${key}: not an https link`);
             urls.add(value);
@@ -1405,8 +1410,18 @@ async function main() {
         // characters and the point of the whole entry), so the bar is substance where the
         // card needs it: something to read, and something said about why it matters.
         if (category === 'literature') {
-          assert.ok((item.passage as string).trim().length >= 8, `${where}: no passage to read`);
           assert.ok((item.whyItMatters as string).length > 40, `${where}: a passage published without a reason`);
+          assert.ok(typeof item.whyItMatters === 'string' && (item.whyItMatters as string).length > 40, `${where}: a passage published without a reason`);
+          if (item.excerptKind === 'link-only') {
+            // Quoting is not allowed: the card must carry an original note and a
+            // stated rights basis instead of text it does not have the right to show.
+            assert.equal((item.passage as string).trim(), '', `${where}: a link-only entry reproduces a passage`);
+            assert.ok(((item.context as string) ?? '').trim().length > 40, `${where}: a link-only entry has no original context note`);
+            assert.ok(((item.rights as string) ?? '').length > 0, `${where}: a link-only entry states no rights basis`);
+            assert.match(((item.url as string) ?? ''), /^https:\/\/\S+$/, `${where}: a link-only entry has no link to read`);
+          } else {
+            assert.ok((item.passage as string).trim().length >= 8, `${where}: no passage to read`);
+          }
         }
         if (category === 'learn-something') assert.ok((item.explanation as string).length > 60, `${where}: nothing being taught`);
       }
@@ -1475,9 +1490,9 @@ async function main() {
       /^lib\/discovery\//,
       /^components\/curiosity\/sections\/[a-z-]*discovery\.tsx$/,
       /^components\/curiosity\/speak-better-[a-z-]+\.tsx$/,
-      /^scripts\/(verify-)?(discover|speak-better)[a-z-]*\.(ts|tsx)$/,
-      /^docs\/(discovery-architecture|speak-better-levels)\.md$/,
-      /^\.github\/workflows\/discovery-[a-z]+\.yml$/,
+      /^scripts\/(verify-)?(discover|speak-better|science|daily-knowledge)[a-z-]*\.(ts|tsx)$/,
+      /^docs\/(discovery-architecture|speak-better-levels|knowledge-workflow-modernization)\.md$/,
+      /^\.github\/workflows\/(discovery|curiosity-science-discovery)[a-z-]*\.yml$/,
       /^app\/speak-better\/page\.tsx$/,
       /^components\/(layout\/nav|ui\/icons)\.tsx?$/,
       /^(\.github\/workflows\/curiosity-(daily|discovery)\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,

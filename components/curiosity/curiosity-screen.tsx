@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { useLocalDate } from '@/lib/use-local-date';
 import { EmptyState } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,18 @@ import {
   IconProjects,
   IconReview,
 } from '@/components/ui/icons';
+import { PUZZLE_CATEGORY_LABELS } from '@/lib/curiosity/types';
+import {
+  attemptedIds,
+  hasAttempted,
+  markAttempted,
+  markSolved,
+  publishSharpenerProgress,
+  sharpenerProgressSnapshot,
+  sharpenerServerSnapshot,
+  sharpenerSummary,
+  subscribeSharpenerProgress,
+} from '@/lib/curiosity/sharpener-store';
 import type {
   BrainSharpener,
   CuriosityBriefing,
@@ -237,7 +249,21 @@ function HistorySection({ events }: { events: HistoryEvent[] }) {
   );
 }
 
+/**
+ * A Few Minutes of Literature.
+ *
+ * Two shapes, deliberately different:
+ *
+ *  - a **quoted** selection, from the authored pool, with its recorded rights basis
+ *    and any jurisdiction caveat printed under the passage;
+ *  - a **link-only** selection, from the discovery library, which reproduces no text
+ *    at all and instead gives an original note, the reason it was chosen and a link.
+ *
+ * The badge is not decoration: a reader is entitled to know whether today's reading
+ * was curated by an editor or discovered in a public-domain catalogue.
+ */
 function LiteratureSection({ item }: { item: LiteratureItem }) {
+  const linkOnly = item.excerptKind === 'link-only';
   return (
     <div className="space-y-3">
       <div className="flex gap-3.5">
@@ -252,14 +278,34 @@ function LiteratureSection({ item }: { item: LiteratureItem }) {
             by <span className="font-medium text-ink-2">{item.author}</span>
             {item.eraOrCountry ? ` · ${item.eraOrCountry}` : ''}
           </p>
+          {item.origin ? (
+            <span className="mt-1.5 inline-block rounded-md border border-line bg-surface-2 px-1.5 py-px text-[10px] font-medium text-ink-3">
+              {item.origin === 'discovered' ? 'discovered · link only' : 'curated reading'}
+            </span>
+          ) : null}
         </div>
       </div>
 
       <div className="rounded-xl border border-line bg-surface-2/40 p-4">
-        <p className="whitespace-pre-line font-serif text-[13.5px] italic leading-relaxed text-ink">
-          {item.passage}
-        </p>
+        {linkOnly ? (
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            {item.context ?? 'Read this work at the source — no text is reproduced here.'}
+          </p>
+        ) : (
+          <p className="whitespace-pre-line font-serif text-[13.5px] italic leading-relaxed text-ink">
+            {item.passage}
+          </p>
+        )}
         {item.attribution ? <p className="mt-2 text-[11px] leading-relaxed text-ink-2">{item.attribution}</p> : null}
+        {!linkOnly && item.rightsBasis ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+            Rights: {item.rightsBasis}
+            {item.jurisdictionNote ? ` ${item.jurisdictionNote}` : ''}
+          </p>
+        ) : null}
+        {linkOnly && item.rightsBasis ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-3">{item.rightsBasis}</p>
+        ) : null}
       </div>
 
       <p className="text-[13px] leading-relaxed text-ink-2">
@@ -267,18 +313,74 @@ function LiteratureSection({ item }: { item: LiteratureItem }) {
         {item.whyItMatters}
       </p>
 
+      {item.selectionBasis?.length ? (
+        <p className="text-[11px] leading-relaxed text-ink-3">
+          Selected because: {item.selectionBasis.join(' · ')}
+        </p>
+      ) : null}
+
       {item.url ? (
         <p className="text-sm">
-          <LinkOut href={item.url}>Explore the work →</LinkOut>
+          <LinkOut href={item.url}>{linkOnly ? 'Read it at the source →' : 'Explore the work →'}</LinkOut>
+          {item.sourceName ? (
+            <span className="mt-1 block text-[11px] text-ink-3">Source: {item.sourceName}</span>
+          ) : null}
         </p>
       ) : null}
     </div>
   );
 }
 
-function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
+/**
+ * Brain Sharpener.
+ *
+ * The card keeps its interface and gains three things behind it: a category and a
+ * difficulty label, a local record of what this device has already attempted, and a
+ * "try another" control that swaps in one of the publisher's verified alternatives
+ * rather than re-showing the same puzzle. The alternate puzzles arrive inside the
+ * briefing, so nothing is generated in the browser and no request is made.
+ */
+function BrainSharpenerSection({
+  sharpener,
+  alternatives = [],
+}: {
+  sharpener: BrainSharpener;
+  alternatives?: BrainSharpener[];
+}) {
   const [showSolution, setShowSolution] = useState(false);
   const solutionId = useId();
+  const progress = useSyncExternalStore(
+    subscribeSharpenerProgress,
+    sharpenerProgressSnapshot,
+    sharpenerServerSnapshot,
+  );
+  const [activeId, setActiveId] = useState(sharpener.id);
+  const pool = useMemo(
+    () => [sharpener, ...alternatives].filter((puzzle) => puzzle && puzzle.id),
+    [sharpener, alternatives],
+  );
+  const active = pool.find((puzzle) => puzzle.id === activeId) ?? sharpener;
+  const summary = sharpenerSummary(progress);
+  const solvedThisPuzzle = Boolean(progress.attempts[active.id]?.solvedAt);
+  const attemptedBefore = hasAttempted(progress, active.id);
+  const category = active.category ?? (active.subject === 'physics' ? 'physics' : 'mathematics');
+  const categoryLabel = PUZZLE_CATEGORY_LABELS[category];
+
+  // Opening a puzzle is what counts as an attempt. Recorded once per mounted id, so
+  // the count rises by one per visit rather than on every re-render.
+  useEffect(() => {
+    publishSharpenerProgress(markAttempted(sharpenerProgressSnapshot(), active.id));
+  }, [active.id]);
+
+  const nextPuzzle = () => {
+    const attempted = new Set(attemptedIds(sharpenerProgressSnapshot()));
+    const candidate = pool.find((puzzle) => puzzle.id !== active.id && !attempted.has(puzzle.id))
+      ?? pool.find((puzzle) => puzzle.id !== active.id);
+    if (candidate) {
+      setActiveId(candidate.id);
+      setShowSolution(false);
+    }
+  };
 
   return (
     <div className="space-y-3.5">
@@ -289,25 +391,36 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[17px] font-medium leading-snug text-ink">
-              {sharpener.title}
+              {active.title}
             </h3>
             <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-accent-ink">
-              {sharpener.subject}
+              {categoryLabel}
             </span>
+            {active.difficulty ? (
+              <span className="text-[10.5px] text-ink-3">difficulty {active.difficulty}/5</span>
+            ) : null}
+            {active.origin === 'generated' ? (
+              <span className="text-[10.5px] text-ink-3">generated · answer verified</span>
+            ) : null}
           </div>
-          <p className="text-[12px] text-ink-3">{sharpener.topic}</p>
+          <p className="text-[12px] text-ink-3">{active.topic}</p>
+          {attemptedBefore ? (
+            <p className="mt-0.5 text-[11px] text-ink-3">
+              You have attempted this puzzle before on this device.
+            </p>
+          ) : null}
         </div>
       </div>
 
       <p className="text-[13.5px] leading-relaxed text-ink">
-        {sharpener.problem}
+        {active.problem}
       </p>
 
-      {sharpener.givenInfo && sharpener.givenInfo.length > 0 ? (
+      {active.givenInfo && active.givenInfo.length > 0 ? (
         <div className="space-y-1 rounded-xl border border-line/70 bg-surface-2/40 px-3.5 py-2.5 text-[11.5px] text-ink-2">
           <p className="font-medium text-ink-3">Given information:</p>
           <ul className="list-inside list-disc space-y-0.5 font-mono text-[11px]">
-            {sharpener.givenInfo.map((info, idx) => (
+            {active.givenInfo.map((info, idx) => (
               <li key={idx}>{info}</li>
             ))}
           </ul>
@@ -335,10 +448,10 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
 
       {showSolution ? (
         <div id={solutionId} className="space-y-2.5 rounded-xl border border-accent/30 bg-accent-soft/25 p-3.5 animate-fade-in sm:p-4">
-          {sharpener.hint ? (
+          {active.hint ? (
             <div className="border-b border-accent/20 pb-2 text-[12px] text-ink-2">
               <strong className="font-medium text-accent-ink">Hint:</strong>{' '}
-              {sharpener.hint}
+              {active.hint}
             </div>
           ) : null}
           <div>
@@ -346,7 +459,7 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
               Step-by-Step Solution
             </p>
             <p className="mt-1 whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink">
-              {sharpener.solution}
+              {active.solution}
             </p>
           </div>
           <div className="border-t border-accent/20 pt-2">
@@ -354,11 +467,40 @@ function BrainSharpenerSection({ sharpener }: { sharpener: BrainSharpener }) {
               Final Answer
             </p>
             <p className="mt-0.5 text-[13.5px] font-semibold text-ink">
-              {sharpener.answer}
+              {active.answer}
             </p>
           </div>
         </div>
       ) : null}
+
+      <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3 text-[11.5px] text-ink-3">
+        {pool.length > 1 ? (
+          <button
+            type="button"
+            onClick={nextPuzzle}
+            className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-ink-2 transition-colors hover:text-ink"
+          >
+            Try another challenge
+          </button>
+        ) : null}
+        {!solvedThisPuzzle ? (
+          <button
+            type="button"
+            onClick={() => {
+              publishSharpenerProgress(markSolved(sharpenerProgressSnapshot(), active.id));
+            }}
+            className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-ink-2 transition-colors hover:text-ink"
+          >
+            Mark as solved
+          </button>
+        ) : null}
+        <span>
+          {summary.attempted} attempted · {summary.solved} marked solved on this device
+        </span>
+      </div>
+      <p className="text-[11px] text-ink-3">
+        Attempts are kept in this browser only; they are never sent anywhere.
+      </p>
     </div>
   );
 }
@@ -524,7 +666,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
         <SectionGroup label="Speak better" hint="practical spoken English, one situation a day" />
 
         <section>
-          <SpeakBetterSection lesson={briefing.speakBetter} />
+          <SpeakBetterSection lesson={briefing.speakBetter} alternatives={briefing.speakBetterAlternatives} />
         </section>
 
         {/* ---- Group: Mythology --------------------------------------- */}
@@ -603,7 +745,11 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           {briefing.sharpener ? (
             <section className="h-full">
               <SectionCard label="Brain Sharpener">
-                <BrainSharpenerSection key={`${briefing.date}-${briefing.sharpener.id}`} sharpener={briefing.sharpener} />
+                <BrainSharpenerSection
+                  key={`${briefing.date}-${briefing.sharpener.id}`}
+                  sharpener={briefing.sharpener}
+                  alternatives={briefing.sharpenerAlternatives}
+                />
               </SectionCard>
             </section>
           ) : null}

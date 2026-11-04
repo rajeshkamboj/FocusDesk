@@ -1,0 +1,97 @@
+name: Curiosity Science Discovery
+
+# Replenishes the ranked science candidates in `curiosity_candidates` before the
+# midnight IST snapshot (`curiosity-daily.yml`).
+#
+# WHAT IT IS, AND IS NOT
+# This is a *discovery* job, not a publisher. It writes candidates into the existing
+# reservoir through the existing validation, deduplication and persistence path.
+# Publishing is still done by exactly one scheduler (`curiosity-daily.yml`), which
+# reads whatever the reservoir holds. There is no second publisher.
+#
+# SCHEDULE
+# 11:40 UTC, between the literature run (11:20) and the daily publish (18:30). The
+# offsets exist so the runs never contend for the same API budgets.
+#
+# SOURCES AND THEIR TERMS are documented in docs/knowledge-workflow-modernization.md:
+#   OpenAlex   — CC0 metadata, `mailto` contact, one bounded query per discipline
+#   Crossref   — open metadata, `mailto` contact, DOI verification for top records
+#   Europe PMC — free REST, no key, MEDLINE/PMC indexing for biology
+#   arXiv      — CC0 metadata, preprints only, ~3s between requests, always labelled
+#
+# NOTHING NEW IS REQUIRED TO RUN IT: the same Supabase runner secrets the literature
+# and pool jobs already use. The contact address is optional and reuses the existing
+# WIKIMEDIA_CONTACT_EMAIL repository variable.
+#
+# Switch a source off without a code change: CURIOSITY_SCIENCE_SOURCES=off disables
+# all four; the daily publisher then falls back to its labelled curated cards.
+
+on:
+  schedule:
+    - cron: '40 11 * * *'
+  workflow_dispatch:
+    inputs:
+      disciplines:
+        description: 'Comma-separated disciplines (physics, chemistry, biology)'
+        required: false
+        type: string
+      sources:
+        description: 'Comma-separated adapter ids (openalex, crossref, europepmc, arxiv)'
+        required: false
+        type: string
+      max_per_discipline:
+        description: 'Optional per-discipline cap (default 6)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curiosity-science-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      # Reused from the existing Curiosity configuration; every source's terms ask
+      # for an identifying contact.
+      WIKIMEDIA_CONTACT_EMAIL: ${{ vars.WIKIMEDIA_CONTACT_EMAIL }}
+      OPENALEX_CONTACT_EMAIL: ${{ vars.OPENALEX_CONTACT_EMAIL }}
+      INPUT_DISCIPLINES: ${{ inputs.disciplines }}
+      INPUT_SOURCES: ${{ inputs.sources }}
+      INPUT_MAX: ${{ inputs.max_per_discipline }}
+
+    steps:
+      - name: Report missing configuration
+        if: ${{ env.SUPABASE_SECRET_KEY == '' || env.NEXT_PUBLIC_SUPABASE_URL == '' }}
+        run: |
+          echo "::error::Supabase runner secrets are not configured, so science discovery cannot persist anything."
+          echo "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY as repository secrets (the same ones the other Curiosity jobs use)."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Discover ranked science candidates
+        run: |
+          set -euo pipefail
+          ARGS=("--trigger=cron")
+          if [ -n "${INPUT_DISCIPLINES}" ]; then ARGS+=("--disciplines=${INPUT_DISCIPLINES}"); fi
+          if [ -n "${INPUT_SOURCES}" ]; then ARGS+=("--sources=${INPUT_SOURCES}"); fi
+          if [ -n "${INPUT_MAX}" ]; then ARGS+=("--max=${INPUT_MAX}"); fi
+          npx tsx scripts/discover-science.ts "${ARGS[@]}"

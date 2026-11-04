@@ -19,7 +19,10 @@
     "verify:view-modes": "npx tsx scripts/verify-view-modes.tsx",
     "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx",
     "verify:discovery": "npx tsx scripts/verify-discovery.tsx",
-    "discover:literature": "npx tsx scripts/discover-literature.ts"
+    "discover:literature": "npx tsx scripts/discover-literature.ts",
+    "discover:science": "npx tsx scripts/discover-science.ts",
+    "verify:science": "npx tsx scripts/verify-science-discovery.ts",
+    "verify:daily-knowledge": "npx tsx scripts/verify-daily-knowledge.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

@@ -73,6 +73,7 @@ export interface Rejection {
 
 export type SelectionReason =
   | 'fresh'
+  | 'ranked'
   | 'least-recent'
   | 'relaxed-subject'
   | 'relaxed-cooldown'
@@ -95,6 +96,17 @@ export interface SelectionOptions {
   offset?: number;
   /** Test seam: override individual windows without editing the registry. */
   policy?: Partial<CardPolicy>;
+  /**
+   * Optional quality ranking among the items that are allowed today.
+   *
+   * When supplied, the highest-ranked *fresh* candidate wins instead of the
+   * date-rotated one. It is used by the science cards, where a scored research
+   * record should beat a curated explainer, and by the reading cards, where a
+   * discovered work should beat the fallback pool. Every existing caller omits it,
+   * so the date rotation that every stored snapshot was published under is
+   * unchanged.
+   */
+  rank?: (candidate: ContentCandidate) => number;
 }
 
 export interface SelectionOutcome<T = unknown> {
@@ -371,7 +383,16 @@ export function selectCandidate<T = unknown>(
   const fresh = allowed.filter((item) => lastOn(item) === null);
 
   let chosen: Prepared;
-  if (fresh.length) {
+  if (fresh.length && options.rank) {
+    // Quality beats rotation, but only among items that passed every window, and
+    // with the caller's list order as the deterministic tie-break.
+    const ranked = [...fresh].sort((left, right) => {
+      const delta = options.rank!(right.candidate as ContentCandidate) - options.rank!(left.candidate as ContentCandidate);
+      return delta !== 0 ? delta : left.order - right.order;
+    });
+    chosen = ranked[0];
+    if (reason !== 'relaxed-cooldown') reason = 'ranked';
+  } else if (fresh.length) {
     chosen = fresh[rotationIndex(options.date, offset, fresh.length)];
     if (reason !== 'relaxed-cooldown') reason = reason === 'relaxed-subject' ? 'relaxed-subject' : 'fresh';
   } else {

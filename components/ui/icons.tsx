@@ -404,12 +404,45 @@ export function IconBiology(props: IconProps) {
   );
 }
 
+/**
+ * A copy mark — two offset sheets. Used by the task “copy context” action,
+ * which puts a task's details on the clipboard as Markdown.
+ */
+export function IconCopy(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="9" y="9" width="11" height="12" rx="2.2" />
+      <path d="M15 9V6.2A2.2 2.2 0 0 0 12.8 4H6.2A2.2 2.2 0 0 0 4 6.2v9.6A2.2 2.2 0 0 0 6.2 18H9" />
+    </svg>
+  );
+}
 
 /** A saved/bookmarked mark for tracked vocabulary. */
 export function IconStar(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="m12 3.6 2.6 5.3 5.9.9-4.2 4.1 1 5.9-5.3-2.8-5.3 2.8 1-5.9L3.5 9.8l5.9-.9z" />
+    </svg>
+  );
+}
+
+/** Layout marks for the Projects and Goals list ⇄ grid switch. */
+export function IconList(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 6h12M8 12h12M8 18h12" />
+      <path d="M4 6h.01M4 12h.01M4 18h.01" />
+    </svg>
+  );
+}
+
+export function IconGrid(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="4" width="7" height="7" rx="1.6" />
+      <rect x="13" y="4" width="7" height="7" rx="1.6" />
+      <rect x="4" y="13" width="7" height="7" rx="1.6" />
+      <rect x="13" y="13" width="7" height="7" rx="1.6" />
     </svg>
   );
 }

@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
 import { IconChevronDown, IconMore, IconPencil, IconPlus, IconProjects, IconTrash } from '@/components/ui/icons';
+import { ViewToggle, useViewMode } from '@/components/ui/view-toggle';
 import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
@@ -49,6 +50,14 @@ export function ProjectsScreen() {
   const [milestoneForm, setMilestoneForm] = useState<{ projectId: string; milestone?: ProjectMilestone } | null>(null);
   const [deletingMilestone, setDeletingMilestone] = useState<ProjectMilestone | undefined>(undefined);
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
+  /**
+   * List or grid. Remembered per device with the app's existing view-state
+   * convention (localStorage, like the timer dock), so no new settings system
+   * and no schema change. Filtering, sorting, search-free navigation, bulk
+   * select and every row action work identically in both layouts — only the
+   * wrapper changes, and the card is the same component in each.
+   */
+  const [viewMode, setViewMode] = useViewMode('projects');
   // Bulk select & delete (Phase 6). One Set covers projects and milestones —
   // the two share an entity id space, and deleting them is one combined
   // confirm so the user sees the full consequence in one place.
@@ -151,7 +160,12 @@ export function ProjectsScreen() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
+    <div
+      className={`mx-auto w-full px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 ${
+        viewMode === 'grid' ? 'max-w-4xl lg:max-w-6xl' : 'max-w-4xl'
+      }`}
+      data-view-mode={viewMode}
+    >
       <PageHeader
         title="Projects"
         subtitle="Group related work toward an outcome. Projects are yours to define — nothing is predefined."
@@ -173,6 +187,7 @@ export function ProjectsScreen() {
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-1.5">
+        <ViewToggle collection="projects" value={viewMode} onChange={setViewMode} className="sm:mr-1.5" />
         <div className="ml-auto min-w-0 sm:w-56">
           <Select value={sort} onChange={(e) => setSort(e.target.value as EntityDateSort)} aria-label="Sort projects">
             <option value="deadline-asc">Sort by · Deadline — Soonest first</option>
@@ -237,7 +252,15 @@ export function ProjectsScreen() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div
+          className={
+            viewMode === 'grid'
+              ? // 1 column on a phone, 2 on a tablet, 3 from desktop up.
+                'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+              : 'space-y-3'
+          }
+          data-projects-layout={viewMode}
+        >
           {projects.map((project) => {
             const prog = projectProgress(data.tasks, project.id);
             const focused = projectFocusedSeconds(data.tasks, project.id);
@@ -249,7 +272,14 @@ export function ProjectsScreen() {
             const deadlineSoon = project.deadline !== undefined && project.deadline >= todayISO();
 
             return (
-              <div key={project.id} className="rounded-2xl border border-line bg-surface shadow-card">
+              <div
+                key={project.id}
+                className={`h-full rounded-2xl border border-line bg-surface shadow-card${
+                  // A card that opens to show its tasks needs the width back, so in
+                  // the grid it takes the whole row; in the list it is already full width.
+                  isExpanded && viewMode === 'grid' ? ' sm:col-span-2 lg:col-span-3' : ''
+                }`}
+              >
                 <div className="flex items-start gap-3 p-5">
                   {selectMode ? (
                     <span className="mt-2.5">
@@ -281,7 +311,7 @@ export function ProjectsScreen() {
                     {project.description ? (
                       <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{project.description}</p>
                     ) : null}
-                    <div className="mt-3 flex items-center gap-3">
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <ProgressBar done={prog.done} total={prog.total} className="max-w-56" />
                       <span className="text-[11px] tabular-nums text-ink-3">
                         {prog.done}/{prog.total} tasks done

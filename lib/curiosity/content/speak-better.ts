@@ -15,6 +15,7 @@ import type { SpeakBetterLesson } from '../types';
  */
 export const speakBetterLessons: SpeakBetterLesson[] = [
   {
+    level: 'A2-B1',
     id: 'teach-learn-study-practise',
     focus: 'You teach a person, you learn a thing, you study a subject, and you practise a skill.',
     situation:
@@ -71,6 +72,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Describe your last week at school in four sentences, using teach, learn, study and practise once each — one word per sentence, and nobody else’s role mixed in.',
   },
   {
+    level: 'A2-B1',
     id: 'hear-listen-overhear-listen-in',
     focus: 'Hearing happens to you; listening is something you do. Overhearing is an accident; listening in is a choice.',
     situation: 'A parent asks on the phone why their child “hears but does not listen”, and you want to explain the difference in one breath.',
@@ -126,6 +128,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Speak four sentences in a row: something you heard today but did not listen to, something you listen to every day, something you overheard by accident, and something you would never listen in on.',
   },
   {
+    level: 'A2-B1',
     id: 'say-tell-speak-talk',
     focus: 'You say words, you tell a person, you speak a language, and you talk with someone.',
     situation: 'A student says, “Sir, I will say you one thing”, and you want to give them the four-word pattern they will use for life.',
@@ -181,6 +184,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Report one real conversation from today in four sentences, using say, tell, speak and talk once each — and check that “tell” is always followed by a person.',
   },
   {
+    level: 'A2-B1',
     id: 'see-look-watch-observe',
     focus: 'You see without trying, you look on purpose, you watch something that changes, and you observe in order to learn.',
     situation: 'You are sitting with family watching a cricket match and someone asks, “Did you see that catch?” — and you realise you had looked away exactly then.',
@@ -236,6 +240,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Sit quietly for one minute, then report: one thing you saw without trying, one thing you looked at on purpose, one thing you watched for at least ten seconds, and one thing you observed closely enough to describe a detail.',
   },
   {
+    level: 'A2-B1',
     id: 'borrow-lend-loan-return',
     focus: 'You borrow what you take, you lend what you give, and a loan is a formal arrangement — in both directions the thing goes back.',
     situation: 'A colleague asks, “Can you borrow me your calculator for the period?” while a student is standing right there listening.',
@@ -291,6 +296,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Say four sentences about something you have recently taken and given back, using borrow, lend, loan and return once each — and make sure the direction of the item is correct in every one.',
   },
   {
+    level: 'A2-B1',
     id: 'remember-remind-recall-forget',
     focus: 'Remember is inside your own head; remind is something done to someone else. Recall is the effort to bring it back.',
     situation: 'The Hindi “yaad dilana” becomes “remember me” in English, and a teacher hears it every single day.',
@@ -346,6 +352,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Speak four sentences about the coming week, using remember, remind, recall and forget once each, and make sure “remind” always has a person after it.',
   },
   {
+    level: 'A2-B1',
     id: 'spend-take-waste-pass',
     focus: 'You spend time on what you choose, time takes what it needs, you waste what has no use, and you pass time while waiting.',
     situation: 'Talking to a student about the two-month summer break, and how the same holiday can be spent, taken, wasted or passed.',
@@ -401,6 +408,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Describe yesterday in four sentences speaking aloud, using spend, take, waste and pass once each — one sentence each, in the correct sense of time.',
   },
   {
+    level: 'A2-B1',
     id: 'ask-request-demand-insist',
     focus: 'Ask is neutral, request is formal and polite, demand assumes authority, and insisting refuses to let the matter drop.',
     situation: 'You need one day’s leave, and you want the words to match the people you are speaking to — a colleague, the office, an official, or a clerk who is not moving.',
@@ -456,6 +464,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Think of one thing you want from three different people — a friend, a senior, and an office clerk. Say the same want three times in a row, changing only the strength of the verb, and hear which one sounds right.',
   },
   {
+    level: 'A2-B1',
     id: 'argue-debate-quarrel-discuss',
     focus: 'You discuss to understand, debate to win fairly, argue when positions harden, and quarrel when the person becomes the subject.',
     situation: 'The physics and chemistry teachers both want the same period with the same class, and the staff room is getting louder.',
@@ -511,6 +520,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Recall one disagreement from the last fortnight and describe it four times — once as a discussion, once as a debate, once as an argument, once as a quarrel — and notice how differently the same events sound.',
   },
   {
+    level: 'A2-B1',
     id: 'think-feel-believe-suppose',
     focus: 'Think is reasoned, feel is instinctive, believe is settled, and suppose is provisional — the strength of the same opinion, in four sizes.',
     situation: 'A parent-teacher meeting, where you must give an honest opinion about a child’s ability without sounding either certain or careless.',
@@ -566,6 +576,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Give one opinion about something happening in your school today, then say it four times using think, feel, believe and suppose — and hear exactly how much certainty each version claims.',
   },
   {
+    level: 'A2-B1',
     id: 'advice-advise-suggest-recommend',
     focus: 'Advice is the noun, advise the verb; suggest offers an option, recommend puts your name behind it.',
     situation: 'A former student calls to ask which stream to take in class eleven, and you want to help without overselling your own opinion.',
@@ -621,6 +632,7 @@ export const speakBetterLessons: SpeakBetterLesson[] = [
       'Give one piece of guidance to a friend three times — first as advice, then as a suggestion, then as a recommendation — and notice how much of your own judgement each version carries.',
   },
   {
+    level: 'A2-B1',
     id: 'sorry-excuse-me-pardon-apologise',
     focus: 'Excuse me gets attention, sorry is for a fault, pardon invites repetition, and apologise names the fault out loud.',
     situation: 'You step on a colleague’s foot in a crowded staff room, and then arrive late to the principal’s meeting — two different words for two different moments.',

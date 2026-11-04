@@ -263,23 +263,66 @@ export interface BrainSharpener {
 }
 
 /**
- * Speak Better — one practical spoken-English lesson a day.
+ * Speak Better — practical spoken English, taught through a situation.
  *
  * The words in a lesson are meant to be *confusable*: the lesson earns its
  * place only by making the difference between them explicit, so every word
  * carries its own English gloss, Hindi gloss and one line of nuance, plus
  * example sentences that show the difference rather than describe it.
+ *
+ * DIFFICULTY
+ * The original twelve lessons were written for A2–B1 learners and keep their
+ * ids, wording and order exactly as they were — the difficulty marker is
+ * metadata, not a rewrite, so an existing reading history and the rotation that
+ * produced it are untouched. B2, C1 and C2 lessons use the same shape with the
+ * optional depth fields filled in: pronunciation, collocations, common mistakes,
+ * the difference from a near-synonym, and a register note for natural
+ * conversational use.
+ *
+ * Every field beyond `word`/`englishMeaning`/`hindiMeaning`/`nuance`/`examples`
+ * is optional, which is what lets one type describe a two-line A2 lesson and a
+ * nine-line C2 one without padding the simpler lesson with empty headings.
  */
+export const SPEAK_BETTER_LEVELS = ['A2-B1', 'B2', 'C1', 'C2'] as const;
+
+export type SpeakBetterLevel = (typeof SPEAK_BETTER_LEVELS)[number];
+
+/** How a reader is tracking one word they have met. */
+export const SPEAK_BETTER_TRACKING_STATES = ['seen', 'known', 'saved', 'review'] as const;
+
+export type SpeakBetterTrackingState = (typeof SPEAK_BETTER_TRACKING_STATES)[number];
+
+export const SPEAK_BETTER_LEVEL_LABELS: Record<SpeakBetterLevel, string> = {
+  'A2-B1': 'A2–B1 · Elementary & Pre-intermediate',
+  B2: 'B2 · Upper Intermediate',
+  C1: 'C1 · Advanced',
+  C2: 'C2 · Proficiency',
+};
+
 export interface SpeakBetterWord {
+  /** Stable identity for progress tracking. Defaults to the lesson id + the word. */
+  id?: string;
   word: string;
   englishMeaning: string;
   hindiMeaning: string;
   nuance: string;
   examples: string[];
+  /** How to say it: stress, vowels, linking. Omitted where it would add nothing. */
+  pronunciation?: string;
+  /** Words this one habitually travels with, as they are actually said. */
+  collocations?: string[];
+  /** The mistake learners at this level actually make, and the fix. */
+  commonMistake?: string;
+  /** The near-synonym it is most often confused with, and the line between them. */
+  differsFrom?: string;
+  /** When this is the natural thing to say, and when it would sound wrong. */
+  register?: string;
 }
 
 export interface SpeakBetterLesson {
   id: string;
+  /** Difficulty band. Absent means A2–B1, the original corpus. */
+  level?: SpeakBetterLevel;
   /** The one-line takeaway the whole lesson exists to deliver. */
   focus: string;
   /** A concrete moment where this language would actually be spoken. */
@@ -289,6 +332,20 @@ export interface SpeakBetterLesson {
   dialogue: { speaker: string; line: string }[];
   /** One small spoken task the reader can do immediately. */
   challenge: string;
+}
+
+/** One word's tracking record, as persisted for a reader. */
+export interface SpeakBetterProgressEntry {
+  /** `${lessonId}:${word}` — stable across a lesson rewrite only if the word survives. */
+  id: string;
+  lessonId: string;
+  word: string;
+  level: SpeakBetterLevel;
+  state: SpeakBetterTrackingState;
+  /** ISO instant of the first time the reader met the word. */
+  firstSeenAt: string;
+  /** ISO instant of the most recent tracking change. */
+  updatedAt: string;
 }
 
 /**

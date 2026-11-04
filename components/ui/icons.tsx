@@ -404,3 +404,12 @@ export function IconBiology(props: IconProps) {
   );
 }
 
+
+/** A saved/bookmarked mark for tracked vocabulary. */
+export function IconStar(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m12 3.6 2.6 5.3 5.9.9-4.2 4.1 1 5.9-5.3-2.8-5.3 2.8 1-5.9L3.5 9.8l5.9-.9z" />
+    </svg>
+  );
+}

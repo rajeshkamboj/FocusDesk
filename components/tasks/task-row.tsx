@@ -30,6 +30,7 @@ import type { Task } from '@/lib/types';
 import { SelectionCheckbox, type RowSelection } from '@/components/ui/bulk-select';
 import { TaskFormModal } from './task-form-modal';
 import { TaskSubtasks } from './task-subtasks';
+import { CopyTaskContextItem } from './copy-task-context';
 import { useNow } from './use-now';
 
 function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
@@ -480,6 +481,13 @@ export function TaskRow({
               >
                 <IconPencil width={14} height={14} /> Edit…
               </MenuItem>
+              {/*
+                Copying the task's context as Markdown is a read-only action: it
+                never edits the task, and it is available on every row — open,
+                completed or cancelled — because a finished task is just as
+                likely to be the thing you want to ask an assistant about.
+              */}
+              <CopyTaskContextItem taskId={task.id} onDone={close} />
               {!cancelled && !done ? (
                 <MenuItem
                   onClick={() => {

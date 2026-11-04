@@ -15,6 +15,7 @@
     "curiosity:dedupe": "npx tsx scripts/verify-curiosity-dedupe.ts",
     "curiosity:content": "npx tsx scripts/verify-daily-content.tsx",
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
+    "verify:task-context": "npx tsx scripts/verify-task-context.tsx",
     "verify:view-modes": "npx tsx scripts/verify-view-modes.tsx"
   },
   "dependencies": {

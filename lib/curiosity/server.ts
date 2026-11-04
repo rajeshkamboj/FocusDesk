@@ -5,7 +5,8 @@ import { addPublicationDays, publicationDate } from './schedule';
 import { BOOK_INTERVAL_DAYS } from './schedule';
 import { getStateStore, type CuriosityState, type PublishedDaily } from './state';
 import { getDailyQuote } from '../quotes';
-import type { CuriosityBriefing, CuriosityDurability } from './types';
+import type { CuriosityBriefing, CuriosityDurability, DiscoveryShelfEntry } from './types';
+import { getDiscoveryShelves } from '../discovery/server';
 
 /**
  * The read path for Curiosity.
@@ -79,6 +80,26 @@ function publicationFrom(
   };
 }
 
+/**
+ * The discovered shelves for one date, or empty arrays when discovery has produced
+ * nothing usable yet.
+ *
+ * Failures are swallowed on purpose. The discovery reservoir is an *addition* to a
+ * page that already works: a missing table, an expired key or an empty reservoir
+ * must leave the authored Literature and Science cards exactly as they were, not
+ * replace them with an error panel. `getDiscoveryShelves` already returns empty
+ * rather than throwing; this belt-and-braces catch also covers an import-time
+ * failure.
+ */
+async function discoveryShelves(date: string): Promise<{ literatureShelf: DiscoveryShelfEntry[] }> {
+  try {
+    const shelves = await getDiscoveryShelves(date);
+    return { literatureShelf: shelves.literature.entries };
+  } catch {
+    return { literatureShelf: [] };
+  }
+}
+
 export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   const store = getStateStore();
   const state = await readState();
@@ -86,9 +107,13 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
 
   if (state.daily && state.daily.date === date) {
     const daily = state.daily;
+    // The shelves are read from the reservoir, not from the snapshot: a book
+    // discovered after midnight should appear without re-publishing the day.
+    const shelves = await discoveryShelves(date);
     return {
       date,
       book,
+      ...shelves,
       ...daily.payload,
       publication: publicationFrom(daily, store.kind, date, state, store.durability),
     };
@@ -111,9 +136,11 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
     if (summary && summary.status === 'published') {
       const refreshed = await store.read();
       if (refreshed.daily?.date === date) {
+        const shelves = await discoveryShelves(date);
         return {
           date,
           book: currentBook(refreshed, date),
+          ...shelves,
           ...refreshed.daily.payload,
           publication: publicationFrom(refreshed.daily, store.kind, date, refreshed, store.durability),
         };
@@ -134,9 +161,11 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   }
 
   const fallback = dailyEditorial(date);
+  const shelves = await discoveryShelves(date);
   return {
     date,
     book,
+    ...shelves,
     // The live cards take today's slice of the curated shelves rather than being empty.
     // Empty is honest only if the reader is told nothing else is available — and they are
     // told, by the label on the card — but a card that can be filled with something true

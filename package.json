@@ -17,7 +17,9 @@
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
     "verify:task-context": "npx tsx scripts/verify-task-context.tsx",
     "verify:view-modes": "npx tsx scripts/verify-view-modes.tsx",
-    "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx"
+    "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx",
+    "verify:discovery": "npx tsx scripts/verify-discovery.tsx",
+    "discover:literature": "npx tsx scripts/discover-literature.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

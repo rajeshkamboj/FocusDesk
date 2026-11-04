@@ -526,6 +526,34 @@ export interface CuriosityPublicationMeta {
   bookNextChangeOn?: string;
 }
 
+/**
+ * One discovered record as the Curiosity page renders it.
+ *
+ * Deliberately a flat, serialisable shape: it crosses the server/client boundary
+ * inside the briefing, so it may not carry functions or dates. `attribution`,
+ * `license` and `rights` are part of the type — not optional extras — because a
+ * record without them may not be shown.
+ */
+export type DiscoveryShelfEntry = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  sourceName: string;
+  attribution: string;
+  license?: string;
+  /** book | text | explainer | entity | textbook | mission-media | research-abstract */
+  kind: string;
+  /** Mandatory reading for research records; shown inline, never as a footnote. */
+  caveat?: string;
+  rights: string;
+  subjects: string[];
+  author?: string;
+  language?: string;
+  publicationDetails?: string;
+  discoveredAt?: string;
+};
+
 export type CuriosityBriefing = {
   date: string;
   quote?: { text: string; author: string };
@@ -556,4 +584,14 @@ export type CuriosityBriefing = {
   biology: BiologyConcept;
   /** Present whenever a scheduled snapshot (rather than the fallback) is shown. */
   publication?: CuriosityPublicationMeta;
+  /**
+   * Discovered public-domain books and texts, selected from the persistent
+   * candidate reservoir — never fetched during this render.
+   *
+   * Optional and additive: a stored snapshot from before the discovery feature
+   * exists simply omits it, and the page falls back to the authored Literature and
+   * Science cards it has always shown. An empty array means "the reservoir had
+   * nothing eligible", which is a normal, quiet state rather than an error.
+   */
+  literatureShelf?: DiscoveryShelfEntry[];
 };

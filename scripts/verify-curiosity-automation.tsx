@@ -1467,6 +1467,19 @@ async function main() {
       /^scripts\/(verify-)?curiosity[a-z-]*\.(ts|tsx|mjs)$/,
       /^scripts\/verify-daily-content\.tsx$/,
       /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history|11_curiosity_candidates)\.sql)$/,
+      // The Literature and Science discovery features extend Curiosity rather than
+      // sitting beside it: they write into the same reservoir through the same
+      // validation, dedupe and store, so their adapters, scheduled jobs and docs are
+      // part of this area's footprint. The Speak Better library is surfaced from the
+      // Curiosity page, and its nav entry and icon are shared with it.
+      /^lib\/discovery\//,
+      /^components\/curiosity\/sections\/[a-z-]*discovery\.tsx$/,
+      /^components\/curiosity\/speak-better-[a-z-]+\.tsx$/,
+      /^scripts\/(verify-)?(discover|speak-better)[a-z-]*\.(ts|tsx)$/,
+      /^docs\/(discovery-architecture|speak-better-levels)\.md$/,
+      /^\.github\/workflows\/discovery-[a-z]+\.yml$/,
+      /^app\/speak-better\/page\.tsx$/,
+      /^components\/(layout\/nav|ui\/icons)\.tsx?$/,
       /^(\.github\/workflows\/curiosity-(daily|discovery)\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
     ];
     try {

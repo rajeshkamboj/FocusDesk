@@ -1,0 +1,86 @@
+name: Literature Discovery
+
+# Scheduled discovery for the literature collection.
+#
+# Runs on the GitHub runner, never in the app: a page render must never make an
+# outbound request to a third-party catalogue or index. Results are written to the
+# existing Curiosity reservoir (`curiosity_candidates`) through the shared
+# validation, deduplication and persistence path, and the run is logged in
+# `curiosity_discovery_runs` with a per-source success/failure breakdown.
+#
+# Schedule: 11:20 UTC daily, offset from the Curiosity discovery run (12:00 UTC) so
+# the two never contend for the same API rate limits, and well before the midnight
+# IST publish.
+#
+# Sources and their terms are documented in docs/discovery-architecture.md. The
+# collection can be switched off without a code change:
+#   CURIOSITY_LITERATURE_SOURCES=off
+
+on:
+  schedule:
+    - cron: '20 11 * * *'
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Optional comma-separated adapter ids (gutenberg, standard-ebooks, wikisource)'
+        required: false
+        type: string
+      max_records:
+        description: 'Optional per-source record cap (default 10)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One run at a time. The adapters share a per-host rate limiter inside a process;
+# two overlapping processes would not, so overlap is prevented here instead.
+concurrency:
+  group: discovery-literature
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      # Reused from the existing Curiosity configuration: every source's terms ask
+      # for an identifying contact in the user agent, and one variable is enough.
+      WIKIMEDIA_CONTACT_EMAIL: ${{ vars.WIKIMEDIA_CONTACT_EMAIL }}
+      INPUT_SOURCES: ${{ inputs.sources }}
+      INPUT_MAX: ${{ inputs.max_records }}
+
+    steps:
+      - name: Checkout repository
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        run: npm ci
+
+      - name: Discover literature candidates
+        if: ${{ env.SUPABASE_SECRET_KEY != '' && env.NEXT_PUBLIC_SUPABASE_URL != '' }}
+        run: |
+          set -euo pipefail
+          ARGS=("--trigger=cron")
+          if [ -n "${INPUT_SOURCES}" ]; then ARGS+=("--sources=${INPUT_SOURCES}"); fi
+          if [ -n "${INPUT_MAX}" ]; then ARGS+=("--max=${INPUT_MAX}"); fi
+          npx tsx scripts/discover-literature.ts "${ARGS[@]}"
+
+      - name: Report missing configuration
+        if: ${{ env.SUPABASE_SECRET_KEY == '' || env.NEXT_PUBLIC_SUPABASE_URL == '' }}
+        run: |
+          echo "::error::Supabase runner secrets are not configured, so literature discovery cannot persist anything."
+          echo "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY as repository secrets."
+          exit 1

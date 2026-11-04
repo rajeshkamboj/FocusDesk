@@ -8,6 +8,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import type { ISODate, Task, TaskInput, TaskPriority } from '@/lib/types';
 import { formatDuration, todayISO } from '@/lib/dates';
 import { projectMilestonesFor } from '@/lib/project-milestones';
+import { CopyTaskContextButton } from './copy-task-context';
 
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: 'high', label: 'Important' },
@@ -155,6 +156,12 @@ export function TaskFormModal({
       title={task ? 'Edit task' : 'New task'}
       footer={
         <>
+          {/*
+            The details view of a task is the other place its context is worth
+            copying from, so the action lives here as well as in the row menu.
+            It is hidden while creating a task — there is nothing saved to copy.
+          */}
+          {task ? <CopyTaskContextButton taskId={task.id} className="mr-auto" /> : null}
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

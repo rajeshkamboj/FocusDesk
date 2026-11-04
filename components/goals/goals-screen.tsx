@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Modal } from '@/components/ui/modal';
 import { IconChevronDown, IconGoals, IconMore, IconPencil, IconPlus, IconTrash } from '@/components/ui/icons';
+import { ViewToggle, useViewMode } from '@/components/ui/view-toggle';
 import { PageHeader } from '@/components/layout/page-header';
 import { TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
@@ -33,6 +34,12 @@ export function GoalsScreen() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addTaskFor, setAddTaskFor] = useState<string | null>(null);
   const [sort, setSort] = useState<EntityDateSort>('deadline-asc');
+  /**
+   * List or grid — the same remembered per-device view state Projects uses
+   * (existing localStorage convention, no new settings system). Sorting, bulk
+   * selection, expansion and every row action behave identically in both.
+   */
+  const [viewMode, setViewMode] = useViewMode('goals');
   // Bulk select & delete (Phase 6).
   const [selectMode, setSelectMode] = useState(false);
   const selection = useBulkSelection();
@@ -101,7 +108,12 @@ export function GoalsScreen() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
+    <div
+      className={`mx-auto w-full px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 ${
+        viewMode === 'grid' ? 'max-w-4xl lg:max-w-6xl' : 'max-w-4xl'
+      }`}
+      data-view-mode={viewMode}
+    >
       <PageHeader
         title="Goals"
         subtitle="Broader outcomes you are moving toward. A goal can own projects — or stand on its own."
@@ -122,8 +134,9 @@ export function GoalsScreen() {
         }
       />
 
-      <div className="mb-5 flex justify-end">
-        <div className="min-w-0 sm:w-56">
+      <div className="mb-5 flex items-center gap-1.5">
+        <ViewToggle collection="goals" value={viewMode} onChange={setViewMode} />
+        <div className="ml-auto min-w-0 sm:w-56">
           <Select value={sort} onChange={(e) => setSort(e.target.value as EntityDateSort)} aria-label="Sort goals">
             <option value="deadline-asc">Sort by · Deadline — Soonest first</option>
             <option value="deadline-desc">Sort by · Deadline — Latest first</option>
@@ -175,7 +188,15 @@ export function GoalsScreen() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div
+          className={
+            viewMode === 'grid'
+              ? // 1 column on a phone, 2 on a tablet, 3 from desktop up.
+                'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+              : 'space-y-3'
+          }
+          data-goals-layout={viewMode}
+        >
           {goals.map((goal) => {
             const prog = goalProgress(data.tasks, data.projects, goal.id);
             const linkedProjects = data.projects.filter((p) => p.goalId === goal.id);
@@ -185,7 +206,14 @@ export function GoalsScreen() {
             const isExpanded = expanded === goal.id;
 
             return (
-              <div key={goal.id} className="rounded-2xl border border-line bg-surface shadow-card">
+              <div
+                key={goal.id}
+                className={`h-full rounded-2xl border border-line bg-surface shadow-card${
+                  // A card that opens to show its tasks needs the width back, so in
+                  // the grid it takes the whole row; in the list it is already full width.
+                  isExpanded && viewMode === 'grid' ? ' sm:col-span-2 lg:col-span-3' : ''
+                }`}
+              >
                 <div className="flex items-start gap-3 p-5">
                   {selectMode ? (
                     <span className="mt-2.5">

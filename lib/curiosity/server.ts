@@ -91,12 +91,15 @@ function publicationFrom(
  * rather than throwing; this belt-and-braces catch also covers an import-time
  * failure.
  */
-async function discoveryShelves(date: string): Promise<{ literatureShelf: DiscoveryShelfEntry[] }> {
+async function discoveryShelves(date: string): Promise<{
+  literatureShelf: DiscoveryShelfEntry[];
+  scienceShelf: DiscoveryShelfEntry[];
+}> {
   try {
     const shelves = await getDiscoveryShelves(date);
-    return { literatureShelf: shelves.literature.entries };
+    return { literatureShelf: shelves.literature.entries, scienceShelf: shelves.science.entries };
   } catch {
-    return { literatureShelf: [] };
+    return { literatureShelf: [], scienceShelf: [] };
   }
 }
 

@@ -24,7 +24,7 @@ import {
 export type { CollectionShelfEntry };
 
 export interface CollectionShelf {
-  collection: 'literature';
+  collection: 'literature' | 'science';
   date: string;
   entries: CollectionShelfEntry[];
   /** How many eligible records exist, per source — shown as a quiet provenance line. */
@@ -42,7 +42,7 @@ function summariseSources(candidates: readonly KnowledgeCandidate[]): Record<str
 }
 
 export async function getCollectionShelf(
-  collection: 'literature',
+  collection: 'literature' | 'science',
   date: string,
   options: { store?: CandidateStore; limit?: number; recentIds?: readonly string[] } = {},
 ): Promise<CollectionShelf> {
@@ -76,20 +76,19 @@ export async function getCollectionShelf(
   };
 }
 
-/**
- * The shelves for one date. Shaped as an object rather than a bare array so a
- * second collection can be added without changing every caller.
- */
+/** Both shelves in one round trip, for the Curiosity page. */
 export async function getDiscoveryShelves(
   date: string,
   options: { store?: CandidateStore } = {},
-): Promise<{ literature: CollectionShelf }> {
-  return { literature: await getCollectionShelf('literature', date, options) };
+): Promise<{ literature: CollectionShelf; science: CollectionShelf }> {
+  const [literature, science] = await Promise.all([
+    getCollectionShelf('literature', date, options),
+    getCollectionShelf('science', date, options),
+  ]);
+  return { literature, science };
 }
 
 /** Exported for the docs and the harness: where a collection's records live. */
 export function collectionTable(collection: KnowledgeCollection): string {
-  return collection === 'literature'
-    ? 'curiosity_candidates (category book, literature)'
-    : 'curiosity_candidates';
+  return collection === 'literature' ? 'curiosity_candidates (category book, literature)' : 'curiosity_candidates (category chemistry, physics, biology, one-thing, learn-something)';
 }

@@ -594,4 +594,6 @@ export type CuriosityBriefing = {
    * nothing eligible", which is a normal, quiet state rather than an error.
    */
   literatureShelf?: DiscoveryShelfEntry[];
+  /** Discovered science material: explainers, open textbooks, mission media, abstracts. */
+  scienceShelf?: DiscoveryShelfEntry[];
 };

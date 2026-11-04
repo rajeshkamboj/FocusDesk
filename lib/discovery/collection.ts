@@ -41,24 +41,27 @@ import {
  * is a derived property of both the category and the payload, so the same table
  * serves every feature without a migration.
  */
-export const KNOWLEDGE_COLLECTIONS = ['curiosity', 'literature'] as const;
+export const KNOWLEDGE_COLLECTIONS = ['curiosity', 'literature', 'science'] as const;
 
 export type KnowledgeCollection = (typeof KNOWLEDGE_COLLECTIONS)[number];
 
 /**
  * The reservoir categories a collection may write into.
  *
- * Literature reuses `'literature'` and `'book'`. Science expansion reuses
- * `'chemistry'`, `'physics'`, `'biology'` and the two ideas categories
- * `'one-thing'` and `'learn-something'` in a follow-up change; this module is
- * written so that adding a collection is a one-line change to this table, not a new
- * persistence path.
+ * Literature reuses `'literature'` and `'book'`. Science reuses `'chemistry'`,
+ * `'physics'`, `'biology'` and the two ideas categories `'one-thing'` and
+ * `'learn-something'` — those are opened in the existing Curiosity UI but carry a
+ * `payload.collection = 'science'` marker so selection can tell a discovered
+ * explainer apart from an editorial idea card.
  *
  * `curiosity` keeps every category, because that is the pre-existing behaviour.
  */
 export const COLLECTION_CATEGORIES: Record<KnowledgeCollection, readonly ReservoirCategory[]> = {
   curiosity: RESERVOIR_CATEGORIES,
   literature: ['literature', 'book'],
+  // `learn-something` is shared with the Curiosity idea cards; science records are
+  // told apart by their `payload.collection` marker, not by their category.
+  science: ['chemistry', 'physics', 'biology', 'one-thing', 'learn-something'],
 };
 
 export function categoriesForCollection(collection: KnowledgeCollection): readonly ReservoirCategory[] {
@@ -325,7 +328,7 @@ export function collectionOfCandidate(candidate: {
   payload?: Record<string, unknown>;
 }): KnowledgeCollection {
   const marker = candidate.payload?.[COLLECTION_PAYLOAD_KEY];
-  if (marker === 'literature' || marker === 'curiosity') return marker;
+  if (marker === 'literature' || marker === 'science' || marker === 'curiosity') return marker;
   return 'curiosity';
 }
 

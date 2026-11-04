@@ -1,13 +1,11 @@
-# Discovery architecture — Literature
+# Discovery architecture — Literature and Science
 
-How discovered reading reaches a reader, what each source is allowed to claim, and
-what is deliberately **not** verified.
+Two features, one engine. This document covers how discovered reading reaches a
+reader, what each source is allowed to claim, and what is deliberately **not**
+verified.
 
 - Literature discovery — books and texts from Project Gutenberg, Standard Ebooks and Wikisource
-
-The same engine is designed to carry a second collection (Science expansion) without
-a new persistence path; that collection is added in a follow-up change, and the
-sections it touches are marked below.
+- Science expansion — explainers and research metadata from Wikipedia, Wikidata, NASA, OpenStax and Europe PMC
 
 ## The pipeline
 
@@ -52,11 +50,12 @@ make an outbound request to a third-party catalogue. The only writers are:
 | Workflow | Schedule (UTC) | Script |
 | --- | --- | --- |
 | `discovery-literature.yml` | `20 11 * * *` | `scripts/discover-literature.ts` |
+| `discovery-science.yml` | `35 11 * * *` | `scripts/discover-science.ts` |
 
-It is offset from the existing Curiosity discovery run (`00 12 * * *`) so it never
-contends for the same API rate limits, and it finishes well before the midnight IST
-publish. It is `workflow_dispatch`-able and uses a `concurrency` group so two runs
-cannot overlap — the per-host rate limiter lives in process memory, so
+Both are offset from the existing Curiosity discovery run (`00 12 * * *`) so they
+never contend for the same API rate limits, and both are well before the midnight
+IST publish. Both are `workflow_dispatch`-able, and both use a `concurrency` group so
+two runs cannot overlap — the per-host rate limiter lives in process memory, so
 overlap is prevented by the scheduler rather than by the client.
 
 ## Sources, terms and what may be claimed
@@ -66,6 +65,11 @@ overlap is prevented by the scheduler rather than by the client.
 | Project Gutenberg | `gutenberg.org/ebooks/<id>.rdf` | `public-domain-verified` when the RDF says "Public domain in the USA" | **None** — metadata and a link |
 | Standard Ebooks | `standardebooks.org/opds/all` | `public-domain-verified` (the project's own statement) | **None** — metadata and a link |
 | Wikisource | `en.wikisource.org/w/api.php` | per page: `permitted-reuse` if CC/GDlF, `public-domain-verified` if a PD category, else `unknown` | **None** — intro extract capped at 600 characters, plus a link |
+| Wikipedia | `en.wikipedia.org/w/api.php` | `permitted-reuse` (CC BY-SA 4.0) | Intro extract capped at 900 characters |
+| Wikidata | `www.wikidata.org/w/api.php` | `permitted-reuse` (CC0 1.0) | Label and one-line description |
+| NASA | `images-api.nasa.gov/search` | `public-domain-asserted` (NASA's own usage guidelines; third-party elements may differ) | **None** — metadata and a link; **no media is copied or re-hosted** |
+| OpenStax | `openstax.org/apps/cms/api/v2/books/` | `permitted-reuse` only when the catalogue states a CC licence, else `unknown` | **None** — summary and a link |
+| Europe PMC | `www.ebi.ac.uk/europepmc/webservices/rest/search` | `abstract-only` | Metadata plus the abstract. **No full text** |
 
 Every adapter identifies itself with
 `FocusDesk/0.1 (<tool>; contact: <email>; <repository url>)`, using the existing
@@ -95,6 +99,19 @@ but it is never eligible and therefore never reaches a shelf.
 both the record and the card say so; a reader elsewhere is told to check their own
 rules. Wikisource is decided per page from its own categories, because that site
 hosts both public-domain and CC BY-SA texts.
+
+## Research is never presented as established fact
+
+Every Europe PMC record carries a caveat chosen from its own publication type:
+
+- **preprint** — "has not completed peer review; treat it as preliminary"
+- **review / meta-analysis** — "stronger than one study, but still a summary of evidence"
+- **anything else** — "one peer-reviewed study … preliminary until other groups replicate it; it is not established fact"
+
+The record also carries `fullTextIncluded: false` and `isEstablishedFact: false` as
+data, not just prose, and the card prints "Metadata and abstract only — no full text
+stored" instead of a licence badge. The abstract text is the source's, not a
+paraphrase that could overstate it.
 
 ## Deduplication
 
@@ -151,17 +168,18 @@ Optional switches (no code change needed):
 
 - `CURIOSITY_LITERATURE_SOURCES=off` — disable all three literature sources
 - `CURIOSITY_SCIENCE_SOURCES=off` — disable all five science sources
-- Individual sources can be restricted per run with `--sources=`.
+- `CURIOSITY_LITERATURE_SOURCES=…` also accepts `off` per collection only; individual
+  sources can be restricted per run with `--sources=`.
 
 ## What is verified, and what is not
 
-`npm run verify:discovery` — **53 checks** — covers every adapter against recorded
+`npm run verify:discovery` — **65 checks** — covers every adapter against recorded
 response shapes, the rights policy, the strictness policy, the HTTP client's
 retry/backoff/redaction behaviour, per-source isolation, cursor advancement,
 deduplication and idempotent persistence, the selection rules, the UI markup, the
 scheduled-not-per-visit guarantee, and that Curiosity's daily rotation is untouched.
 
-**Not verified in this environment:** no live request was made to any of the three
+**Not verified in this environment:** no live request was made to any of the eight
 sources, because this sandbox's network policy allows only GitHub, npm and PyPI. Every
 adapter is exercised against a fixture that mirrors the documented response shape,
 and every failure path against a stub, but **no claim is made here that a source

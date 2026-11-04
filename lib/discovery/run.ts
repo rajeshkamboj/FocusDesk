@@ -1,5 +1,5 @@
 /**
- * The scheduled discovery runner for the Literature collection.
+ * The scheduled discovery runner for Literature and Science.
  *
  * This is a *thin* orchestration layer over the existing Curiosity machinery: it
  * picks the adapters for a collection, runs them independently, gives each one its
@@ -8,8 +8,8 @@
  *
  * WHY IT IS SCHEDULED AND NOT PER-PAGE-VIEW
  * Nothing here is reachable from a React component or a route handler. The only
- * callers are `scripts/discover-literature.ts` and the
- * `discovery-literature.yml` workflow, so a reader's page load can never trigger an
+ * callers are `scripts/discover-literature.ts`, `scripts/discover-science.ts` and
+ * the GitHub Actions workflows, so a reader's page load can never trigger an
  * outbound request to a third party.
  *
  * ISOLATION
@@ -31,6 +31,10 @@ import type { AdapterContext, DiscoveryAdapter } from './sources/types';
 import { gutenbergAdapter } from './sources/gutenberg';
 import { standardEbooksAdapter } from './sources/standard-ebooks';
 import { wikisourceAdapter } from './sources/wikisource';
+import { wikipediaScienceAdapter, wikidataScienceAdapter } from './sources/wikipedia-science';
+import { nasaAdapter } from './sources/nasa';
+import { openStaxAdapter } from './sources/openstax';
+import { europePmcAdapter } from './sources/europepmc';
 
 export const LITERATURE_ADAPTERS: readonly DiscoveryAdapter[] = [
   gutenbergAdapter,
@@ -38,13 +42,22 @@ export const LITERATURE_ADAPTERS: readonly DiscoveryAdapter[] = [
   wikisourceAdapter,
 ];
 
+export const SCIENCE_ADAPTERS: readonly DiscoveryAdapter[] = [
+  wikipediaScienceAdapter,
+  wikidataScienceAdapter,
+  nasaAdapter,
+  openStaxAdapter,
+  europePmcAdapter,
+];
+
 export function adaptersForCollection(collection: KnowledgeCollection): readonly DiscoveryAdapter[] {
   if (collection === 'literature') return LITERATURE_ADAPTERS;
+  if (collection === 'science') return SCIENCE_ADAPTERS;
   return [];
 }
 
 export interface RunCollectionOptions {
-  collection: 'literature';
+  collection: 'literature' | 'science';
   trigger?: DiscoveryTrigger;
   now?: Date;
   store?: CandidateStore;
@@ -58,7 +71,7 @@ export interface RunCollectionOptions {
 }
 
 export interface CollectionRunOutcome {
-  collection: 'literature';
+  collection: 'literature' | 'science';
   ranAt: string;
   drafts: CandidateDraft[];
   reports: SourceReport[];

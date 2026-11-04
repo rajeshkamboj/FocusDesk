@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { DailyQuote } from './daily-quote';
 import { SectionCard, VisualMark } from './section-card';
 import { LiteratureDiscoveryCard } from './sections/literature-discovery';
+import { ScienceDiscoveryCard } from './sections/science-discovery';
 import { SectionGroup } from './sections/section-group';
 import { SpeakBetterSection } from './sections/speak-better';
 import { MythologySection } from './sections/mythology';
@@ -564,6 +565,15 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           </section>
         </div>
 
+        {/* 3b. Discovered science — explainers, open textbooks, mission media and
+            research abstracts. Research records always carry their caveat. */}
+        {briefing.scienceShelf && briefing.scienceShelf.length > 0 ? (
+          <div className="mt-7">
+            <ScienceDiscoveryCard
+              shelf={{ collection: 'science', date: briefing.date, entries: briefing.scienceShelf, sourceCounts: {} }}
+            />
+          </div>
+        ) : null}
 
         {/* ---- Group: Reading & practice ------------------------------ */}
         <SectionGroup label="Reading & practice" hint="reading, developer tools and brain sharpeners" />

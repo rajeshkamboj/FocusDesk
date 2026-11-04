@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SectionCard, VisualMark } from '../section-card';
 import { IconSpeech } from '@/components/ui/icons';
 import type { SpeakBetterLesson, SpeakBetterWord } from '@/lib/curiosity/types';
@@ -79,6 +80,19 @@ export function SpeakBetterSection({ lesson }: { lesson: SpeakBetterLesson }) {
           <p className="mt-1 text-[13px] leading-relaxed text-ink">{lesson.challenge}</p>
           <p className="mt-1.5 text-[11.5px] text-ink-3">Say it out loud — the spoken half is the half that transfers.</p>
         </div>
+
+        {/*
+          Today's lesson keeps rotating over the A2–B1 corpus exactly as before.
+          The link is the way to everything else: B2, C1 and C2 lessons, search,
+          and per-word tracking. It adds one line and changes nothing published.
+        */}
+        <p className="text-[12px] leading-relaxed text-ink-3">
+          Practising at another level?{' '}
+          <Link href="/speak-better" className="font-medium text-accent hover:underline">
+            Open the Speak Better library
+          </Link>{' '}
+          for B2, C1 and C2 lessons, search and word tracking.
+        </p>
       </div>
     </SectionCard>
   );

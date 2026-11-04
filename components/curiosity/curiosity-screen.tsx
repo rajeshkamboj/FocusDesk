@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DailyQuote } from './daily-quote';
 import { SectionCard, VisualMark } from './section-card';
+import { LiteratureDiscoveryCard } from './sections/literature-discovery';
 import { SectionGroup } from './sections/section-group';
 import { SpeakBetterSection } from './sections/speak-better';
 import { MythologySection } from './sections/mythology';
@@ -563,6 +564,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           </section>
         </div>
 
+
         {/* ---- Group: Reading & practice ------------------------------ */}
         <SectionGroup label="Reading & practice" hint="reading, developer tools and brain sharpeners" />
 
@@ -584,6 +586,17 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
             />
           </section>
         </div>
+
+        {/* 4b. Discovered literature — public-domain books and texts from the
+            scheduled discovery pipeline. Renders nothing when the reservoir has
+            nothing eligible, so the authored card above is always the fallback. */}
+        {briefing.literatureShelf && briefing.literatureShelf.length > 0 ? (
+          <div className="mt-7">
+            <LiteratureDiscoveryCard
+              shelf={{ collection: 'literature', date: briefing.date, entries: briefing.literatureShelf, sourceCounts: {} }}
+            />
+          </div>
+        ) : null}
 
         {/* 5. Brain Sharpener & Learn Something */}
         <div className="grid gap-7 lg:grid-cols-2">

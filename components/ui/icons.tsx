@@ -413,3 +413,28 @@ export function IconStar(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Literature and Science — the two collection marks. Same 24px grid and 1.7px
+ * stroke as the rest of the set.
+ */
+export function IconLiterary(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 6.5C10.4 5.2 8.4 4.6 5.8 4.8 5.3 4.8 5 5.2 5 5.7v12.6c0 .5.4.9.9.9 2.5-.1 4.4.4 6.1 1.7" />
+      <path d="M12 6.5c1.6-1.3 3.6-1.9 6.2-1.7.5 0 .8.4.8.9v12.6c0 .5-.4.9-.9.9-2.5-.1-4.4.4-6.1 1.7" />
+      <path d="M12 6.5v15" />
+    </svg>
+  );
+}
+
+export function IconAtom(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="1.6" />
+      <ellipse cx="12" cy="12" rx="9" ry="4.2" />
+      <ellipse cx="12" cy="12" rx="9" ry="4.2" transform="rotate(60 12 12)" />
+      <ellipse cx="12" cy="12" rx="9" ry="4.2" transform="rotate(120 12 12)" />
+    </svg>
+  );
+}

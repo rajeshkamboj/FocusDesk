@@ -15,7 +15,9 @@
     "curiosity:dedupe": "npx tsx scripts/verify-curiosity-dedupe.ts",
     "curiosity:content": "npx tsx scripts/verify-daily-content.tsx",
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
-    "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx"
+    "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx",
+    "verify:discovery": "npx tsx scripts/verify-discovery.tsx",
+    "discover:literature": "npx tsx scripts/discover-literature.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

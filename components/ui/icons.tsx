@@ -404,3 +404,24 @@ export function IconBiology(props: IconProps) {
   );
 }
 
+
+/** Layout marks for the Projects and Goals list ⇄ grid switch. */
+export function IconList(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 6h12M8 12h12M8 18h12" />
+      <path d="M4 6h.01M4 12h.01M4 18h.01" />
+    </svg>
+  );
+}
+
+export function IconGrid(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="4" width="7" height="7" rx="1.6" />
+      <rect x="13" y="4" width="7" height="7" rx="1.6" />
+      <rect x="4" y="13" width="7" height="7" rx="1.6" />
+      <rect x="13" y="13" width="7" height="7" rx="1.6" />
+    </svg>
+  );
+}

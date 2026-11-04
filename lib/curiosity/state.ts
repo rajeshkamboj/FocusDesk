@@ -428,15 +428,81 @@ export function leaseToken(value: unknown): string | null {
 }
 
 /**
+ * Why the last database read returned nothing.
+ *
+ * `read()` must never throw: a database that cannot answer has to degrade to the
+ * built-in rotation rather than to an error page. The price of that promise is
+ * that a *broken* read is otherwise indistinguishable from an *empty* table — and
+ * that is how a projection naming a column the table does not have (`trigger`
+ * instead of `source_trigger`) reported a day of successfully published content as
+ * "nothing published yet" for as long as the database backend was in use.
+ *
+ * So the failure is retained here, and reported by the status endpoint, instead of
+ * being swallowed entirely.
+ */
+export type StateReadFailure = {
+  /** When the read failed, ISO. */
+  at: string;
+  /** The HTTP status PostgREST answered with, or 0 for a transport error. */
+  status: number;
+  /** Our own sentence about our own query — never a body, a URL or a key. */
+  detail: string;
+};
+
+let lastReadFailure: StateReadFailure | null = null;
+let loggedReadFailure = '';
+
+/** The most recent failed database read, or null if the last read succeeded. */
+export function getLastStateReadFailure(): StateReadFailure | null {
+  return lastReadFailure;
+}
+
+/** Test seam: forget a retained failure between cases. */
+export function resetStateReadFailureForTesting(): void {
+  lastReadFailure = null;
+  loggedReadFailure = '';
+}
+
+function readFailureFrom(error: unknown): StateReadFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  // `select()` throws `Supabase read failed (400)`; the ledger throws its own.
+  const status = /\((\d{3})\)/.exec(message);
+  return {
+    at: new Date().toISOString(),
+    status: status ? Number(status[1]) : 0,
+    detail: message.slice(0, 200),
+  };
+}
+
+/**
+ * Retain the failure, and say it once.
+ *
+ * Logged only when the failure changes, so a deployment whose query is wrong does
+ * not write the same line on every page render. A later successful read clears the
+ * signature, so the next failure is reported again rather than being treated as the
+ * one already logged.
+ */
+function recordReadFailure(failure: StateReadFailure): void {
+  lastReadFailure = failure;
+  const signature = `${failure.status}:${failure.detail}`;
+  if (signature === loggedReadFailure) return;
+  loggedReadFailure = signature;
+  console.error(`[curiosity] database read failed (${failure.status || 'transport'}): ${failure.detail} — serving the built-in rotation until it recovers.`);
+}
+
+/**
  * Server-side only.
  *
- * Reads go through the anon key, because the Curiosity tables are world-readable
- * and contain no user data. Every write goes through the service-role key, which
- * therefore must never appear in a `NEXT_PUBLIC_*` variable or reach the browser:
- * the tables' row-level security allows select to anyone and writes to no one, so
- * the service key is the only way the publisher can persist anything at all. That
- * is also what keeps the endpoint safe: a caller who can reach `/api/curiosity/refresh`
- * without a credential can trigger a fetch, never write.
+ * Reads of the *published* content travel with the anon key, because the briefings,
+ * the ledger and the pool are world-readable and contain no user data. Two reads do
+ * not: `curiosity_jobs` is revoked from `anon` and `authenticated` by migration 009,
+ * so it is read with the server-side key, and the lease RPCs accept only that key.
+ * Every write goes through the service-role key, which therefore must never appear
+ * in a `NEXT_PUBLIC_*` variable or reach the browser: the tables' row-level security
+ * allows select to anyone and writes to no one, so the service key is the only way
+ * the publisher can persist anything at all. That is also what keeps the endpoint
+ * safe: a caller who can reach `/api/curiosity/refresh` without a credential can
+ * trigger a fetch, never write.
  */
 export class SupabaseStateStore implements CuriosityStateStore {
   readonly kind = 'supabase' as const;
@@ -451,10 +517,19 @@ export class SupabaseStateStore implements CuriosityStateStore {
     return `${this.url.replace(/^https?:\/\//, '')} · curiosity_briefings`;
   }
 
-  /** `curiosity_jobs` is the only table this reads, and only for reporting. */
+  /**
+   * `curiosity_jobs` is the only table this reads, and only for reporting.
+   *
+   * It travels with the **server-side** key on purpose. Migration 009 revokes the
+   * table from `anon` and `authenticated` and leaves it reachable only through the
+   * SECURITY DEFINER lease functions, so a publishable-key read is refused by the
+   * database and the run history would silently stay empty — the failure mode this
+   * read used to have. The key never leaves the server: this store is only ever
+   * constructed from server-side code.
+   */
   async lastRun(): Promise<{ at: string; ok: boolean; detail: string } | null> {
     try {
-      const [row] = await this.select('curiosity_jobs?select=last_result,last_error,last_finished_at&id=eq.1');
+      const [row] = await this.select('curiosity_jobs?select=last_result,last_error,last_finished_at&id=eq.1', this.writeKey);
       if (!row || (!row.last_finished_at && !row.last_result && !row.last_error)) return null;
       const error = typeof row.last_error === 'string' && row.last_error.length > 0 ? row.last_error : null;
       const result = typeof row.last_result === 'string' && row.last_result.length > 0 ? row.last_result : error ? 'failed' : 'no result recorded';
@@ -473,26 +548,41 @@ export class SupabaseStateStore implements CuriosityStateStore {
     };
   }
 
-  /** A snapshot is one row: (kind, date) with the payload the app renders. */
+  /**
+   * A snapshot is one row: (kind, date) with the payload the app renders.
+   *
+   * The projection names the columns the hydrators actually read, and it has to
+   * keep doing so: PostgREST answers **400**, not an empty list, for a column that
+   * does not exist, and `read()` turns any failure into "nothing published". The
+   * trigger column is `source_trigger` (migration 009) — `trigger` belongs to
+   * `curiosity_discovery_runs` — and `content_id_map` is what `hydrateDaily` and
+   * `hydrateBook` read the per-card ids from.
+   */
   async read(): Promise<CuriosityState> {
     try {
       const [briefings, seen] = await Promise.all([
-        this.select('curiosity_briefings?order=date_key.desc&select=kind,date_key,published_at,content_ids,payload,degraded,trigger&limit=60'),
+        this.select('curiosity_briefings?order=date_key.desc&select=kind,date_key,published_at,content_ids,content_id_map,payload,degraded,source_trigger&limit=60'),
         this.readLedger(),
       ]);
       const daily = briefings.find((row) => row.kind === 'daily');
       const book = briefings.find((row) => row.kind === 'book');
-      return normalizeState({
+      const state = normalizeState({
         version: 1,
         daily: daily ? hydrateDaily(daily) : null,
         book: book ? hydrateBook(book) : null,
         seen: seen.map(hydrateSeen).reverse(),
         runs: [],
       });
-    } catch {
-      // A missing migration, a cold project or a bad network all land here. The
-      // caller treats "nothing published" as "use the fallback pool", so the page
-      // keeps working; the reason is reported by the admin action instead.
+      // A read that worked clears the record, so the next failure is new news.
+      lastReadFailure = null;
+      loggedReadFailure = '';
+      return state;
+    } catch (error) {
+      // A missing migration, a cold project, a bad network, or a projection naming
+      // a column the table does not have all land here. The caller treats "nothing
+      // published" as "use the fallback pool", so the page keeps working — but the
+      // reason is retained (and logged once) instead of vanishing.
+      recordReadFailure(readFailureFrom(error));
       return emptyState();
     }
   }

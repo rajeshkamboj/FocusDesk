@@ -42,7 +42,13 @@ import {
 import { CURATED_PER_DAY, curatedAiWorld, curatedHistoryArchive, curatedRadar, dailyEditorial, dailyEditorialIds } from '../lib/curiosity/content';
 import { buildBriefing, clearBriefingMemo } from '../lib/curiosity/server';
 import { getCuriosityStatus, invalidBookFields, invalidDailyFields, runCuriosityRefresh } from '../lib/curiosity/job';
-import { getStateStore, setStateStoreForTesting, type CuriosityState } from '../lib/curiosity/state';
+import {
+  getLastStateReadFailure,
+  getStateStore,
+  resetStateReadFailureForTesting,
+  setStateStoreForTesting,
+  type CuriosityState,
+} from '../lib/curiosity/state';
 import { rowToPoolEntry } from '../lib/curiosity/content-db';
 import { authorizeRefresh } from '../lib/curiosity/refresh-auth';
 import { COVER_PLACEHOLDER, buildRecommendation, lookupBook, openLibraryUserAgent, pickWorkRecord, searchUrl, titlesMatch } from '../lib/curiosity/openlibrary';
@@ -678,17 +684,44 @@ async function main() {
     const realFetch = globalThis.fetch;
     const briefings: Record<string, unknown>[] = [];
     const ledger: Record<string, unknown>[] = [];
-    const requests: { method: string; path: string; apikey: string; prefer: string }[] = [];
+    const requests: { method: string; path: string; apikey: string; prefer: string; select: string }[] = [];
     let held: string | null = null;
     let released: { token: string; result: string | null; error: string | null } | null = null;
     // The row curiosity_release_lease maintains; the app reads it for its status.
     const job: Record<string, unknown> = {};
 
+    /**
+     * A PostgREST that validates `select` the way the real one does.
+     *
+     * Two behaviours matter and both were invisible before: an unknown column is
+     * **400/42703**, not an empty list, and the response carries only the columns
+     * asked for. The client used to ask for `trigger` (the column is
+     * `source_trigger`) and the 400 was turned into "nothing published yet"; the
+     * same projection also omitted `content_id_map`, which is where the hydrators
+     * read the per-card ids from.
+     */
+    const tableColumns: Record<string, string[]> = {
+      curiosity_briefings: ['kind', 'date_key', 'published_at', 'content_ids', 'content_id_map', 'payload', 'degraded', 'source_trigger'],
+      curiosity_seen: ['category', 'content_id', 'shown_on', 'recorded_at', 'title', 'url', 'fingerprint', 'signature', 'subjects', 'source', 'version'],
+      curiosity_jobs: ['id', 'lease_token', 'lease_expires_at', 'claimed_at', 'last_result', 'last_error', 'last_finished_at'],
+    };
+
+    const selectFrom = (table: string, rows: Record<string, unknown>[], params: URLSearchParams): Response => {
+      const wanted = (params.get('select') ?? '*').split(',').map((column) => column.trim()).filter(Boolean);
+      const allowed = tableColumns[table];
+      if (!allowed || wanted.includes('*')) return Response.json(rows);
+      const unknown = wanted.filter((column) => !allowed.includes(column));
+      if (unknown.length) {
+        return Response.json({ code: '42703', message: `column ${table}.${unknown[0]} does not exist` }, { status: 400 });
+      }
+      return Response.json(rows.map((row) => Object.fromEntries(wanted.filter((column) => column in row).map((column) => [column, row[column]]))));
+    };
+
     const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       const headers = new Headers(init?.headers ?? {});
       const method = (init?.method ?? 'GET').toUpperCase();
-      requests.push({ method, path: url.pathname, apikey: headers.get('apikey') ?? '', prefer: headers.get('prefer') ?? '' });
+      requests.push({ method, path: url.pathname, apikey: headers.get('apikey') ?? '', prefer: headers.get('prefer') ?? '', select: url.searchParams.get('select') ?? '' });
       const body = init?.body ? JSON.parse(String(init.body)) : null;
 
       if (url.pathname === '/rest/v1/rpc/curiosity_acquire_lease') {
@@ -718,7 +751,7 @@ async function main() {
         return new Response(null, { status: 204 });
       }
       if (url.pathname === '/rest/v1/curiosity_jobs') {
-        return Response.json(Object.keys(job).length ? [job] : []);
+        return selectFrom('curiosity_jobs', Object.keys(job).length ? [job] : [], url.searchParams);
       }
       if (method === 'POST' && url.pathname === '/rest/v1/curiosity_seen') {
         for (const row of body as Record<string, unknown>[]) {
@@ -728,10 +761,10 @@ async function main() {
       }
       if (url.pathname === '/rest/v1/curiosity_briefings') {
         const sorted = [...briefings].sort((a, b) => String(b.date_key ?? '').localeCompare(String(a.date_key ?? '')));
-        return Response.json(headers.get('accept')?.includes('json') ? sorted : sorted);
+        return selectFrom('curiosity_briefings', sorted, url.searchParams);
       }
       if (url.pathname === '/rest/v1/curiosity_seen') {
-        return Response.json([...ledger].sort((a, b) => String(a.shown_on ?? '').localeCompare(String(b.shown_on ?? ''))));
+        return selectFrom('curiosity_seen', [...ledger].sort((a, b) => String(a.shown_on ?? '').localeCompare(String(b.shown_on ?? ''))), url.searchParams);
       }
       // Anything else is an un-migrated database: exactly the 404 the app must survive.
       return new Response(JSON.stringify({ code: '42P01', message: 'relation does not exist' }), { status: 404 });
@@ -772,12 +805,28 @@ async function main() {
       assert.equal(lastRun?.ok, true);
       databaseChecks += 1;
 
-      // Reads travel with the publishable key; writes with the secret. Never the
-      // other way round, and never a key that a browser could also have.
+      // Published content is read with the publishable key; writes with the secret.
+      // The internal job row is the exception, and deliberately so: migration 009
+      // revokes `curiosity_jobs` from anon and authenticated, so a publishable-key
+      // read is refused by the database and the run history stays empty in silence.
       const reads = requests.filter((request) => request.method === 'GET');
+      const jobReads = reads.filter((request) => request.path.endsWith('curiosity_jobs'));
+      const contentReads = reads.filter((request) => !request.path.endsWith('curiosity_jobs'));
       const writes = requests.filter((request) => request.method === 'POST' && !request.path.includes('/rpc/'));
-      assert.ok(reads.length > 0 && reads.every((request) => request.apikey === 'publishable-test-key'), 'a read used more than the publishable key');
+      assert.ok(contentReads.length > 0 && contentReads.every((request) => request.apikey === 'publishable-test-key'), 'a content read used more than the publishable key');
+      assert.ok(jobReads.length > 0, 'the job row was never read');
+      assert.ok(jobReads.every((request) => request.apikey === 'secret-test-key'), 'the revoked job row was read with the publishable key');
       assert.ok(writes.length > 0 && writes.every((request) => request.apikey === 'secret-test-key'), 'a write did not use the secret key');
+
+      // The projection must match the schema it reads, because PostgREST answers an
+      // unknown column with 400 and `read()` turns any failure into "nothing
+      // published". `trigger` is a column on curiosity_discovery_runs; the briefings
+      // table calls it `source_trigger`, and the per-card ids live in `content_id_map`.
+      const briefingReads = reads.filter((request) => request.path.endsWith('curiosity_briefings'));
+      assert.ok(briefingReads.length > 0, 'the briefing table was never read');
+      assert.ok(briefingReads.every((request) => request.select.split(',').includes('source_trigger')), 'the briefing read does not ask for source_trigger');
+      assert.ok(briefingReads.every((request) => !request.select.split(',').includes('trigger')), 'the briefing read asked for a column the table does not have: trigger');
+      assert.ok(briefingReads.every((request) => request.select.split(',').includes('content_id_map')), 'the briefing read does not ask for content_id_map, so the recorded ids would hydrate empty');
       // The content pool is read with the public key and never written by the app:
       // authoring happens in git, or by the CLI with an explicit service key.
       const poolReads = requests.filter((request) => request.path.endsWith('curiosity_content'));
@@ -794,6 +843,8 @@ async function main() {
       setStateStoreForTesting(null);
       const reopened = await getStateStore().read();
       assert.deepEqual(reopened.daily?.contentIds, published.daily.contentIds, 'the published ids did not round-trip');
+      assert.equal(reopened.daily?.trigger, 'cron', 'the briefing read lost source_trigger');
+      assert.ok(Object.keys(reopened.daily?.contentIds ?? {}).length >= 8, 'content_id_map did not hydrate the ids the row recorded');
       assert.deepEqual(reopened.book?.payload.title, published.book.published ? reopened.book?.payload.title : null);
       assert.ok(typeof reopened.book?.payload.title === 'string' && reopened.book.payload.title.length > 0, 'the book row did not round-trip');
       assert.equal(reopened.seen.length, ledger.length, 'the seen ledger did not round-trip');
@@ -821,6 +872,19 @@ async function main() {
       held = null;
       databaseChecks += 1;
 
+      // A 400 — what a projection naming a missing column produces — must not be
+      // reported as an empty database. Readers still get the fallback, but the reason
+      // is retained and the status endpoint says it out loud.
+      resetStateReadFailureForTesting();
+      globalThis.fetch = (async () => Response.json({ code: '42703', message: 'column x does not exist' }, { status: 400 })) as unknown as typeof fetch;
+      setStateStoreForTesting(null);
+      const failedRead = await getStateStore().read();
+      assert.equal(failedRead.daily, null, 'a failed read must degrade to the fallback rather than throw');
+      assert.equal(getLastStateReadFailure()?.status, 400, 'a failed read was indistinguishable from an empty database');
+      assert.match(String((await getCuriosityStatus(IST_MIDNIGHT(0))).store.readError), /400/, 'the status endpoint hid the read failure');
+      resetStateReadFailureForTesting();
+      databaseChecks += 1;
+
       // An un-migrated database reads as empty and fails the write loudly, without
       // taking the file store down with it.
       briefings.length = 0;
@@ -841,9 +905,12 @@ async function main() {
         else process.env[key] = value;
       }
       setStateStoreForTesting(null);
+      // The 500 case above records a failure on purpose; do not let it leak into the
+      // file-store cases that follow.
+      resetStateReadFailureForTesting();
     }
   }
-  results.push('Supabase state: every lease acquired and released with the run result recorded on the job row, daily and book rows keyed by (kind, date_key), upsert merge-duplicates + ledger ignore-duplicates, reads on the publishable key and writes on the secret only, a second publisher refused while the lease was live, a fresh store object reading back the identical day, and an un-migrated database degrading to the built-in rotation');
+  results.push('Supabase state: every lease acquired and released with the run result recorded on the job row, daily and book rows keyed by (kind, date_key), upsert merge-duplicates + ledger ignore-duplicates, published content read on the publishable key and the revoked job row plus every write on the secret only, a briefing projection of source_trigger + content_id_map that the schema accepts, a 400 read failure retained and reported instead of looking like an empty database, a second publisher refused while the lease was live, a fresh store object reading back the identical day, and an un-migrated database degrading to the built-in rotation');
 
 
 /* ---------------------------------------------------------------- *
@@ -1232,6 +1299,7 @@ async function main() {
     const store = getStateStore();
     assert.equal(store.kind, 'file');
     assert.notEqual(store.durability, 'shared', 'the file store claimed to be shared');
+    assert.equal(getLastStateReadFailure(), null, 'a healthy file store reported a database read failure');
     const status = await getCuriosityStatus(IST_MIDNIGHT(0));
     assert.equal(status.store.durable, store.durability === 'shared');
     assert.equal(status.store.durability, store.durability);

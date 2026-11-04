@@ -9,6 +9,7 @@ import { fetchDeveloperRadar, fetchNews, type SourceNote } from './sources';
 import { addPublicationDays, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import {
   emptyState,
+  getLastStateReadFailure,
   getStateStore,
   recentSeenIds,
   type RefreshTrigger,
@@ -661,7 +662,18 @@ export async function catchUpOnRender(date: string, fetchImpl?: typeof fetch): P
 }
 
 export type CuriosityStatus = {
-  store: { kind: 'file' | 'supabase'; location: string; durability: CuriosityDurability; durable: boolean };
+  store: {
+    kind: 'file' | 'supabase';
+    location: string;
+    durability: CuriosityDurability;
+    durable: boolean;
+    /**
+     * Why the last database read failed, if it did. Present so an operator can tell
+     * "the database refused the query" from "nothing has been published yet" — the
+     * two used to look identical from here, and the difference was the whole bug.
+     */
+    readError?: string | null;
+  };
   today: string;
   scheduler: {
     cronSecretConfigured: boolean;
@@ -824,7 +836,16 @@ export async function getCuriosityStatus(now: Date = new Date()): Promise<Curios
     {} as CuriosityStatus['pool'],
   );
   return {
-    store: { kind: store.kind, location: store.location, durability: store.durability, durable: store.durability === 'shared' },
+    store: {
+      kind: store.kind,
+      location: store.location,
+      durability: store.durability,
+      durable: store.durability === 'shared',
+      // Only the database backend can fail a read in a way worth reporting: the file
+      // store answers from its own document, and a missing one is genuinely "nothing
+      // published yet" rather than a broken query.
+      readError: store.kind === 'supabase' ? (getLastStateReadFailure()?.detail ?? null) : null,
+    },
     today: date,
     scheduler: {
       cronSecretConfigured: Boolean(process.env.CURIOSITY_CRON_SECRET?.trim()),

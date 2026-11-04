@@ -13,7 +13,7 @@ import type { CuriosityPoolEntry, LiteratureItem } from '../types';
  * that the original card carried. Every entry links to a copy of the full work
  * so a reader who likes the four lines can read the book.
  */
-export const literaturePool: CuriosityPoolEntry<LiteratureItem>[] = [
+export const literatureEntries: CuriosityPoolEntry<LiteratureItem>[] = [
   {
     id: 'lit-frost-road-not-taken',
     category: 'literature',
@@ -510,3 +510,169 @@ export const literaturePool: CuriosityPoolEntry<LiteratureItem>[] = [
     },
   },
 ];
+
+
+/* ------------------------------------------------------------------ */
+/* Rights, recorded per work rather than asserted for the file         */
+/*                                                                     */
+/* Every entry above reproduces text, and every one therefore needs a  */
+/* stated basis for doing so. The review found two that do not have    */
+/* one — both are modern translations — and those are converted to     */
+/* link-only entries here, with the quotation removed rather than      */
+/* annotated. The rest are public-domain works whose *translator* is   */
+/* also long dead (Butler 1900, Long 1862, Tagore's own English), and  */
+/* each carries the jurisdiction caveat the card prints.               */
+/*                                                                     */
+/* Keeping this table separate from the passages means the basis can   */
+/* be reviewed, counted and tested in one place: the harness asserts   */
+/* that every entry has one, and that a link-only entry has no text.   */
+/* ------------------------------------------------------------------ */
+
+interface LiteratureRightsRecord {
+  rights: 'public-domain' | 'link-only';
+  /** One sentence: which edition, which translator, which jurisdiction. */
+  basis: string;
+  /** The sentence the card prints when a country's rules may differ. */
+  jurisdiction?: string;
+  /** An original note for a link-only entry — never a quotation. */
+  context?: string;
+}
+
+export const LITERATURE_RIGHTS_BY_ID: Record<string, LiteratureRightsRecord> = {
+  'lit-frost-road-not-taken': {
+    rights: 'public-domain',
+    basis: '“The Road Not Taken” was first published in 1916 and is in the public domain in the United States.',
+    jurisdiction: 'Frost died in 1963, so the poem remains in copyright in countries with a life+70 term until 2034.',
+  },
+  'lit-rilke-letter-four': {
+    rights: 'link-only',
+    basis: 'The 1903 German text is public domain, but the English translation quoted by the source is in copyright, so no text is reproduced here.',
+    jurisdiction: 'Copyright in a translation is separate from copyright in the original work.',
+    context:
+      'Rilke wrote ten letters to a young officer between 1903 and 1908. The fourth is the best known: it argues that patience with unanswered questions is itself a kind of work. Read the letter in the translation at the source.',
+  },
+  'lit-tagore-gitanjali-35': {
+    rights: 'public-domain',
+    basis: 'Tagore translated Gitanjali into English himself in 1912; the translation and the original are both in the public domain.',
+    jurisdiction: 'Tagore died in 1941, so the work is out of copyright in India and in life+60 countries.',
+  },
+  'lit-marcus-aurelius-book4': {
+    rights: 'public-domain',
+    basis: 'The quoted English is George Long’s translation of 1862, which is in the public domain.',
+  },
+  'lit-gibran-on-work': {
+    rights: 'public-domain',
+    basis: '“The Prophet” was published in 1923 and entered the public domain in the United States in 2019; Gibran died in 1931.',
+  },
+  'lit-basho-narrow-road': {
+    rights: 'link-only',
+    basis: 'The 1689 Japanese text is public domain, but the English line came from a modern translation still in copyright, so it has been removed.',
+    jurisdiction: 'Copyright in a translation is separate from copyright in the original work.',
+    context:
+      'Bashō walked north from Edo in 1689 and wrote the journey up as a haibun — prose with poems set into it. The opening sentence is among the most quoted in Japanese literature. Read it in a licensed translation at the source.',
+  },
+  'lit-thoreau-walden': {
+    rights: 'public-domain',
+    basis: '“Walden” was published in 1854 and is in the public domain.',
+  },
+  'lit-dickinson-hope-feathers': {
+    rights: 'public-domain',
+    basis: 'The poem was published in 1891 and is in the public domain.',
+  },
+  'lit-shelley-ozymandias': {
+    rights: 'public-domain',
+    basis: '“Ozymandias” was first published in The Examiner on 11 January 1818 and is in the public domain.',
+  },
+  'lit-blake-tyger': {
+    rights: 'public-domain',
+    basis: '“The Tyger” appeared in Songs of Innocence and of Experience (1794) and is in the public domain.',
+  },
+  'lit-keats-grecian-urn': {
+    rights: 'public-domain',
+    basis: '“Ode on a Grecian Urn” was published in 1819 and is in the public domain.',
+  },
+  'lit-coleridge-kubla-khan': {
+    rights: 'public-domain',
+    basis: '“Kubla Khan” was published in 1816 and is in the public domain.',
+  },
+  'lit-henley-invictus': {
+    rights: 'public-domain',
+    basis: '“Invictus” was published in 1888 and is in the public domain.',
+    jurisdiction: 'Henley died in 1903, so the poem is out of copyright in life+70 countries as well.',
+  },
+  'lit-tennyson-ulysses': {
+    rights: 'public-domain',
+    basis: '“Ulysses” was published in 1842 and is in the public domain.',
+  },
+  'lit-poe-raven': {
+    rights: 'public-domain',
+    basis: '“The Raven” was published in 1845 and is in the public domain.',
+  },
+  'lit-milton-paradise-lost': {
+    rights: 'public-domain',
+    basis: '“Paradise Lost” was published in 1667 and is in the public domain.',
+  },
+  'lit-shakespeare-hamlet': {
+    rights: 'public-domain',
+    basis: '“Hamlet” was published around 1600 and is in the public domain.',
+  },
+  'lit-whitman-song-of-myself': {
+    rights: 'public-domain',
+    basis: 'The 1855 edition of “Song of Myself” is in the public domain.',
+  },
+  'lit-austen-pride-prejudice': {
+    rights: 'public-domain',
+    basis: '“Pride and Prejudice” was published in 1813 and is in the public domain.',
+  },
+  'lit-dickens-tale-two-cities': {
+    rights: 'public-domain',
+    basis: '“A Tale of Two Cities” was published in 1859 and is in the public domain.',
+  },
+  'lit-shelley-frankenstein': {
+    rights: 'public-domain',
+    basis: 'The 1818 text of “Frankenstein” is in the public domain.',
+  },
+  'lit-doyle-scandal-bohemia': {
+    rights: 'public-domain',
+    basis: '“A Scandal in Bohemia” was published in 1891 and is in the public domain.',
+    jurisdiction: 'Doyle died in 1930, so the story is out of copyright in life+70 countries as well.',
+  },
+  'lit-fitgerald-gatsby': {
+    rights: 'public-domain',
+    basis: 'The 1925 text entered the public domain in the United States in 2021; Fitzgerald died in 1940, so it is out of copyright in life+70 countries too.',
+  },
+  'lit-homer-odyssey-butler': {
+    rights: 'public-domain',
+    basis: 'The quoted English is Samuel Butler’s translation of 1900, which is in the public domain.',
+  },
+};
+
+/**
+ * Attach the recorded rights basis to an entry.
+ *
+ * A link-only entry keeps its title, author, link and *original* note, and loses
+ * its quotation entirely. That is deliberate: an excerpt under an unclear licence
+ * is not made safe by a disclaimer.
+ */
+export function withLiteratureRights(
+  entry: CuriosityPoolEntry<LiteratureItem>,
+): CuriosityPoolEntry<LiteratureItem> {
+  const record = LITERATURE_RIGHTS_BY_ID[entry.id];
+  if (!record) return entry;
+  const item: LiteratureItem = {
+    ...entry.item,
+    origin: 'curated',
+    rights: record.rights === 'link-only' ? 'link-only' : 'public-domain',
+    rightsBasis: record.basis,
+    ...(record.jurisdiction ? { jurisdictionNote: record.jurisdiction } : {}),
+    excerptKind: record.rights === 'link-only' ? 'link-only' : 'public-domain-passage',
+    ...(record.rights === 'link-only'
+      ? { passage: '', context: record.context ?? 'Read this work at the source.' }
+      : {}),
+  };
+  return { ...entry, item };
+}
+
+/** The daily literature pool, with every entry's rights basis attached. */
+export const literaturePool: CuriosityPoolEntry<LiteratureItem>[] =
+  literatureEntries.map(withLiteratureRights);

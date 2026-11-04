@@ -12,6 +12,13 @@ import { chemistryConcepts } from '../lib/curiosity/content/chemistry';
 import { physicsConcepts } from '../lib/curiosity/content/physics';
 import { biologyConcepts } from '../lib/curiosity/content/biology';
 import { speakBetterLessons } from '../lib/curiosity/content/speak-better';
+import {
+  SPEAK_BETTER_B2_LESSONS,
+  SPEAK_BETTER_C1_LESSONS,
+  SPEAK_BETTER_C2_LESSONS,
+} from '../lib/curiosity/speak-better';
+import { verifyPuzzle, puzzlePoolForDate } from '../lib/curiosity/puzzles';
+import { PUZZLE_CATEGORIES } from '../lib/curiosity/types';
 import { getUserDisplayName } from '../lib/auth/display-name';
 import { ProgressSegments } from '../components/today/progress-segments';
 import { CuriosityScreen } from '../components/curiosity/curiosity-screen';
@@ -20,6 +27,8 @@ const CLAIM_LAYERS = ['textual', 'traditional', 'analysis', 'inference'] as cons
 
 async function main() {
   const speakBetterIds = new Set<string>();
+  const sharpenerIds = new Set<string>();
+  const sharpenerCategories = new Set<string>();
   const mythologyIds = new Set<string>();
   const chemistryIds = new Set<string>();
   const physicsIds = new Set<string>();
@@ -35,6 +44,17 @@ async function main() {
     if (editorial.history) assert.equal(editorial.history.date, new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }));
     assert.ok(editorial.literature.author && editorial.literature.url);
     assert.ok(editorial.sharpener.solution && editorial.sharpener.answer);
+    // Every puzzle the page can show must verify against its generator: the answer is
+    // re-derived from the seed rather than trusted from the object. A puzzle whose
+    // answer cannot be reproduced is never published, so it must not be reachable here.
+    sharpenerIds.add(editorial.sharpener.id);
+    if (editorial.sharpener.category) sharpenerCategories.add(editorial.sharpener.category);
+    const verified = verifyPuzzle(editorial.sharpener);
+    assert.ok(verified.ok, `${editorial.sharpener.id} does not verify on ${date}: ${verified.reasons.join('; ')}`);
+    for (const alternative of editorial.sharpenerAlternatives ?? []) {
+      const check = verifyPuzzle(alternative);
+      assert.ok(check.ok, `${alternative.id} (alternative) does not verify on ${date}: ${check.reasons.join('; ')}`);
+    }
 
     // Speak Better: a situation, 3-5 confusable words, and something to say
     // out loud. Every word must carry both an English and a Hindi meaning, and
@@ -93,7 +113,34 @@ async function main() {
   // so the assertions compare against the pools rather than a literal that would
   // silently forbid adding content — which is how a "diversity" test becomes a
   // ceiling.
-  assert.equal(speakBetterIds.size, speakBetterLessons.length, `only ${speakBetterIds.size} of ${speakBetterLessons.length} Speak Better lessons appear`);
+  // The daily card speaks at B2–C1 with a C2 lesson one day in five (see
+  // `speak-better-daily.ts`). A2–B1 remains the library's on-ramp and its final
+  // fallback, so the daily rotation is asserted against the advanced corpus.
+  const advancedBands = [...SPEAK_BETTER_B2_LESSONS, ...SPEAK_BETTER_C1_LESSONS];
+  for (const lesson of advancedBands) {
+    assert.ok(speakBetterIds.has(lesson.id), `${lesson.id} (${lesson.level}) never reaches the daily card`);
+  }
+  const a2b1OnTheDailyCard = speakBetterLessons.filter((lesson) => speakBetterIds.has(lesson.id));
+  assert.deepEqual(a2b1OnTheDailyCard, [], 'an A2–B1 lesson took the daily card from the advanced rotation');
+  assert.ok(
+    SPEAK_BETTER_C2_LESSONS.some((lesson) => speakBetterIds.has(lesson.id)),
+    'no C2 lesson ever reaches the daily card, so the hardest band is unreachable',
+  );
+  // C2 is an occasional day, not the default: one in five, and it must actually
+  // happen often enough to reach the whole C2 band over a year without crowding
+  // out B2 and C1.
+  const c2Days = Array.from({ length: 366 }, (_, day) =>
+    new Date(Date.UTC(2028, 0, 1 + day)).toISOString().slice(0, 10),
+  ).filter((date) => dailyEditorial(date).speakBetter.level === 'C2').length;
+  assert.ok(c2Days >= 50 && c2Days <= 90, `${c2Days} of 366 days were C2`);
+  // Brain Sharpener: the pool is wider than the six legacy puzzles, spans more than
+  // one category, and gained verified procedural puzzles rather than only rotation.
+  assert.ok(sharpenerIds.size >= 20, `only ${sharpenerIds.size} puzzles reach 366 days`);
+  assert.ok(sharpenerCategories.size >= 3, `only ${sharpenerCategories.size} puzzle categories reach the card`);
+  const generated = puzzlePoolForDate('2028-05-01', []).filter(
+    (puzzle) => puzzle.generator && puzzle.category && PUZZLE_CATEGORIES.includes(puzzle.category),
+  );
+  assert.ok(generated.length > 0, 'the puzzle pool has no generated, categorised puzzle');
   assert.equal(mythologyIds.size, mythCharacters.length, `only ${mythologyIds.size} of ${mythCharacters.length} myth characters appear`);
   assert.ok(dailyPairs.size >= mythCharacters.length, 'the Speak Better and Mythology rotations are locked together');
   assert.equal(chemistryIds.size, chemistryConcepts.length, `only ${chemistryIds.size} of ${chemistryConcepts.length} chemistry concepts appear`);
@@ -177,6 +224,6 @@ async function main() {
   assert.equal(restored.general.displayName, 'Rajesh');
   assert.equal(restored.general.defaultTaskDuration, 45);
   assert.deepEqual(restored.notifications, defaultSettings.notifications);
-  console.log(`PASS 366 daily selections (${speakBetterLessons.length} Speak Better lessons, ${mythCharacters.length} myth characters, ${chemistryConcepts.length}/${physicsConcepts.length}/${biologyConcepts.length} chemistry/physics/biology concepts; every claim layer-labelled; every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip`);
+  console.log(`PASS 366 daily selections (${advancedBands.length} B2/C1 Speak Better lessons plus a C2 day one in five; ${sharpenerIds.size} verified puzzles over ${sharpenerCategories.size} categories; ${speakBetterLessons.length} A2–B1 lessons remain the library on-ramp, ${mythCharacters.length} myth characters, ${chemistryConcepts.length}/${physicsConcepts.length}/${biologyConcepts.length} chemistry/physics/biology concepts; every claim layer-labelled; every Hindi meaning in Devanagari), the Curiosity page renders all nine existing cards plus the four new sections in order, matching historical dates, zero/partial/full/250-task progress, name fallback, local reload and Supabase settings round-trip`);
 }
 main().catch((error) => { console.error(error); process.exit(1); });

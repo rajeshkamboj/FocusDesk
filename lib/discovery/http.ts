@@ -105,6 +105,14 @@ const lastRequestAt = new Map<string, number>();
 
 export const HOST_MIN_INTERVAL_MS: Record<string, number> = {
   'www.gutenberg.org': 1_000,
+  // OpenAlex publishes usage guidance rather than a cap; Crossref asks for a `mailto`
+  // and no bursts; arXiv asks for roughly three seconds between requests, which is the
+  // one interval here that is a hard requirement rather than politeness.
+  'api.openalex.org': 250,
+  'api.crossref.org': 1_000,
+  'export.arxiv.org': 3_000,
+  'api.datamuse.com': 250,
+  'en.wiktionary.org': 1_000,
   'standardebooks.org': 1_000,
   'en.wikisource.org': 1_000,
   'en.wikipedia.org': 1_000,

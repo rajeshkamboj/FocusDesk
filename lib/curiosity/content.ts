@@ -18,6 +18,13 @@ import { dayNumber } from './schedule';
 import { selectFromPool } from './pool';
 import { buildRecommendation } from './openlibrary';
 import { speakBetterLessons } from './content/speak-better';
+import {
+  SPEAK_BETTER_B2_LESSONS,
+  SPEAK_BETTER_C1_LESSONS,
+  SPEAK_BETTER_C2_LESSONS,
+} from './speak-better';
+import { selectDailyLesson } from './speak-better-daily';
+import { puzzlePoolForDate, selectDailyPuzzle } from './puzzles';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
@@ -266,7 +273,6 @@ export const brainSharpeners: BrainSharpener[] = [
  * gets a different one. That is the property the verify script tests, and it is
  * why no card may consult `Date.now()` or a random value.
  */
-const SPEAK_BETTER_OFFSET = 5;
 const MYTHOLOGY_OFFSET = 2;
 const CHEMISTRY_OFFSET = 7;
 const PHYSICS_OFFSET = 11;
@@ -471,6 +477,35 @@ export function fallbackHistoryTriad(date: string, safeDayOverride?: number): Hi
   });
 }
 
+/** The advanced bands, in the order the daily card prefers them. */
+function advancedFallbackLessons() {
+  return [...SPEAK_BETTER_B2_LESSONS, ...SPEAK_BETTER_C1_LESSONS, ...SPEAK_BETTER_C2_LESSONS];
+}
+
+/** The fallback puzzle: verified, varied, deterministic for the date. */
+function fallbackPuzzle(date: string) {
+  const pool = puzzlePoolForDate(date, brainSharpeners);
+  return selectDailyPuzzle({ date, pool }).puzzle ?? brainSharpeners[0];
+}
+
+function fallbackPuzzleAlternatives(date: string) {
+  const chosen = fallbackPuzzle(date);
+  return puzzlePoolForDate(date, brainSharpeners)
+    .filter((puzzle) => puzzle.id !== chosen.id)
+    .slice(0, 3);
+}
+
+/**
+ * The fallback lesson: B2 and C1, with a C2 lesson one day in five, exactly as the
+ * publisher chooses. A2–B1 is only used if the advanced curriculum is empty, which
+ * keeps the no-snapshot page consistent with the published one.
+ */
+function fallbackSpeakBetter(date: string) {
+  const advanced = advancedFallbackLessons();
+  const selected = selectDailyLesson(advanced.length ? advanced : speakBetterLessons, { date });
+  return selected?.lesson ?? speakBetterLessons[0];
+}
+
 function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolEntry<T> {
   return selectFromPool(category, date).entry as CuriosityPoolEntry<T>;
 }
@@ -486,7 +521,9 @@ export function dailyEditorial(date: string): Pick<
   | 'historyEntries'
   | 'literature'
   | 'sharpener'
+  | 'sharpenerAlternatives'
   | 'speakBetter'
+  | 'speakBetterAlternatives'
   | 'mythology'
   | 'chemistry'
   | 'physics'
@@ -519,8 +556,17 @@ export function dailyEditorial(date: string): Pick<
     history: curatedHistoryMatches(date)[0] ?? null,
     historyEntries: fallbackHistoryTriad(date, safeDay),
     literature: literature.item,
-    sharpener: brainSharpeners[safeDay % brainSharpeners.length],
-    speakBetter: speakBetterLessons[(safeDay + SPEAK_BETTER_OFFSET) % speakBetterLessons.length],
+    /*
+      Brain Sharpener and Speak Better use the same selection the publisher uses, so a
+      reader with no published snapshot sees the same quality of card as one with
+      today's: a generated-or-authored puzzle whose answer has been verified, and a
+      B2/C1 lesson with a C2 day one in five. The A2–B1 corpus remains available in
+      the library and as the final fallback.
+    */
+    sharpener: fallbackPuzzle(date),
+    sharpenerAlternatives: fallbackPuzzleAlternatives(date),
+    speakBetter: fallbackSpeakBetter(date),
+    speakBetterAlternatives: advancedFallbackLessons().filter((lesson) => lesson.id !== fallbackSpeakBetter(date).id).slice(0, 2),
     mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
     chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
     physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],

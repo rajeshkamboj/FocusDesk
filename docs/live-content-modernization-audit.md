@@ -340,3 +340,29 @@ Plus the **publishing** machinery itself: `curiosity-daily.yml` has succeeded on
 **Do not** add twenty institution feeds, an arXiv pipeline for "discoveries", or a live puzzle API before the scoring layer exists. Without ranking, more sources make the app noisier, not better — and the current selector would distribute the noise evenly by date index.
 
 **What I would not claim:** that any of the proposed science sources will, unaided, surface "the single most valuable discovery" each day. OpenAlex citation data cannot rank same-week papers, and press releases outnumber findings. The achievable, honest target is: *a small set of genuinely recent, peer-reviewed, well-attributed items, ranked by a stated heuristic, labelled by provenance, deduplicated, and never presented as more certain than it is.* That is a real improvement over a Wikipedia article chosen by `dayNumber % 9` — and it is a target the current architecture can actually reach.
+
+---
+
+## Addendum — what was implemented (2026-11-04)
+
+This audit's recommendations were implemented on the branch `arena/502ef525-focusdesk`, on
+top of `824e1b1`. Nothing in the analysis above is retracted; the note here exists so a
+reader of the audit knows which parts are now history.
+
+- **P0, literature:** every one of the 24 entries now states a rights basis, and the two
+  entries whose source translation is in copyright (`lit-rilke-letter-four`,
+  `lit-basho-narrow-road`) are link-only — no text, an original note and a link. Discovered
+  literature now reaches the daily card ahead of the curated pool.
+- **P1, science:** OpenAlex, Crossref, Europe PMC and arXiv adapters, a 100-point ranking
+  with a stored significance basis, dataset-first DOI collapse and Crossref DOI verification
+  that can only demote a review claim. Scheduled by
+  `.github/workflows/curiosity-science-discovery.yml`; the card shows a provenance badge.
+- **P1, Brain Sharpener:** 15 authored puzzles plus 8 generator families, every puzzle
+  re-verified from its seed before publication, with a local attempt ledger.
+- **P1, Speak Better:** the daily card is B2/C1 with a C2 day one in five, a reader-level
+  refinement that only chooses among published lessons, and Wiktionary/Datamuse enrichment
+  that can only add an attributed gloss.
+- **Not done:** no new table, no migration, no new dependency, and no claim that any of
+  these live APIs were proven reachable from the dev environment — the harnesses stub the
+  network deliberately. Details, terms and rollback:
+  [knowledge-workflow-modernization.md](knowledge-workflow-modernization.md).

@@ -41,7 +41,7 @@ import {
  * is a derived property of both the category and the payload, so the same table
  * serves every feature without a migration.
  */
-export const KNOWLEDGE_COLLECTIONS = ['curiosity', 'literature'] as const;
+export const KNOWLEDGE_COLLECTIONS = ['curiosity', 'literature', 'science'] as const;
 
 export type KnowledgeCollection = (typeof KNOWLEDGE_COLLECTIONS)[number];
 
@@ -59,6 +59,9 @@ export type KnowledgeCollection = (typeof KNOWLEDGE_COLLECTIONS)[number];
 export const COLLECTION_CATEGORIES: Record<KnowledgeCollection, readonly ReservoirCategory[]> = {
   curiosity: RESERVOIR_CATEGORIES,
   literature: ['literature', 'book'],
+  // Research records live in the three science categories the reservoir already
+  // has from migration 011 — no migration, no new category, no new table.
+  science: ['physics', 'chemistry', 'biology'],
 };
 
 export function categoriesForCollection(collection: KnowledgeCollection): readonly ReservoirCategory[] {
@@ -325,7 +328,7 @@ export function collectionOfCandidate(candidate: {
   payload?: Record<string, unknown>;
 }): KnowledgeCollection {
   const marker = candidate.payload?.[COLLECTION_PAYLOAD_KEY];
-  if (marker === 'literature' || marker === 'curiosity') return marker;
+  if (marker === 'literature' || marker === 'curiosity' || marker === 'science') return marker;
   return 'curiosity';
 }
 

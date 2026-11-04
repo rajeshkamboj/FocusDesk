@@ -105,10 +105,24 @@ Full design, sources, Open Library usage rules, verification results and runbook
 [docs/curiosity-content-automation.md](docs/curiosity-content-automation.md).
 
 ```bash
-npm run curiosity:verify   # 19 automation + reliability checks, offline and deterministic
-npm run curiosity:links    # confirm every cited source URL still resolves
+npm run curiosity:verify        # 19 automation + reliability checks, offline and deterministic
+npm run verify:science          # 14 science-adapter, ranking and enrichment checks (fixtures)
+npm run verify:daily-knowledge  # 8 puzzle, literature-rights, Speak Better and ledger checks
+npm run curiosity:content       # 366 days of the card, every puzzle re-verified
+npm run curiosity:links         # confirm every cited source URL still resolves
 npm run curiosity:refresh -- --status
 ```
+
+Science discovery is scheduled only — the app never calls a journal API while you read:
+
+```bash
+npm run discover:science -- --sources=openalex,europepmc --max=4
+npm run discover:science -- --verify=off
+```
+
+See [docs/knowledge-workflow-modernization.md](docs/knowledge-workflow-modernization.md)
+for the sources, their terms, the switches (`CURIOSITY_SCIENCE_SOURCES`,
+`CURIOSITY_ENRICHMENT`) and an explicit list of what the harnesses do **not** prove.
 
 ## Required API credentials
 

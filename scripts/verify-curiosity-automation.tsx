@@ -1493,9 +1493,14 @@ async function main() {
       /^scripts\/(verify-)?(discover|speak-better|science|daily-knowledge)[a-z-]*\.(ts|tsx)$/,
       /^docs\/(discovery-architecture|speak-better-levels|knowledge-workflow-modernization)\.md$/,
       /^\.github\/workflows\/(discovery|curiosity-science-discovery)[a-z-]*\.yml$/,
-      /^app\/speak-better\/page\.tsx$/,
       /^components\/(layout\/nav|ui\/icons)\.tsx?$/,
-      /^(\.github\/workflows\/curiosity-(daily|discovery)\.yml|vercel\.json|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
+      // The retired standalone route: only its *deletion* should ever appear here,
+      // since the path now resolves through the redirect in next.config.ts.
+      /^app\/speak-better\/page\.tsx$/,
+      // `next.config.ts` holds the route-level redirects this area owns: `/curious`
+      // and now the retired `/speak-better`, which lands on the Speak Better card
+      // rather than a second copy of the same library.
+      /^(\.github\/workflows\/curiosity-(daily|discovery)\.yml|vercel\.json|next\.config\.ts|package\.json|tsconfig\.json|\.env\.example|\.gitignore|README\.md|AGENTS\.md)$/,
     ];
     try {
       const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();

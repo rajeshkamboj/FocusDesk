@@ -158,6 +158,10 @@ eligible discovered work today.
 - The level is printed as "curated level" (`levelLabel`) because no dictionary API assigns
   CEFR levels per sense; saying "B2" without that qualifier would imply a source that does
   not exist.
+- **One entry point.** There is no Speak Better item in the navigation any more. The full
+  practice library (search, level filters, seen/known/saved/review tracking) opens from the
+  daily card, lazily loaded, and the retired `/speak-better` route redirects to
+  `/curiosity#speak-better`. Lessons, ledger keys and stored progress are untouched.
 - **Dictionary enrichment** (`lib/discovery/enrichment/`): Wiktionary supplies an English
   part of speech and a short definition (CC BY-SA 4.0, attributed and linked); Datamuse
   supplies association lists labelled "Often appears with" (CC BY 4.0). Hindi meaning,

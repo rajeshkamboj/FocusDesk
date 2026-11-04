@@ -9,7 +9,6 @@ import {
   IconProjects,
   IconReview,
   IconSettings,
-  IconSpeech,
   IconTasks,
   IconToday,
 } from '@/components/ui/icons';
@@ -31,14 +30,15 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/learnings', label: 'Learnings', icon: IconLearnings },
   { href: '/ideas', label: 'Ideas', icon: IconIdeas },
   { href: '/curiosity', label: 'Curiosity', icon: IconCuriosity },
-  { href: '/speak-better', label: 'Speak Better', icon: IconSpeech },
   { href: '/settings', label: 'Settings', icon: IconSettings },
 ];
 
 export const MOBILE_NAV_ITEMS: NavItem[] = NAV_ITEMS.slice(0, 3);
 /**
  * Everything else, in the sidebar on desktop and in the "More" sheet on a phone.
- * Speak Better sits next to Curiosity because that is where the daily lesson
- * lives; the practice library is the same material, one tap further.
+ *
+ * There is deliberately no Speak Better entry: the daily lesson and the practice
+ * library both live inside Curiosity now, so a second menu item would be a second
+ * door to one room. `/speak-better` still resolves — it redirects to the card.
  */
 export const MORE_NAV_ITEMS: NavItem[] = NAV_ITEMS.slice(3);

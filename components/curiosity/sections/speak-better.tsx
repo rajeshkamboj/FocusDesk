@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useSyncExternalStore } from 'react';
+import dynamic from 'next/dynamic';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { SectionCard, VisualMark } from '../section-card';
 import { IconSpeech } from '@/components/ui/icons';
 import type { SpeakBetterLesson, SpeakBetterWord } from '@/lib/curiosity/types';
@@ -19,6 +19,31 @@ import {
   speakBetterServerSnapshot,
   subscribeSpeakBetterProgress,
 } from '@/lib/curiosity/speak-better-store';
+
+/**
+ * The practice library, loaded only when a reader asks for it.
+ *
+ * It used to be a section of its own with a sidebar entry (`/speak-better`). That
+ * page is retired: the library is part of this card now, behind a disclosure, so
+ * there is one place for Speak Better rather than two doors to the same room.
+ *
+ * The split matters for cost as well as for navigation. The library is 32 lessons
+ * with every word rendered, so it is fetched on first open and never as part of
+ * the daily page. `ssr: false` keeps it off the server render: the expanded state
+ * is a client choice, and the progress ledger's `useSyncExternalStore` already
+ * makes the first client paint match the server.
+ */
+const SpeakBetterLibrary = dynamic(
+  () => import('../speak-better-library').then((module) => module.SpeakBetterLibrary),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-[12.5px] text-ink-3" role="status">
+        Loading the practice library…
+      </p>
+    ),
+  },
+);
 
 /**
  * Speak Better — one lesson a day, laid out as a comparison.
@@ -132,6 +157,14 @@ export function SpeakBetterSection({
     speakBetterServerSnapshot,
   );
 
+  /*
+    The library starts closed. It is a deliberate second step — the daily card is
+    what a reader gets, and the shelf of every lesson is what they open when today's
+    lesson is not the one they need.
+  */
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const libraryPanelId = useId();
+
   /**
    * Refinement is computed here rather than published: only the browser knows which
    * words this reader has marked known. `refineForReader` returns the published
@@ -176,7 +209,7 @@ export function SpeakBetterSection({
 
   return (
     <SectionCard label="Speak Better">
-      <div className="space-y-4">
+      <div id="speak-better" className="space-y-4">
         <div className="flex gap-3.5">
           <VisualMark>
             <IconSpeech width={18} height={18} />
@@ -236,13 +269,28 @@ export function SpeakBetterSection({
           <p className="mt-1.5 text-[11.5px] text-ink-3">Say it out loud — the spoken half is the half that transfers.</p>
         </div>
 
-        <p className="text-[12px] leading-relaxed text-ink-3">
-          Practising at another level?{' '}
-          <Link href="/speak-better" className="font-medium text-accent hover:underline">
-            Open the Speak Better library
-          </Link>{' '}
-          to mark words known, save them for later and search every lesson.
-        </p>
+        <div className="rounded-xl border border-line bg-surface-2/30 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <p className="text-[12.5px] leading-relaxed text-ink-2">
+              Practising at another level? The library holds every lesson — search a word or a Hindi meaning, mark
+              words known, and save them for later. Progress stays on this device.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLibraryOpen((open) => !open)}
+              aria-expanded={libraryOpen}
+              aria-controls={libraryPanelId}
+              className="shrink-0 rounded-full border border-accent/40 bg-accent-soft px-3 py-1.5 text-[12px] font-medium text-accent-ink transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+            >
+              {libraryOpen ? 'Hide the practice library' : 'Open the practice library'}
+            </button>
+          </div>
+          {libraryOpen ? (
+            <div id={libraryPanelId} className="mt-4 border-t border-line pt-4">
+              <SpeakBetterLibrary />
+            </div>
+          ) : null}
+        </div>
       </div>
     </SectionCard>
   );

@@ -56,19 +56,18 @@ async function main() {
       assert.ok(check.ok, `${alternative.id} (alternative) does not verify on ${date}: ${check.reasons.join('; ')}`);
     }
 
-    // Speak Better: a situation, 3-5 confusable words, and something to say
-    // out loud. Every word must carry both an English and a Hindi meaning, and
-    // the Hindi must actually be Devanagari rather than a transliteration.
+    // Speak Better: one primary word, taught in depth, a situation, and something
+    // to say out loud. The word must carry both an English and a Hindi meaning,
+    // and the Hindi must actually be Devanagari rather than a transliteration.
     const lesson = editorial.speakBetter;
     speakBetterIds.add(lesson.id);
     assert.ok(lesson.id && lesson.focus && lesson.situation && lesson.challenge);
-    assert.ok(lesson.words.length >= 3 && lesson.words.length <= 5, `${lesson.id} has ${lesson.words.length} words`);
+    assert.ok(lesson.word && !('words' in lesson), `${lesson.id} must teach one primary word, not a list`);
     assert.ok(lesson.dialogue.length >= 3, `${lesson.id} dialogue is too short`);
-    for (const word of lesson.words) {
-      assert.ok(word.word && word.englishMeaning && word.nuance, `${lesson.id}: ${word.word} is incomplete`);
-      assert.match(word.hindiMeaning, /[\u0900-\u097F]/, `${lesson.id}: ${word.word} has no Hindi meaning`);
-      assert.ok(word.examples.length >= 1, `${lesson.id}: ${word.word} has no example sentence`);
-    }
+    const word = lesson.word;
+    assert.ok(word.word && word.englishMeaning && word.nuance && word.partOfSpeech, `${lesson.id}: ${word.word} is incomplete`);
+    assert.match(word.hindiMeaning, /[\u0900-\u097F]/, `${lesson.id}: ${word.word} has no Hindi meaning`);
+    assert.ok(word.examples.length >= 3 && word.examples.length <= 4, `${lesson.id}: ${word.word} needs three or four examples`);
 
     // Mythology: a reference panel (family, timeline, sources) plus claims that
     // are each labelled with their evidence layer, so a modern reading can never

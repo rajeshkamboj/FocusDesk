@@ -653,14 +653,14 @@ async function main(): Promise<void> {
     const disabled = await enrichLesson(lesson, { nowIso: NOW_ISO });
     delete process.env.CURIOSITY_ENRICHMENT;
     assert.equal(disabled.lesson.enrichment?.status, 'disabled', 'the switch is recorded on the lesson');
-    assert.deepEqual(disabled.lesson.words, authored.words, 'a disabled run must not touch a single authored word');
+    assert.deepEqual(disabled.lesson.word, authored.word, 'a disabled run must not touch the authored word');
 
     const failing = (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
-    const unavailable = await enrichLesson(lesson, { fetchImpl: failing, sleepImpl: async () => {}, maxWords: 2, budgetMs: 2_000, nowIso: NOW_ISO });
+    const unavailable = await enrichLesson(lesson, { fetchImpl: failing, sleepImpl: async () => {}, budgetMs: 2_000, nowIso: NOW_ISO });
     assert.ok(['unavailable', 'partial'].includes(unavailable.lesson.enrichment?.status ?? ''), `unexpected status ${unavailable.lesson.enrichment?.status}`);
     assert.deepEqual(
-      unavailable.lesson.words.map((word) => [word.word, word.englishMeaning, word.hindiMeaning, word.nuance]),
-      authored.words.map((word: { word: string; englishMeaning: string; hindiMeaning: string; nuance: string }) => [word.word, word.englishMeaning, word.hindiMeaning, word.nuance]),
+      [unavailable.lesson.word.word, unavailable.lesson.word.englishMeaning, unavailable.lesson.word.hindiMeaning, unavailable.lesson.word.nuance],
+      [authored.word.word, authored.word.englishMeaning, authored.word.hindiMeaning, authored.word.nuance],
       'the authored meanings are identical after a failed enrichment',
     );
 
@@ -669,16 +669,20 @@ async function main(): Promise<void> {
       if (url.includes('datamuse')) return jsonResponse([{ word: 'example-association' }]);
       return jsonResponse(wiktionaryJson);
     }) as unknown as typeof fetch;
-    const enriched = await enrichLesson(lesson, { fetchImpl: dictionaryOk, sleepImpl: async () => {}, maxWords: 1, budgetMs: 4_000, nowIso: NOW_ISO });
-    const first = enriched.lesson.words[0];
+    const enriched = await enrichLesson(lesson, { fetchImpl: dictionaryOk, sleepImpl: async () => {}, budgetMs: 4_000, nowIso: NOW_ISO });
+    const first = enriched.lesson.word;
     if (enriched.lesson.enrichment?.status === 'enriched') {
       assert.ok(first.dictionary?.definition, 'an enriched word carries its dictionary gloss');
       assert.equal(first.dictionary?.sourceName?.toLowerCase().includes('wiktionary'), true, 'the gloss names Wiktionary');
       assert.match(first.dictionary?.license ?? '', /CC BY-SA/i, 'the gloss carries its licence');
-      assert.equal(first.englishMeaning, authored.words[0].englishMeaning, 'the authored meaning wins');
-      assert.equal(first.hindiMeaning, authored.words[0].hindiMeaning, 'the authored Hindi is never replaced');
-      assert.equal(first.nuance, authored.words[0].nuance, 'the authored nuance is never replaced');
-      assert.deepEqual(enriched.lesson.words.slice(1), authored.words.slice(1), 'words beyond the budget are untouched');
+      assert.equal(first.englishMeaning, authored.word.englishMeaning, 'the authored meaning wins');
+      assert.equal(first.hindiMeaning, authored.word.hindiMeaning, 'the authored Hindi is never replaced');
+      assert.equal(first.nuance, authored.word.nuance, 'the authored nuance is never replaced');
+      assert.equal(first.commonMistake, authored.word.commonMistake, 'the authored mistake note is never replaced');
+      assert.deepEqual(first.examples, authored.word.examples, 'the authored examples are never replaced');
+      const { dictionary: _attached, ...withoutDictionary } = first;
+      void _attached;
+      assert.deepEqual(withoutDictionary, authored.word, 'enrichment adds only the dictionary object');
     } else {
       assert.ok(['unavailable', 'partial'].includes(enriched.lesson.enrichment?.status ?? ''), `unexpected enrichment status ${enriched.lesson.enrichment?.status}`);
     }

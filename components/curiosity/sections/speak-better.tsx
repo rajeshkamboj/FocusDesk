@@ -5,13 +5,8 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { SectionCard, VisualMark } from '../section-card';
 import { IconSpeech } from '@/components/ui/icons';
 import type { SpeakBetterLesson, SpeakBetterWord } from '@/lib/curiosity/types';
-import {
-  bandOf,
-  knownWordsByLesson,
-  levelLabel,
-  newWordCount,
-  refineForReader,
-} from '@/lib/curiosity/speak-better-daily';
+import { bandOf, levelLabel, refineForReader } from '@/lib/curiosity/speak-better-daily';
+import { primaryWord, toCurrentLesson } from '@/lib/curiosity/speak-better';
 import {
   markSeen,
   publishSpeakBetterProgress,
@@ -46,48 +41,104 @@ const SpeakBetterLibrary = dynamic(
 );
 
 /**
- * Speak Better — one lesson a day, laid out as a comparison.
+ * Speak Better — one lesson a day, built around one word.
  *
- * The lesson is full width on purpose: three to five words have to sit side by
- * side with an English meaning, a Hindi meaning, a line of nuance and example
- * sentences each, and none of that survives being squeezed into a half column.
- * From `lg` the word blocks form two comparison columns, with a hairline above
- * every block so the grid reads like a table without becoming one.
+ * Each lesson teaches exactly one primary word in depth. The layout is a single
+ * column, read top to bottom: the word itself, its meaning in English and Hindi,
+ * how it is used, the mistake to avoid, and then one short task. Related words
+ * appear only as one-line clarifications, underneath, so the eye stays on the word.
  *
- * Two additions, both inside the existing card:
+ * Two behaviours live in this card:
  *
- *  - **Per-reader refinement.** The published lesson is replaced *only* when every
- *    one of its words is already marked known on this device, and only with one of
- *    the two alternatives the publisher supplied. The card says when that happened.
+ *  - **Per-reader refinement.** The published lesson is replaced only when its word
+ *    is already marked known on this device, and only with one of the alternatives
+ *    the publisher supplied. The card says when that happened.
  *  - **Dictionary detail.** A word may carry a Wiktionary sense and the words it
- *    travels with from Datamuse. It is shown in a separate, attributed line under
- *    the authored meanings — never in place of them.
+ *    travels with from Datamuse. It is shown in a separate, attributed block under
+ *    the authored teaching content, never in place of it.
  */
-function WordBlock({ word }: { word: SpeakBetterWord }) {
+function WordTeaching({ word }: { word: SpeakBetterWord }) {
   return (
-    <div className="border-t border-line pt-3">
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <h3 className="text-[15px] font-medium text-ink">{word.word}</h3>
-        <p lang="hi" className="break-words text-[13px] text-ink-2">{word.hindiMeaning}</p>
-        {word.dictionary?.partOfSpeech ? (
-          <span className="text-[10.5px] uppercase tracking-wide text-ink-3">{word.dictionary.partOfSpeech}</span>
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="font-serif text-[26px] leading-tight text-ink sm:text-[30px]">{word.word}</h3>
+        {word.partOfSpeech ? (
+          <span className="text-[11px] font-medium uppercase tracking-wider text-accent-ink">{word.partOfSpeech}</span>
         ) : null}
+        <span className="rounded-full border border-line px-2 py-0.5 text-[10.5px] uppercase tracking-wide text-ink-3">
+          {word.tone}
+        </span>
       </div>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">{word.englishMeaning}</p>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">
-        <span className="font-medium text-ink-3">Nuance: </span>
+      {word.pronunciation ? (
+        <p className="mt-1 text-[12px] text-ink-3">
+          <span className="font-medium">Say it: </span>
+          {word.pronunciation}
+        </p>
+      ) : null}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">Meaning</p>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink">{word.englishMeaning}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">हिंदी</p>
+          <p lang="hi" className="mt-1.5 text-[13.5px] leading-relaxed text-ink">{word.hindiMeaning}</p>
+        </div>
+      </div>
+
+      <p className="mt-4 text-[13px] leading-relaxed text-ink-2">
+        <span className="font-medium text-ink">Nuance. </span>
         {word.nuance}
       </p>
-      <ul className="mt-1.5 space-y-1">
-        {word.examples.map((example) => (
-          <li key={example} className="break-words font-serif text-[12.5px] italic leading-relaxed text-ink-3">
-            “{example}”
-          </li>
-        ))}
-      </ul>
+
+      <div className="mt-4">
+        <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">Examples</p>
+        <ul className="mt-2 space-y-2">
+          {word.examples.map((example) => (
+            <li key={example} className="break-words border-l-2 border-accent/40 pl-3 font-serif text-[14px] italic leading-relaxed text-ink-2">
+              {example}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {word.collocations.length > 0 || word.idioms?.length ? (
+        <div className="mt-4">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">Use it with</p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {[...word.collocations, ...(word.idioms ?? []).map((idiom) => `idiom: ${idiom}`)].map((phrase) => (
+              <li key={phrase} className="rounded-full bg-surface-2 px-2.5 py-1 text-[12px] text-ink-2">
+                {phrase}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-4 space-y-2.5 text-[12.5px] leading-relaxed text-ink-2">
+        {word.commonMistake ? (
+          <p>
+            <span className="font-medium text-ink">Common mistake. </span>
+            {word.commonMistake}
+          </p>
+        ) : null}
+        {word.differsFrom ? (
+          <p>
+            <span className="font-medium text-ink">Don’t confuse it with. </span>
+            {word.differsFrom}
+          </p>
+        ) : null}
+        {word.register ? (
+          <p>
+            <span className="font-medium text-ink">Register. </span>
+            {word.register}
+          </p>
+        ) : null}
+      </div>
 
       {word.dictionary ? (
-        <div className="mt-2 rounded-lg border border-line/70 bg-surface-2/40 px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-2">
+        <div className="mt-4 rounded-lg border border-line/70 bg-surface-2/40 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-2">
           {word.dictionary.definition ? (
             <p>
               <span className="font-medium text-ink-3">Dictionary: </span>
@@ -115,38 +166,13 @@ function WordBlock({ word }: { word: SpeakBetterWord }) {
           </p>
         </div>
       ) : null}
-
-      {word.collocations?.length ? (
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
-          <span className="font-medium">Collocations: </span>
-          {word.collocations.join(' · ')}
-        </p>
-      ) : null}
-      {word.commonMistake ? (
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
-          <span className="font-medium">Common mistake: </span>
-          {word.commonMistake}
-        </p>
-      ) : null}
-      {word.differsFrom ? (
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
-          <span className="font-medium">Don’t confuse it with: </span>
-          {word.differsFrom}
-        </p>
-      ) : null}
-      {word.register ? (
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
-          <span className="font-medium">Register: </span>
-          {word.register}
-        </p>
-      ) : null}
     </div>
   );
 }
 
 export function SpeakBetterSection({
-  lesson,
-  alternatives = [],
+  lesson: publishedLesson,
+  alternatives: publishedAlternatives = [],
 }: {
   lesson: SpeakBetterLesson;
   alternatives?: SpeakBetterLesson[];
@@ -166,50 +192,42 @@ export function SpeakBetterSection({
   const libraryPanelId = useId();
 
   /**
-   * Refinement is computed here rather than published: only the browser knows which
-   * words this reader has marked known. `refineForReader` returns the published
-   * lesson unchanged unless every word on it is already known.
+   * Snapshots written before the one-word schema are read as a single primary word
+   * here, so an old published card still renders. Current lessons pass through.
    */
-  const candidates = [lesson, ...alternatives];
-  const known = knownWordsByLesson(Object.values(progress.words));
-  const refined = newWordCount(lesson, known) > 0
-    ? { lesson, replaced: false as const, reason: undefined }
-    : (() => {
-        for (const candidate of alternatives) {
-          if (newWordCount(candidate, known) > 0) {
-            return {
-              lesson: candidate,
-              replaced: true as const,
-              reason: 'Today’s published lesson was already known, so a lesson with new words is shown instead.',
-            };
-          }
-        }
-        return refineForReader(lesson, candidates, Object.values(progress.words), '');
-      })();
-
-  const shown = refined.lesson;
+  const lesson = toCurrentLesson(publishedLesson);
+  const alternatives = publishedAlternatives.map(toCurrentLesson);
 
   /**
-   * Opening the card is the point at which the reader has "met" these words, so they
-   * are recorded as seen — the same ledger the library uses, which is what lets the
+   * Refinement is computed here rather than published: only the browser knows which
+   * words this reader has marked known. `refineForReader` returns the published
+   * lesson unchanged unless its word is already known.
+   */
+  const refined = refineForReader(lesson, [lesson, ...alternatives], Object.values(progress.words), '');
+  const shown = refined.lesson;
+  const target = primaryWord(shown);
+  const band = bandOf(shown);
+
+  /**
+   * Opening the card is the point at which the reader has "met" this word, so it is
+   * recorded as seen — the same ledger the library uses, which is what lets the
    * refinement above work tomorrow.
    */
+  // Keyed on stable identifiers, not the lesson object: a legacy lesson is
+  // re-normalised on each render and must not re-publish progress in a loop.
   useEffect(() => {
-    let document = speakBetterProgressSnapshot();
-    for (const word of shown.words) {
-      document = markSeen(document, {
-        id: word.id ?? `${shown.id}:${word.word}`,
-        lessonId: shown.id,
-        word: word.word,
-        level: bandOf(shown),
-      });
-    }
+    const document = markSeen(speakBetterProgressSnapshot(), {
+      id: target.id,
+      lessonId: shown.id,
+      word: target.word,
+      level: band,
+    });
     publishSpeakBetterProgress(document);
-  }, [shown]);
+  }, [shown.id, target.id, target.word, band]);
 
   return (
     <SectionCard label="Speak Better">
-      <div id="speak-better" className="space-y-4">
+      <div id="speak-better" className="space-y-5">
         <div className="flex gap-3.5">
           <VisualMark>
             <IconSpeech width={18} height={18} />
@@ -231,27 +249,33 @@ export function SpeakBetterSection({
           </div>
         </div>
 
-        <p className="rounded-xl border border-accent/30 bg-accent-soft/25 px-3.5 py-3 text-[13px] leading-relaxed text-ink">
-          <span className="font-medium text-accent-ink">Today’s distinction: </span>
-          {shown.focus}
-        </p>
-
         {refined.replaced ? (
           <p className="rounded-lg border border-line bg-surface-2/50 px-3 py-2 text-[11.5px] leading-relaxed text-ink-3">
-            {refined.reason ?? 'A lesson with new words is shown because today’s published lesson was already known.'}
+            {refined.reason ?? 'A lesson with a new word is shown because today’s published word was already known.'}
           </p>
         ) : null}
 
-        <ul className="grid gap-x-8 gap-y-4 lg:grid-cols-2">
-          {shown.words.map((word) => (
-            <li key={word.word} className="min-w-0">
-              <WordBlock word={word} />
-            </li>
-          ))}
-        </ul>
+
+        <WordTeaching word={target} />
+
+        {shown.relatedWords?.length ? (
+          <div className="rounded-xl border border-line bg-surface-2/30 p-3.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+              Related words, briefly
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {shown.relatedWords.map((related) => (
+                <li key={related.word} className="text-[12.5px] leading-relaxed text-ink-2">
+                  <span className="font-medium text-ink">{related.word}</span>
+                  <span className="text-ink-3"> — {related.note}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="rounded-xl border border-line bg-surface-2/40 p-3.5 sm:p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">A short conversation</p>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">In a short conversation</p>
           <div className="mt-2 space-y-1.5">
             {shown.dialogue.map((line) => (
               <p key={`${line.speaker}-${line.line}`} className="text-[13px] leading-relaxed text-ink-2">
@@ -264,10 +288,15 @@ export function SpeakBetterSection({
         </div>
 
         <div className="rounded-xl border border-accent/30 bg-accent-soft/25 px-3.5 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent-ink">Speaking challenge</p>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-accent-ink">Speaking challenge</p>
           <p className="mt-1 text-[13px] leading-relaxed text-ink">{shown.challenge}</p>
           <p className="mt-1.5 text-[11.5px] text-ink-3">Say it out loud — the spoken half is the half that transfers.</p>
         </div>
+
+        <p className="rounded-xl border border-accent/30 bg-accent-soft/25 px-3.5 py-3 text-[13px] leading-relaxed text-ink">
+          <span className="font-medium text-accent-ink">Today’s focus: </span>
+          {shown.focus}
+        </p>
 
         <div className="rounded-xl border border-line bg-surface-2/30 p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">

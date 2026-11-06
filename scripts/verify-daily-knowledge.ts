@@ -36,8 +36,8 @@ import {
 import {
   isC2Day,
   levelLabel,
-  newWordCount,
-  knownWordsByLesson,
+  isMastered,
+  knownWords,
   refineForReader,
   selectDailyLesson,
 } from '../lib/curiosity/speak-better-daily';
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
 
   /* ---------------------------------------------------------------- *
    * 6. Reader refinement: only swaps when the published lesson is fully
-   *    known, and only to a lesson with new words.
+   *    known, and only to a lesson with a new word.
    * ---------------------------------------------------------------- */
   {
     const published = SPEAK_BETTER_B2_LESSONS[0];
@@ -265,45 +265,54 @@ async function main(): Promise<void> {
     const untouched = refineForReader(published, curriculum, [], '2027-02-01');
     assert.equal(untouched.replaced, false, 'a reader with no history got a different lesson');
 
-    const knownForPublished = published.words.map((word, index) => ({
-      word: word.word,
+    const knownForPublished = [{
+      word: published.word.word,
       lessonId: published.id,
       state: 'known' as const,
-      firstSeenAt: `2027-01-0${(index % 9) + 1}T00:00:00.000Z`,
-      lastSeenAt: `2027-01-0${(index % 9) + 1}T00:00:00.000Z`,
-    }));
+      firstSeenAt: '2027-01-01T00:00:00.000Z',
+      lastSeenAt: '2027-01-01T00:00:00.000Z',
+    }];
     const refined = refineForReader(published, curriculum, knownForPublished, '2027-02-01');
     assert.equal(refined.replaced, true, 'a fully known published lesson was not swapped');
     assert.equal(refined.lesson.id, alternative.id);
-    assert.match(refined.reason ?? '', /already known/i);
+    assert.match(refined.reason ?? '', /already marked known/i);
 
     // Every lesson known: keep the published one rather than swap for no reason.
-    const allKnown = curriculum.flatMap((lesson) =>
-      lesson.words.map((word) => ({
-        word: word.word,
-        lessonId: lesson.id,
-        state: 'known' as const,
-        firstSeenAt: '2027-01-01T00:00:00.000Z',
-        lastSeenAt: '2027-01-01T00:00:00.000Z',
-      })),
-    );
+    const allKnown = curriculum.map((lesson) => ({
+      word: lesson.word.word,
+      lessonId: lesson.id,
+      state: 'known' as const,
+      firstSeenAt: '2027-01-01T00:00:00.000Z',
+      lastSeenAt: '2027-01-01T00:00:00.000Z',
+    }));
     const exhausted = refineForReader(published, curriculum, allKnown, '2027-02-01');
     assert.equal(exhausted.replaced, false, 'when everything has been read, the published lesson is kept');
 
     // Learning state is not "known", so it does not trigger a swap.
-    const learning = published.words.map((word) => ({
-      word: word.word,
+    const learning = [{
+      word: published.word.word,
       lessonId: published.id,
-      state: 'learning' as const,
+      state: 'review' as const,
       firstSeenAt: '2027-01-01T00:00:00.000Z',
       lastSeenAt: '2027-01-01T00:00:00.000Z',
-    }));
+    }];
     assert.equal(refineForReader(published, curriculum, learning, '2027-02-01').replaced, false);
 
-    const known = knownWordsByLesson(knownForPublished as never);
-    assert.equal(newWordCount(published, known), 0);
-    assert.equal(newWordCount(alternative, known), alternative.words.length);
-    pass(6, 'The daily lesson is only replaced when every one of its words is already marked known and another published lesson has something new; a learning, seen-but-unknown or fully-read state never forces a swap');
+    const known = knownWords(knownForPublished as never);
+    assert.equal(isMastered(published, known), true, 'the published word is known');
+    assert.equal(isMastered(alternative, known), false, 'the alternative word is still new');
+
+    // Mastery is per word, not per lesson: the same word known from a different
+    // lesson still counts, so the reader is not re-served a word they know.
+    const knownElsewhere = [{
+      word: published.word.word,
+      lessonId: 'some-other-lesson',
+      state: 'known' as const,
+      firstSeenAt: '2027-01-01T00:00:00.000Z',
+      lastSeenAt: '2027-01-01T00:00:00.000Z',
+    }];
+    assert.equal(refineForReader(published, curriculum, knownElsewhere, '2027-02-01').replaced, true, 'a word known elsewhere was re-served');
+    pass(6, 'The daily lesson is only replaced when its word is already marked known, and another published lesson has a new word; a learning, seen-but-unknown or fully-read state never forces a swap');
   }
 
   /* ---------------------------------------------------------------- *

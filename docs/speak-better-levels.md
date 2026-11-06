@@ -16,10 +16,13 @@ of storage and no progress key changed.
 
 ## What did not change
 
-The **ids and wording of the original twelve A2–B1 lessons are unchanged**, and
-those lessons remain in the curriculum as the library's on-ramp and as the
-publisher's final fallback. Progress keys (`lessonId:word`) therefore keep
-resolving for every record a reader already has.
+Every lesson now teaches **one primary word** (see *What an entry carries*). The
+original twelve A2–B1 lessons keep their **ids, their order and their primary
+words**, and their meanings and nuance are unchanged; their focus lines, dialogues,
+challenges and related-word notes were rewritten so that each lesson teaches one word
+rather than comparing several. Those lessons remain the library's on-ramp and the
+publisher's final fallback. Progress keys (`lessonId:word`) therefore keep resolving
+for every record a reader already has, and no progress is reset.
 
 What the daily card publishes has since changed: it now selects from B2 and C1, with
 a C2 lesson one day in five (`lib/curiosity/speak-better-daily.ts`). See
@@ -34,9 +37,9 @@ record — and since this is the first version of the ledger, nothing is reset.
 
 | File | Purpose |
 | --- | --- |
-| `lib/curiosity/types.ts` | `SpeakBetterLevel`, the four tracking states, and the optional depth fields on a word |
+| `lib/curiosity/types.ts` | `SpeakBetterLevel`, the four tracking states, the single primary `word` and its depth fields |
 | `lib/curiosity/content/speak-better.ts` | the original A2–B1 corpus (unchanged, marked `level: 'A2-B1'`) |
-| `lib/curiosity/content/speak-better-b2.ts` | 8 B2 lessons |
+| `lib/curiosity/content/speak-better-b2.ts` | 9 B2 lessons |
 | `lib/curiosity/content/speak-better-c1.ts` | 6 C1 lessons |
 | `lib/curiosity/content/speak-better-c2.ts` | 5 C2 lessons |
 | `lib/curiosity/speak-better.ts` | curriculum composition, level counts, word ids, search and filtering |
@@ -47,20 +50,45 @@ record — and since this is the first version of the ledger, nothing is reset.
 | `next.config.ts` | the `/speak-better` → `/curiosity#speak-better` redirect (307) |
 
 Content is **one typed data file per band**, not a growing component and not a
-hardcoded array inside the UI. A twenty-word entry and a five-word one use the
-same type; every depth field is optional, so an A2–B1 lesson never renders an
-empty heading.
+hardcoded array inside the UI. Every lesson has the same type: one `word`, plus up
+to three `relatedWords`. A lesson is never a list of target words.
 
-## What an entry carries
+## What a lesson teaches
 
-- Word or expression, English definition, Hindi meaning (Devanagari, `lang="hi"`)
+Each lesson is **one primary target word**, taught in depth:
+
+- The word, its **part of speech** and its **tone** (`formal`, `neutral`,
+  `informal` or `professional`)
+- Pronunciation guidance (every lesson, A2–B1 included)
+- English definition and Hindi meaning (Devanagari, `lang="hi"`)
 - Nuance — what the word implies that its near-synonym does not
-- Two contextual examples, drawn from a real situation
-- **B2 and above additionally:** pronunciation guidance (with IPA and a spoken
-  approximation), common collocations, the *common mistake* learners actually
-  make at that level, the near-synonym it is confused with *and the line between
-  them*, and a register note for natural conversational use
-- A short dialogue and one practical speaking challenge per lesson
+- **Three or four examples** from everyday, professional or academic use
+- Collocations, and idioms where a fixed expression is worth teaching
+- The **common mistake** learners make, and a **register** note
+- The near-synonym it is most often confused with, and the line between them (B2 and above)
+- A short dialogue built around the word, and one speaking challenge
+
+**Related words** are a single line each, at most three, under *Related words,
+briefly*. They clarify the primary word and are never lessons of their own: they
+carry no progress, are never selected as a target and are never saved or marked known.
+
+## One word per day
+
+The daily card is one word. `scripts/verify-speak-better.tsx` proves it three ways:
+every lesson in the curriculum has exactly one primary `word` and no list; 366 daily
+selections each name one word; and every daily lesson renders that word as its single
+heading, with no comparison grid. Old snapshots that still carry a `words` list are
+read as one primary word, with the rest demoted to related words, so nothing is
+deleted and an already-published card still renders.
+
+## Known words
+
+A word is **mastered** once it is marked known, wherever it was met. The browser
+refinement checks the published word against every word the reader has marked known,
+so a word learned in one lesson is not served again as a new lesson later. Dictionary
+enrichment (Wiktionary, Datamuse) looks up only the primary word, and writes its result
+to a separate, attributed `dictionary` object. It never writes or replaces the authored
+teaching content.
 
 The corpus is written for adults using English at work: meetings, clients,
 audits, contracts, appraisals, negotiations. `scripts/verify-speak-better.tsx`

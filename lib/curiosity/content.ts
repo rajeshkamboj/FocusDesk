@@ -566,7 +566,7 @@ export function dailyEditorial(date: string): Pick<
     sharpener: fallbackPuzzle(date),
     sharpenerAlternatives: fallbackPuzzleAlternatives(date),
     speakBetter: fallbackSpeakBetter(date),
-    speakBetterAlternatives: advancedFallbackLessons().filter((lesson) => lesson.id !== fallbackSpeakBetter(date).id).slice(0, 2),
+    speakBetterAlternatives: advancedFallbackLessons().filter((lesson) => lesson.id !== fallbackSpeakBetter(date).id).slice(0, 4),
     mythology: mythCharacters[(safeDay + MYTHOLOGY_OFFSET) % mythCharacters.length],
     chemistry: chemistryConcepts[(safeDay + CHEMISTRY_OFFSET) % chemistryConcepts.length],
     physics: physicsConcepts[(safeDay + PHYSICS_OFFSET) % physicsConcepts.length],

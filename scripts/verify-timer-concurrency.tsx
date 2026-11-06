@@ -262,7 +262,8 @@ async function main() {
   /* 6. The row's "Start (in progress)" menu item follows the same rule   */
   /* ------------------------------------------------------------------ */
   await clickIn(`#row-${taskE}`, 'button[aria-label="Task actions"]', 'open Task E menu');
-  await clickText(`#row-${taskE}`, 'Start (in progress)');
+  // Task actions now render in a body-level portal so cards cannot clip them.
+  await clickText('[data-menu-portal]', 'Start (in progress)');
   ok(!anyBlockDialog() && isTimerRunning(get(taskE)), '6: the menu Start path also starts a concurrent timer');
   ok(runningTimerTasks(c().data.tasks).length === 5,
      '6: five timers (A, B, D, E, Priority) run at the same time');

@@ -246,6 +246,33 @@ button {
 }
 
 /* ------------------------------------------------------------------ */
+/* Task actions                                                        */
+/* ------------------------------------------------------------------ */
+
+/* Phones and touch-first devices always expose the same menu as desktop.
+   Only a fine-pointer, hover-capable desktop keeps the original compact,
+   hover-revealed 29px control. Keyboard focus and an open menu stay visible. */
+@media (hover: hover) and (pointer: fine) and (min-width: 640px) {
+  .task-actions-trigger {
+    width: auto;
+    height: auto;
+    padding: 6px;
+    opacity: 0;
+  }
+  .group:hover .task-actions-trigger,
+  .task-actions-trigger:focus-visible,
+  .task-actions-trigger[aria-expanded="true"] {
+    opacity: 1;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 639px) {
+  .menu-touch .menu-item {
+    min-height: 44px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Motion                                                              */
 /* ------------------------------------------------------------------ */
 

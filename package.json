@@ -17,6 +17,7 @@
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
     "curiosity:history": "npx tsx scripts/verify-curiosity-history-verification.ts",
     "verify:task-context": "npx tsx scripts/verify-task-context.tsx",
+    "verify:task-menu": "npx tsx scripts/verify-task-menu.tsx",
     "verify:view-modes": "npx tsx scripts/verify-view-modes.tsx",
     "verify:speak-better": "npx tsx scripts/verify-speak-better.tsx",
     "verify:discovery": "npx tsx scripts/verify-discovery.tsx",

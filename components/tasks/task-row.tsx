@@ -375,11 +375,27 @@ export function TaskRow({
         ) : null}
 
         <Menu
-          trigger={({ toggle }) => (
+          portal
+          touch
+          label={`Actions for ${task.title}`}
+          trigger={({ open, toggle, triggerRef, triggerId, menuId }) => (
             <button
-              onClick={toggle}
+              ref={triggerRef}
+              id={triggerId}
+              type="button"
+              onClick={(event) => {
+                // The portal still bubbles through React's component tree.
+                // Keep this tap away from row expansion and bulk selection.
+                event.preventDefault();
+                event.stopPropagation();
+                toggle();
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
               aria-label="Task actions"
-              className="rounded-lg p-1.5 text-ink-3 opacity-0 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-controls={open ? menuId : undefined}
+              className="task-actions-trigger inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-ink-3 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:bg-surface-2 aria-expanded:opacity-100"
             >
               <IconMore width={17} height={17} />
             </button>

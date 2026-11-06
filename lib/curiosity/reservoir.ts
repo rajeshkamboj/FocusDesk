@@ -1333,6 +1333,14 @@ export async function selectHistoryTriad(
         if (mode === 'exact-date') {
           return c.eventMonth === parsed.month && c.eventDay === parsed.day;
         }
+        /*
+          The two non-exact modes publish an event labelled `forThisDate: false`. The
+          publish validator only accepts that label on a curated entry: a live or
+          reservoir record carries a real date of its own, and presenting it under
+          another day's heading is an unverified claim. So these pools are curated
+          only. A live record can appear here only when it matches this day exactly.
+        */
+        if (c.payload?.origin !== 'curated') return false;
         if (mode === 'leap-day-observed') {
           return c.eventMonth === 2 && c.eventDay === 29;
         }
@@ -1436,6 +1444,16 @@ export async function selectHistoryTriad(
 
     if (!resolved) {
       throw new RangeError(`No usable candidate for ${HISTORY_CATEGORY_LABELS[category]} on ${options.date}`);
+    }
+
+    /*
+      Defence in depth for the rule the publish validator enforces. An event that is
+      not verified for this date may only be published as a curated, labelled entry.
+    */
+    if (resolved.candidate.item.forThisDate === false && resolved.candidate.item.origin !== 'curated') {
+      throw new RangeError(
+        `Refusing to select an unverified ${HISTORY_CATEGORY_LABELS[category]} entry for ${options.date}: ${resolved.candidate.id}`,
+      );
     }
 
     if (resolved.outcome.relaxed) {

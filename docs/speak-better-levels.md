@@ -2,17 +2,29 @@
 
 The **Speak Better** practice library adds three difficulty bands to the original
 A2–B1 corpus: **B2** (Upper Intermediate), **C1** (Advanced) and **C2**
-(Proficiency). It lives at **`/speak-better`**, linked from the app navigation
-and from the daily Speak Better card on the Curiosity page.
+(Proficiency).
+
+It has **one home**: the Speak Better card on the Curiosity page. The card publishes
+the day's lesson; the practice library — every lesson, every level, search, and the
+word-tracking controls — opens from that card behind an "Open the practice library"
+button, loaded on demand. There is no Speak Better item in the navigation.
+
+`/speak-better` still resolves, but only as a redirect to
+`/curiosity#speak-better`: the standalone page and its sidebar entry were retired
+once the lessons became part of the Curiosity daily experience. Nothing was moved out
+of storage and no progress key changed.
 
 ## What did not change
 
-The daily Curiosity card still publishes exactly one lesson a day and still
-rotates over **the original twelve A2–B1 lessons, in their original order, with
-their original ids and wording**. That is deliberate: the publisher picks by day
-index, so reordering or extending that list would have changed what an existing
-reader sees today. The new bands are surfaced by the library, not by the daily
-card.
+The **ids and wording of the original twelve A2–B1 lessons are unchanged**, and
+those lessons remain in the curriculum as the library's on-ramp and as the
+publisher's final fallback. Progress keys (`lessonId:word`) therefore keep
+resolving for every record a reader already has.
+
+What the daily card publishes has since changed: it now selects from B2 and C1, with
+a C2 lesson one day in five (`lib/curiosity/speak-better-daily.ts`). See
+[docs/knowledge-workflow-modernization.md](knowledge-workflow-modernization.md) §5
+for that selection and for the reader-level refinement.
 
 Progress is stored under keys derived from the lesson id (`lessonId:word`). Because
 the A2–B1 ids are untouched, adding three bands cannot invalidate any existing
@@ -30,8 +42,9 @@ record — and since this is the first version of the ledger, nothing is reset.
 | `lib/curiosity/speak-better.ts` | curriculum composition, level counts, word ids, search and filtering |
 | `lib/curiosity/speak-better-progress.ts` | the pure progress ledger: normalize, mark seen, set state, summarise |
 | `lib/curiosity/speak-better-store.ts` | the browser layer: storage plus `useSyncExternalStore` subscription |
-| `components/curiosity/speak-better-library.tsx` | the practice screen |
-| `components/curiosity/speak-better-screen.tsx`, `app/speak-better/page.tsx` | the page, in the app's existing frame |
+| `components/curiosity/speak-better-library.tsx` | the practice library, mounted inside the Curiosity card |
+| `components/curiosity/sections/speak-better.tsx` | the daily card and the disclosure that opens the library |
+| `next.config.ts` | the `/speak-better` → `/curiosity#speak-better` redirect (307) |
 
 Content is **one typed data file per band**, not a growing component and not a
 hardcoded array inside the UI. A twenty-word entry and a five-word one use the

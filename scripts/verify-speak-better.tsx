@@ -23,7 +23,8 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -57,6 +58,7 @@ import {
 import { speakBetterLessons as publisherLessons } from '../lib/curiosity/content/speak-better';
 import { SPEAK_BETTER_LEVELS, SPEAK_BETTER_LEVEL_LABELS, type SpeakBetterLevel } from '../lib/curiosity/types';
 import { SpeakBetterLibrary, markLessonSeen } from '../components/curiosity/speak-better-library';
+import { SpeakBetterSection } from '../components/curiosity/sections/speak-better';
 
 let checks = 0;
 function pass(label: string) {
@@ -65,6 +67,19 @@ function pass(label: string) {
 }
 
 const DEVANAGARI = /[\u0900-\u097F]/;
+
+/** Every `.ts`/`.tsx` file under a directory, so a stale link cannot hide in a subfolder. */
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sourceFiles(path);
+    return /\.(ts|tsx)$/.test(name) ? [path] : [];
+  });
+}
+
+function read(file: string): string {
+  return readFileSync(file, 'utf8');
+}
 
 async function main() {
   /* ---------------------------------------------------------------- */
@@ -370,23 +385,95 @@ async function main() {
   /* ---------------------------------------------------------------- */
 
   assert.equal(typeof SpeakBetterLibrary, 'function');
-  const pageSource = readFileSync('app/speak-better/page.tsx', 'utf8');
-  assert.match(pageSource, /SpeakBetterScreen/);
-  assert.doesNotMatch(pageSource, /fetch\(|force-dynamic/, 'the practice page fetches nothing at request time');
   assert.ok(
     librarySource.includes('useSyncExternalStore'),
     'progress is read through an external store, so the first client paint matches the server',
   );
   assert.ok(librarySource.includes("aria-pressed={active}"), 'tracking buttons expose their state');
   assert.ok(librarySource.includes('aria-live="polite"'), 'the result count is announced');
+  assert.doesNotMatch(librarySource, /fetch\(|force-dynamic/, 'the library fetches nothing at request time');
   pass('the library is client-side over static content, with no per-visit fetching');
 
+  /* ---------------------------------------------------------------- */
+  /* 11. There is no second door: one section, one route               */
+  /* ---------------------------------------------------------------- */
+
+  // Navigation: Speak Better is not an item, and nothing else links to the retired
+  // route. Both the sidebar and the phone "More" sheet derive from `NAV_ITEMS`, so
+  // checking the source of truth covers desktop and mobile.
   const nav = readFileSync('components/layout/nav.ts', 'utf8');
-  assert.match(nav, /href: '\/speak-better'/, 'the practice library is reachable from the navigation');
-  pass('Speak Better is in the app navigation');
+  assert.doesNotMatch(nav, /href: '\/speak-better'/, 'the standalone Speak Better item is still in the navigation');
+  assert.doesNotMatch(nav, /speak-better.*label:/i, 'the navigation still builds a Speak Better link');
+  assert.doesNotMatch(nav, /IconSpeech/, 'the navigation still imports the Speak Better icon');
+  const navLabels = [...nav.matchAll(/label: '([^']+)'/g)].map((match) => match[1]);
+  assert.ok(!navLabels.includes('Speak Better'), `navigation still offers Speak Better: ${navLabels.join(', ')}`);
+  assert.ok(navLabels.includes('Curiosity'), 'Curiosity must still be a navigation item');
+
+  // The route is retired rather than duplicated: a redirect, and no page component.
+  assert.equal(existsSync('app/speak-better'), false, 'app/speak-better still exists, so the page was not retired');
+  const nextConfig = readFileSync('next.config.ts', 'utf8');
+  assert.match(
+    nextConfig,
+    /source: '\/speak-better',\s*destination: '\/curiosity#speak-better',\s*permanent: false,/,
+    'the retired route does not redirect to the Speak Better card',
+  );
+  assert.equal(existsSync('components/curiosity/speak-better-screen.tsx'), false, 'the retired page frame is still present');
+
+  // No stale link anywhere in shipped code (the redirect's own destination aside).
+  const shippedSources = [...sourceFiles('app'), ...sourceFiles('components')];
+  const stale = shippedSources.filter((file) => /href=["']\/speak-better|router\.push\(['"]\/speak-better/.test(read(file)));
+  assert.deepEqual(stale, [], `a component still links to the retired page: ${stale.join(', ')}`);
+
+  // And the lessons are reachable through Curiosity: the daily card mounts the library.
+  const sectionSource = readFileSync('components/curiosity/sections/speak-better.tsx', 'utf8');
+  assert.match(sectionSource, /import\('\.\.\/speak-better-library'\)/, 'the Curiosity card does not load the practice library');
+  assert.match(sectionSource, /dynamic\(/, 'the library is not split out of the daily page');
+  assert.match(sectionSource, /aria-expanded=\{libraryOpen\}/, 'the disclosure does not announce its state');
+  assert.match(sectionSource, /id="speak-better"/, 'the card has no anchor for the redirect target');
+
+  // The navigation lists themselves, not just their source: desktop sidebar and
+  // phone menus all derive from NAV_ITEMS, so one assertion covers both.
+  const { NAV_ITEMS, MOBILE_NAV_ITEMS, MORE_NAV_ITEMS } = await import('../components/layout/nav');
+  for (const [name, list] of [['NAV_ITEMS', NAV_ITEMS], ['MOBILE_NAV_ITEMS', MOBILE_NAV_ITEMS], ['MORE_NAV_ITEMS', MORE_NAV_ITEMS]] as const) {
+    assert.equal(
+      list.some((item) => item.href === '/speak-better' || item.label === 'Speak Better'),
+      false,
+      `${name} still offers Speak Better`,
+    );
+    // Curiosity is the entry point now: it must be in the sidebar and the phone
+    // "More" sheet (the first three slots are the phone tab bar).
+    assert.equal(
+      list.some((item) => item.href === '/curiosity'),
+      name !== 'MOBILE_NAV_ITEMS',
+      `${name} lost or gained Curiosity unexpectedly`,
+    );
+  }
+  assert.equal(NAV_ITEMS.length, 11, `the navigation has ${NAV_ITEMS.length} items, not 11`);
+
+  // The card as it actually renders: the anchor, a closed disclosure, and no link to
+  // the retired route. The library is not in this markup — that is the point of the
+  // disclosure — but the button that opens it is.
+  const sectionMarkup = renderToStaticMarkup(
+    createElement(SpeakBetterSection, { lesson: SPEAK_BETTER_B2_LESSONS[0], alternatives: [] }),
+  );
+  assert.match(sectionMarkup, /id="speak-better"/, 'the rendered card carries no #speak-better anchor');
+  assert.match(sectionMarkup, /aria-expanded="false"/, 'the disclosure is not rendered closed');
+  assert.match(sectionMarkup, /Open the practice library/, 'the rendered card offers no way into the library');
+  assert.doesNotMatch(sectionMarkup, /href="\/speak-better"/, 'the rendered card still links to the retired page');
+  assert.doesNotMatch(sectionMarkup, /Search lessons and words/, 'the library is rendered before the reader opens it');
+
+  // And the library, rendered on its own, still contains real lessons: retiring the
+  // page must not have retired the content.
+  const libraryMarkup = renderToStaticMarkup(createElement(SpeakBetterLibrary));
+  assert.match(libraryMarkup, /Search lessons and words/, 'the library no longer renders its search control');
+  const renderedTitles = SPEAK_BETTER_B2_LESSONS.concat(SPEAK_BETTER_C1_LESSONS)
+    .filter((lesson) => libraryMarkup.includes(lesson.dialogue[0].line.slice(0, 24)));
+  assert.ok(renderedTitles.length > 0, 'the library renders none of the lesson dialogue it used to');
+  assert.match(libraryMarkup, /data-speak-better-lesson=/, 'the library no longer renders lesson cards');
+  pass('Speak Better has one door: no navigation entry on desktop or phone, the old route redirects to the card, the card offers the library behind a closed disclosure, and the library still renders its lessons');
 
   console.log(
-    `\n${checks} checks. Speak Better B2–C2: ${speakBetterCurriculum.length} lessons across four levels, complete fields with Devanagari Hindi, level and Hindi-aware search, four tracking states that never delete history, and a progress ledger that survives old, lean and corrupt documents.`,
+    `\n${checks} checks. Speak Better B2–C2: ${speakBetterCurriculum.length} lessons across four levels, complete fields with Devanagari Hindi, level and Hindi-aware search, four tracking states that never delete history, a progress ledger that survives old, lean and corrupt documents, and one entry point: the Curiosity card, with the retired /speak-better route redirecting to it.`,
   );
 }
 

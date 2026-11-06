@@ -5,10 +5,11 @@
  *
  * What it proves:
  *
- *   1. Content quality: every lesson at every level carries the word, both
- *      meanings, examples, nuance, and — from B2 up — pronunciation, collocations,
- *      a common mistake and the difference from a near-synonym. Every Hindi gloss
- *      is real Devanagari. No lesson repeats another lesson's word set.
+ *   1. Content quality: every lesson at every level teaches ONE primary word, with
+ *      its part of speech, tone, both meanings, three or four examples, nuance, a
+ *      common mistake and a register note. From B2 up it also carries pronunciation,
+ *      collocations and the difference from a near-synonym. Every Hindi gloss is real
+ *      Devanagari. No two lessons teach the same primary word.
  *   2. The curriculum composes without disturbing A2–B1: same twelve lessons, same
  *      order, same ids, so the publisher's rotation is unchanged.
  *   3. Filtering: by level, by search across words and Hindi meanings, and by
@@ -38,8 +39,9 @@ import {
   levelCounts,
   levelOf,
   lessonsForLevel,
-  resolvedWords,
+  primaryWord,
   speakBetterCurriculum,
+  toCurrentLesson,
   wordProgressId,
 } from '../lib/curiosity/speak-better';
 import {
@@ -58,6 +60,8 @@ import {
 import { speakBetterLessons as publisherLessons } from '../lib/curiosity/content/speak-better';
 import { SPEAK_BETTER_LEVELS, SPEAK_BETTER_LEVEL_LABELS, type SpeakBetterLevel } from '../lib/curiosity/types';
 import { SpeakBetterLibrary, markLessonSeen } from '../components/curiosity/speak-better-library';
+import { SpeakBetterSection } from '../components/curiosity/sections/speak-better';
+import { isMastered, knownWords, selectDailyLesson, isC2Day } from '../lib/curiosity/speak-better-daily';
 import { SpeakBetterSection } from '../components/curiosity/sections/speak-better';
 
 let checks = 0;
@@ -96,7 +100,7 @@ async function main() {
   }
 
   const ids = new Set<string>();
-  const wordSets: string[] = [];
+  const primaries: string[] = [];
   for (const lesson of speakBetterCurriculum) {
     assert.ok(!ids.has(lesson.id), `lesson id ${lesson.id} is unique`);
     ids.add(lesson.id);
@@ -105,28 +109,31 @@ async function main() {
     assert.ok(SPEAK_BETTER_LEVELS.includes(level), `${lesson.id} has a known level`);
     assert.ok(lesson.focus && lesson.situation && lesson.challenge, `${lesson.id} is incomplete`);
     assert.ok(lesson.dialogue.length >= 3, `${lesson.id} has no real dialogue`);
-    assert.ok(lesson.words.length >= 3 && lesson.words.length <= 5, `${lesson.id} has ${lesson.words.length} words`);
+    assert.ok(!('words' in lesson), `${lesson.id} still carries a list of words`);
 
-    for (const word of lesson.words) {
-      assert.ok(word.word && word.englishMeaning && word.nuance, `${lesson.id}/${word.word} is incomplete`);
-      assert.match(word.hindiMeaning, DEVANAGARI, `${lesson.id}/${word.word} has no Devanagari Hindi meaning`);
-      assert.ok(word.examples.length >= 1, `${lesson.id}/${word.word} has no example`);
-      if (level !== 'A2-B1') {
-        assert.ok(word.pronunciation, `${lesson.id}/${word.word} (${level}) has no pronunciation guidance`);
-        assert.ok(word.collocations && word.collocations.length >= 2, `${lesson.id}/${word.word} has no collocations`);
-        assert.ok(word.commonMistake, `${lesson.id}/${word.word} names no common mistake`);
-        assert.ok(word.differsFrom, `${lesson.id}/${word.word} does not distinguish a near-synonym`);
-        assert.ok(word.register, `${lesson.id}/${word.word} has no register note`);
-      }
+    const word = lesson.word;
+    assert.ok(word && word.word && word.englishMeaning && word.nuance, `${lesson.id}/${word?.word} is incomplete`);
+    assert.ok(word.partOfSpeech && word.tone, `${lesson.id}/${word.word} has no part of speech or tone`);
+    assert.match(word.hindiMeaning, DEVANAGARI, `${lesson.id}/${word.word} has no Devanagari Hindi meaning`);
+    assert.ok(word.examples.length >= 3 && word.examples.length <= 4, `${lesson.id}/${word.word} has ${word.examples.length} examples, not 3–4`);
+    assert.ok(word.commonMistake && word.register, `${lesson.id}/${word.word} names no common mistake or register`);
+    if (level !== 'A2-B1') {
+      assert.ok(word.pronunciation, `${lesson.id}/${word.word} (${level}) has no pronunciation guidance`);
+      assert.ok(word.collocations.length >= 2, `${lesson.id}/${word.word} has no collocations`);
+      assert.ok(word.differsFrom, `${lesson.id}/${word.word} does not distinguish a near-synonym`);
     }
 
-    // A lesson earns its place by contrasting words, so its word set must not
-    // repeat another lesson's — that is the "artificial or repetitive" failure.
-    const setKey = lesson.words.map((word) => word.word.toLowerCase()).sort().join('|');
-    assert.ok(!wordSets.includes(setKey), `${lesson.id} repeats another lesson's word set`);
-    wordSets.push(setKey);
+    // Related words are one-line clarifications, not lessons: at most three, each
+    // with a note, and never the lesson's own primary word.
+    assert.ok((lesson.relatedWords ?? []).length <= 3, `${lesson.id} lists more than three related words`);
+    for (const related of lesson.relatedWords ?? []) {
+      assert.ok(related.word && related.note, `${lesson.id}: a related word has no note`);
+      assert.notEqual(related.word.toLowerCase(), word.word.toLowerCase(), `${lesson.id} lists its own primary word as related`);
+    }
+    primaries.push(word.word.toLowerCase());
   }
-  pass(`all ${speakBetterCurriculum.length} lessons (A2–B1 ${SPEAK_BETTER_A2B1_LESSONS.length}, B2 ${SPEAK_BETTER_B2_LESSONS.length}, C1 ${SPEAK_BETTER_C1_LESSONS.length}, C2 ${SPEAK_BETTER_C2_LESSONS.length}) are complete, Devanagari-Hindi, and non-repetitive`);
+  assert.equal(new Set(primaries).size, primaries.length, 'no two lessons teach the same primary word');
+  pass(`all ${speakBetterCurriculum.length} lessons (A2–B1 ${SPEAK_BETTER_A2B1_LESSONS.length}, B2 ${SPEAK_BETTER_B2_LESSONS.length}, C1 ${SPEAK_BETTER_C1_LESSONS.length}, C2 ${SPEAK_BETTER_C2_LESSONS.length}) each teach one primary word, complete, Devanagari-Hindi, with no repeated primary word`);
 
   for (const [level, lessons] of [
     ['B2', SPEAK_BETTER_B2_LESSONS],
@@ -141,7 +148,7 @@ async function main() {
   // The content must be usable for adults at work, not only for beginners.
   const professionalHits = speakBetterCurriculum.filter((lesson) =>
     /meeting|client|team|board|contract|audit|negotiat|colleague|manager|review|report|governance/i.test(
-      `${lesson.situation} ${lesson.focus} ${lesson.words.map((word) => `${word.register ?? ''} ${word.examples.join(' ')}`).join(' ')}`,
+      `${lesson.situation} ${lesson.focus} ${lesson.word.register} ${lesson.word.examples.join(' ')}`,
     ),
   );
   assert.ok(professionalHits.length >= 20, 'too few lessons are grounded in professional communication');
@@ -174,7 +181,8 @@ async function main() {
     ],
     'the original lesson ids and order are byte-identical',
   );
-  assert.deepEqual(SPEAK_BETTER_A2B1_LESSONS[0].words[0], speakBetterCurriculum[0].words[0], 'wording unchanged');
+  assert.equal(SPEAK_BETTER_A2B1_LESSONS[0].word.word, 'practise', 'the first A2–B1 primary word is unchanged');
+  assert.deepEqual(SPEAK_BETTER_A2B1_LESSONS[0], speakBetterCurriculum[0], 'the composed curriculum returns the same lesson');
   pass('A2–B1 keeps its ids, order and wording, so existing history and the daily rotation are unaffected');
 
   /* ---------------------------------------------------------------- */
@@ -182,10 +190,9 @@ async function main() {
   /* ---------------------------------------------------------------- */
 
   assert.equal(wordProgressId('b2-suggest-imply-infer-insinuate', 'imply'), 'b2-suggest-imply-infer-insinuate:imply');
-  const resolved = resolvedWords(SPEAK_BETTER_B2_LESSONS[0]);
-  assert.equal(resolved.length, SPEAK_BETTER_B2_LESSONS[0].words.length);
-  for (const word of resolved) assert.equal(word.id, wordProgressId(SPEAK_BETTER_B2_LESSONS[0].id, word.word));
-  pass('every word has a stable lesson-scoped id, derived rather than authored');
+  const resolved = primaryWord(SPEAK_BETTER_B2_LESSONS[0]);
+  assert.equal(resolved.id, wordProgressId(SPEAK_BETTER_B2_LESSONS[0].id, resolved.word));
+  pass('the primary word has a stable lesson-scoped id, derived rather than authored');
 
   /* ---------------------------------------------------------------- */
   /* 4. Filtering                                                      */
@@ -207,7 +214,7 @@ async function main() {
     'search composes with the level filter',
   );
   // Hindi search: a query typed in Devanagari must find the word it glosses.
-  const hindiGloss = SPEAK_BETTER_A2B1_LESSONS[0].words[0].hindiMeaning.split(',')[0].trim();
+  const hindiGloss = SPEAK_BETTER_A2B1_LESSONS[0].word.hindiMeaning.split(',')[0].trim();
   assert.ok(hindiGloss.length > 1);
   assert.ok(filterLessons({ query: hindiGloss }).length >= 1, `searching “${hindiGloss}” found nothing`);
   assert.equal(filterLessons({ query: 'zzzzz-not-a-word' }).length, 0);
@@ -345,7 +352,7 @@ async function main() {
 
   // (e) The A2–B1 ids used by the publisher are the ids progress is keyed on, so
   //     adding B2–C2 could not have invalidated an existing record.
-  const legacyWord = resolvedWords(SPEAK_BETTER_A2B1_LESSONS[0])[0];
+  const legacyWord = primaryWord(SPEAK_BETTER_A2B1_LESSONS[0]);
   const legacyDoc = setWordState(emptyProgress(), { id: legacyWord.id, lessonId: SPEAK_BETTER_A2B1_LESSONS[0].id, word: legacyWord.word, level: 'A2-B1', state: 'known' });
   assert.equal(wordState(legacyDoc, legacyWord.id), 'known');
   assert.ok(legacyWord.id.startsWith('teach-learn-study-practise:'));
@@ -356,8 +363,8 @@ async function main() {
   /* ---------------------------------------------------------------- */
 
   const seenDoc = markLessonSeen(SPEAK_BETTER_C2_LESSONS[0], emptyProgress());
-  assert.equal(Object.keys(seenDoc.words).length, SPEAK_BETTER_C2_LESSONS[0].words.length);
-  assert.equal(progressSummary(seenDoc).seen, SPEAK_BETTER_C2_LESSONS[0].words.length);
+  assert.equal(Object.keys(seenDoc.words).length, 1, 'the lesson’s one word is recorded');
+  assert.equal(progressSummary(seenDoc).seen, 1);
   // Opening it twice must not change anything the second time.
   const twice = markLessonSeen(SPEAK_BETTER_C2_LESSONS[0], seenDoc);
   assert.deepEqual(Object.keys(twice.words).sort(), Object.keys(seenDoc.words).sort());
@@ -371,7 +378,7 @@ async function main() {
     createElement(
       'div',
       null,
-      createElement('p', { lang: 'hi' }, SPEAK_BETTER_A2B1_LESSONS[0].words[0].hindiMeaning),
+      createElement('p', { lang: 'hi' }, SPEAK_BETTER_A2B1_LESSONS[0].word.hindiMeaning),
     ),
   );
   assert.match(markup, /lang="hi"/, 'Hindi text carries a lang attribute for font and voice selection');
@@ -471,6 +478,66 @@ async function main() {
   assert.ok(renderedTitles.length > 0, 'the library renders none of the lesson dialogue it used to');
   assert.match(libraryMarkup, /data-speak-better-lesson=/, 'the library no longer renders lesson cards');
   pass('Speak Better has one door: no navigation entry on desktop or phone, the old route redirects to the card, the card offers the library behind a closed disclosure, and the library still renders its lessons');
+
+  /* ---------------------------------------------------------------- */
+  /* 10. One primary word per daily lesson, end to end                 */
+  /* ---------------------------------------------------------------- */
+
+  const dailyPool = [...SPEAK_BETTER_B2_LESSONS, ...SPEAK_BETTER_C1_LESSONS, ...SPEAK_BETTER_C2_LESSONS];
+  const dayOf = (index: number) => new Date(Date.UTC(2027, 0, 1) + index * 86_400_000).toISOString().slice(0, 10);
+  let c2Days = 0;
+  for (let index = 0; index < 366; index += 1) {
+    const date = dayOf(index);
+    const selection = selectDailyLesson(dailyPool, { date });
+    assert.ok(selection, `${date} produced no daily lesson`);
+    const lesson = selection!.lesson;
+    assert.ok(!('words' in lesson), `${date}: the daily lesson is still a list`);
+    assert.ok(lesson.word.word.trim().length > 0, `${date}: the daily lesson has no primary word`);
+    if (isC2Day(date)) {
+      c2Days += 1;
+      assert.equal(levelOf(lesson), 'C2', `${date} is a C2 day but got ${levelOf(lesson)}`);
+    } else {
+      assert.notEqual(levelOf(lesson), 'C2', `${date} is a B2–C1 day but got C2`);
+    }
+  }
+  pass(`366 daily selections each name exactly one primary word, with a C2 lesson on ${c2Days} days and B2–C1 on the rest`);
+
+  for (const lesson of dailyPool) {
+    const markup = renderToStaticMarkup(createElement(SpeakBetterSection, { lesson, alternatives: [] }));
+    const headings = markup.match(/<h3[^>]*>/g) ?? [];
+    assert.equal(headings.length, 1, `${lesson.id} renders ${headings.length} word headings, not one`);
+    assert.ok(markup.includes(`>${lesson.word.word}</h3>`), `${lesson.id} does not show its primary word as the heading`);
+    assert.doesNotMatch(markup, /lg:grid-cols-2/, `${lesson.id} still lays words out as a comparison grid`);
+  }
+  pass('every daily lesson renders one target word as its single heading, with no comparison grid');
+
+  /* A snapshot written before the one-word schema must still render, as one word. */
+  const legacy = {
+    id: 'b2-legacy-sample',
+    focus: 'Legacy focus line.',
+    situation: 'A legacy situation.',
+    words: [
+      { word: 'imply', englishMeaning: 'to suggest without stating', hindiMeaning: 'इंगित करना', nuance: 'speaker implies', examples: ['She implies it.'] },
+      { word: 'infer', englishMeaning: 'to conclude', hindiMeaning: 'अनुमान लगाना', nuance: 'listener infers', examples: ['I infer it.'] },
+    ],
+    dialogue: [{ speaker: 'A', line: 'x' }, { speaker: 'B', line: 'y' }, { speaker: 'A', line: 'z' }],
+    challenge: 'Say it.',
+  };
+  const upgraded = toCurrentLesson(legacy as never);
+  assert.equal(upgraded.word.word, 'imply', 'the first legacy word becomes the primary word');
+  assert.deepEqual(upgraded.relatedWords, [{ word: 'infer', note: 'to conclude' }], 'the rest become related words');
+  assert.ok(!('words' in upgraded), 'the legacy list is not carried forward');
+  const legacyMarkup = renderToStaticMarkup(createElement(SpeakBetterSection, { lesson: legacy as never, alternatives: [] }));
+  assert.equal((legacyMarkup.match(/<h3[^>]*>/g) ?? []).length, 1, 'a legacy snapshot renders one heading');
+  pass('an old multi-word snapshot is read as one primary word with related words, and nothing is deleted');
+
+  /* Mastery is per word: a word known in any lesson is not re-served. */
+  const knownAnywhere = knownWords([
+    { id: 'x:listen', lessonId: 'some-other-lesson', word: 'listen', level: 'A2-B1', state: 'known', firstSeenAt: '2027-01-01T00:00:00.000Z', lastSeenAt: '2027-01-01T00:00:00.000Z' },
+  ] as never);
+  const listenLesson = { ...SPEAK_BETTER_B2_LESSONS[0], word: { ...SPEAK_BETTER_B2_LESSONS[0].word, word: 'Listen' } };
+  assert.equal(isMastered(listenLesson, knownAnywhere), true, 'a word known in another lesson counts as known');
+  pass('mastery is tracked per word across lessons, so a known word is not served again');
 
   console.log(
     `\n${checks} checks. Speak Better B2–C2: ${speakBetterCurriculum.length} lessons across four levels, complete fields with Devanagari Hindi, level and Hindi-aware search, four tracking states that never delete history, a progress ledger that survives old, lean and corrupt documents, and one entry point: the Curiosity card, with the retired /speak-better route redirecting to it.`,

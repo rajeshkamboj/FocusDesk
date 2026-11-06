@@ -44,6 +44,7 @@ import {
   SPEAK_BETTER_B2_LESSONS,
   SPEAK_BETTER_C1_LESSONS,
   SPEAK_BETTER_C2_LESSONS,
+  toCurrentLesson,
 } from './speak-better';
 import { selectDailyLesson, bandOf } from './speak-better-daily';
 import { enrichLesson } from '../discovery/enrichment/speak-better';
@@ -487,7 +488,10 @@ export async function runCuriosityRefresh(
       const speakBetterRank = (candidate: ContentCandidate) =>
         candidate.id === chosenLesson.id ? 100 : bandOf(candidate.item as SpeakBetterLesson) === 'C1' ? 2 : 1;
       const speakBetterChoice = reusing
-        ? reusePick(previousIds['speak-better'], previousPayload?.speakBetter)
+        ? reusePick(
+            previousIds['speak-better'],
+            previousPayload?.speakBetter ? toCurrentLesson(previousPayload.speakBetter as SpeakBetterLesson) : undefined,
+          )
         : choose(
             'speak-better',
             speakBetterPool.map((lesson) =>
@@ -773,7 +777,7 @@ export async function runCuriosityRefresh(
         speakBetter: speakBetterChoice.item as SpeakBetterLesson,
         speakBetterAlternatives: speakBetterPool
           .filter((lesson) => lesson.id !== chosenLesson.id)
-          .slice(0, 2),
+          .slice(0, 4),
         mythology: mythologyChoice.item as MythCharacter,
         chemistry: chemistryChoice.item as ScienceConcept,
         physics: physicsChoice.item as ScienceConcept,
@@ -1032,6 +1036,11 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
     const card = payload[key] as { id?: string } | undefined;
     check(`${key}.id`, !blank(card?.id));
   }
+  // A Speak Better lesson teaches exactly one primary word. A multi-word list is
+  // refused rather than published, so the one-word format cannot silently regress.
+  // (A reused pre-change snapshot is normalised to one word before it gets here.)
+  const speakBetterCard = payload.speakBetter as Partial<SpeakBetterLesson> & { words?: unknown } | undefined;
+  check('speakBetter.word is one primary word', !blank(speakBetterCard?.word?.word) && speakBetterCard?.words === undefined);
   check('mythology.story', !blank(payload.mythology?.story));
 
   if (payload.quote) {

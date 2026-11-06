@@ -1,4 +1,4 @@
-import type { SpeakBetterLesson, SpeakBetterLevel, SpeakBetterWord } from './types';
+import type { SpeakBetterLesson, SpeakBetterLevel, SpeakBetterRelatedWord, SpeakBetterWord } from './types';
 import { SPEAK_BETTER_LEVELS } from './types';
 import { speakBetterLessons as speakBetterA2B1 } from './content/speak-better';
 import { speakBetterB2Lessons } from './content/speak-better-b2';
@@ -66,12 +66,51 @@ export function wordProgressId(lessonId: string, word: string): string {
 }
 
 /**
- * The word as the UI and the tracker see it: the authored word plus the id it
- * is stored under. A word with an explicit `id` keeps it, so an unusual spelling
- * can be re-keyed deliberately without losing a reader's progress.
+ * A lesson as the current schema describes it, whatever it was stored as.
+ *
+ * Published daily snapshots and reader-side caches can hold a lesson written
+ * before the one-word schema, with a `words` array. Those are read as one lesson
+ * with a single primary word (the first authored word) and the rest demoted to
+ * related words, so an old snapshot still renders and nothing is deleted. A
+ * current lesson is returned unchanged.
  */
-export function resolvedWords(lesson: SpeakBetterLesson): (SpeakBetterWord & { id: string })[] {
-  return lesson.words.map((word) => ({ ...word, id: word.id ?? wordProgressId(lesson.id, word.word) }));
+export function toCurrentLesson(lesson: SpeakBetterLesson | LegacyMultiWordLesson): SpeakBetterLesson {
+  if ('word' in lesson && lesson.word) return lesson;
+  const legacy = lesson as LegacyMultiWordLesson;
+  const [first, ...rest] = legacy.words ?? [];
+  if (!first) throw new Error(`Speak Better lesson ${legacy.id} has no word to teach`);
+  const { words: _dropped, ...common } = legacy;
+  void _dropped;
+  const related: SpeakBetterRelatedWord[] = rest.map((word) => ({ word: word.word, note: word.englishMeaning }));
+  return {
+    ...common,
+    word: {
+      // Fields the old shape never recorded. Empty, so the card omits them rather
+      // than inventing editorial text for a snapshot that was published without it.
+      partOfSpeech: '',
+      tone: 'neutral',
+      collocations: [],
+      commonMistake: '',
+      register: '',
+      ...first,
+    },
+    relatedWords: related,
+  };
+}
+
+/** The pre-release shape: several words per lesson. Read-only, for old payloads. */
+export interface LegacyMultiWordLesson extends Omit<SpeakBetterLesson, 'word' | 'relatedWords'> {
+  word?: never;
+  words: Array<Partial<SpeakBetterWord> & Pick<SpeakBetterWord, 'word' | 'englishMeaning' | 'hindiMeaning' | 'nuance' | 'examples'>>;
+}
+
+/**
+ * The primary word as the UI and the tracker see it: the authored word plus the
+ * id it is stored under. A word with an explicit `id` keeps it, so an unusual
+ * spelling can be re-keyed deliberately without losing a reader's progress.
+ */
+export function primaryWord(lesson: SpeakBetterLesson): SpeakBetterWord & { id: string } {
+  return { ...lesson.word, id: lesson.word.id ?? wordProgressId(lesson.id, lesson.word.word) };
 }
 
 /**
@@ -95,34 +134,31 @@ export function lessonMatchesQuery(lesson: SpeakBetterLesson, query: string): bo
     lesson.focus,
     lesson.situation,
     lesson.challenge,
-    ...lesson.words.flatMap((word) => [
-      word.word,
-      word.englishMeaning,
-      word.hindiMeaning,
-      word.nuance,
-      word.pronunciation ?? '',
-      ...(word.collocations ?? []),
-      ...(word.commonMistake ? [word.commonMistake] : []),
-      ...(word.differsFrom ? [word.differsFrom] : []),
-      ...(word.register ? [word.register] : []),
-      ...word.examples,
-    ]),
+    lesson.word.word,
+    lesson.word.partOfSpeech,
+    lesson.word.englishMeaning,
+    lesson.word.hindiMeaning,
+    lesson.word.nuance,
+    lesson.word.pronunciation ?? '',
+    ...lesson.word.collocations,
+    ...(lesson.word.idioms ?? []),
+    lesson.word.commonMistake,
+    ...(lesson.word.differsFrom ? [lesson.word.differsFrom] : []),
+    lesson.word.register,
+    ...lesson.word.examples,
+    ...(lesson.relatedWords ?? []).map((related) => `${related.word} ${related.note}`),
     ...lesson.dialogue.flatMap((line) => [line.speaker, line.line]),
   ].join(' \u0000 '));
   // Devanagari does not survive NFKD normalisation predictably, so the raw text
   // is searched too — a query in Hindi matches the Hindi gloss either way.
-  const raw = [
-    ...lesson.words.map((word) => word.hindiMeaning),
-    lesson.focus,
-    lesson.situation,
-  ].join(' ');
+  const raw = [lesson.word.hindiMeaning, lesson.focus, lesson.situation].join(' ');
   return terms.every((term) => haystack.includes(term) || raw.toLowerCase().includes(term));
 }
 
 export interface SpeakBetterFilter {
   level?: SpeakBetterLevel | 'all';
   query?: string;
-  /** Only lessons containing at least one word in this tracking state. */
+  /** Only lessons whose primary word is in this tracking state. */
   onlyWordState?: { state: import('./types').SpeakBetterTrackingState; progress: import('./types').SpeakBetterProgressEntry[] };
 }
 
@@ -141,7 +177,7 @@ export function filterLessons(filter: SpeakBetterFilter = {}): readonly SpeakBet
     if (filter.onlyWordState) {
       const { state, progress } = filter.onlyWordState;
       const tracked = new Set(progress.filter((entry) => entry.state === state).map((entry) => entry.id));
-      if (!resolvedWords(lesson).some((word) => tracked.has(word.id))) return false;
+      if (!tracked.has(primaryWord(lesson).id)) return false;
     }
     return true;
   });

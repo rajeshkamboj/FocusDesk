@@ -393,24 +393,42 @@ export const SPEAK_BETTER_LEVEL_LABELS: Record<SpeakBetterLevel, string> = {
   C2: 'C2 · Proficiency',
 };
 
+/** Register and tone of the primary word, as a learner should choose it. */
+export const SPEAK_BETTER_TONES = ['formal', 'neutral', 'informal', 'professional'] as const;
+export type SpeakBetterTone = (typeof SPEAK_BETTER_TONES)[number];
+
+/**
+ * The one target word a lesson teaches, in depth.
+ *
+ * Every field except `pronunciation`, `idioms`, `differsFrom` and `dictionary` is
+ * authored editorially. Dictionary APIs may only populate `dictionary`; they never
+ * write or replace the authored teaching content.
+ */
 export interface SpeakBetterWord {
   /** Stable identity for progress tracking. Defaults to the lesson id + the word. */
   id?: string;
   word: string;
+  /** e.g. "verb", "noun", "adjective". Shown beside the word. */
+  partOfSpeech: string;
+  /** The register this word belongs to. Required, so every lesson states it. */
+  tone: SpeakBetterTone;
   englishMeaning: string;
   hindiMeaning: string;
   nuance: string;
+  /** Three or four natural examples: everyday, professional or academic. */
   examples: string[];
   /** How to say it: stress, vowels, linking. Omitted where it would add nothing. */
   pronunciation?: string;
   /** Words this one habitually travels with, as they are actually said. */
-  collocations?: string[];
+  collocations: string[];
+  /** Fixed expressions that use the word. Optional: most words have none worth teaching. */
+  idioms?: string[];
   /** The mistake learners at this level actually make, and the fix. */
-  commonMistake?: string;
+  commonMistake: string;
   /** The near-synonym it is most often confused with, and the line between them. */
   differsFrom?: string;
   /** When this is the natural thing to say, and when it would sound wrong. */
-  register?: string;
+  register: string;
   /**
    * Optional live enrichment from Wiktionary (definitions, pronunciation, part of
    * speech) and Datamuse (collocations, related expressions).
@@ -446,6 +464,12 @@ export interface SpeakBetterDictionaryEntry {
   fetchedAt?: string;
 }
 
+/** A near word, mentioned briefly to clarify the primary word. */
+export interface SpeakBetterRelatedWord {
+  word: string;
+  note: string;
+}
+
 export interface SpeakBetterLesson {
   id: string;
   /** Difficulty band. Absent means A2–B1, the original corpus. */
@@ -460,7 +484,14 @@ export interface SpeakBetterLesson {
   focus: string;
   /** A concrete moment where this language would actually be spoken. */
   situation: string;
-  words: SpeakBetterWord[];
+  /** The single primary target word of this lesson. */
+  word: SpeakBetterWord;
+  /**
+   * Words a learner may confuse with the primary word, each in one line of
+   * clarification. These are not lessons: they carry no progress, are never
+   * selected as a target and are never tracked as known or saved.
+   */
+  relatedWords?: SpeakBetterRelatedWord[];
   /** A short conversational example — a few lines of real dialogue. */
   dialogue: { speaker: string; line: string }[];
   /** One small spoken task the reader can do immediately. */

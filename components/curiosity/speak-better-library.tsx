@@ -19,7 +19,8 @@ import {
   filterLessons,
   levelOf,
   levelCounts,
-  resolvedWords,
+  primaryWord,
+  toCurrentLesson,
   wordProgressId,
 } from '@/lib/curiosity/speak-better';
 import {
@@ -252,16 +253,15 @@ function LessonCard({
   // is for reading one. Opening a lesson is one tap and remembered per session.
   const [open, setOpen] = useState(false);
   const band = levelOf(lesson);
-  const words = resolvedWords(lesson);
+  const word = primaryWord(lesson);
 
   return (
     <article className="rounded-2xl border border-line bg-surface shadow-card" data-speak-better-lesson={lesson.id}>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="accent">{band}</Badge>
-          <h2 className="text-[15px] font-semibold text-ink">
-            {words.map((word) => word.word).join(' · ')}
-          </h2>
+          <h2 className="text-[15px] font-semibold text-ink">{word.word}</h2>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-ink-3">{word.partOfSpeech}</span>
         </div>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{lesson.focus}</p>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-3">{lesson.situation}</p>
@@ -287,18 +287,14 @@ function LessonCard({
 
       {open ? (
         <div id={`lesson-body-${lesson.id}`} className="space-y-4 border-t border-line px-4 py-4 sm:px-5">
-          <ul className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
-            {words.map((word) => (
-              <li key={word.id} className="min-w-0">
-                <WordPanel
-                  lesson={lesson}
-                  word={word}
-                  state={progress.words[word.id]?.state ?? null}
-                  onToggle={(state) => onToggle(lesson, word, state)}
-                />
-              </li>
-            ))}
-          </ul>
+          <div className="min-w-0">
+            <WordPanel
+              lesson={lesson}
+              word={word}
+              state={progress.words[word.id]?.state ?? null}
+              onToggle={(state) => onToggle(lesson, word, state)}
+            />
+          </div>
 
           <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">A short conversation</p>
@@ -458,10 +454,8 @@ export function markLessonSeen(
   lesson: SpeakBetterLesson,
   document: SpeakBetterProgressDocument,
 ): SpeakBetterProgressDocument {
-  let next = document;
-  for (const word of resolvedWords(lesson)) {
-    next = markSeen(next, { id: word.id, lessonId: lesson.id, word: word.word, level: levelOf(lesson) });
-  }
+  const word = primaryWord(toCurrentLesson(lesson));
+  const next = markSeen(document, { id: word.id, lessonId: lesson.id, word: word.word, level: levelOf(lesson) });
   return next === document ? document : next;
 }
 

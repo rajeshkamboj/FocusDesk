@@ -1,691 +1,776 @@
 import type { SpeakBetterLesson } from '../types';
 
 /**
- * Speak Better — practical spoken English, taught through a situation.
+ * Speak Better — A2–B1 (Elementary and Pre-intermediate).
  *
- * Each lesson takes a moment that really happens in a day (a classroom, a
- * staff meeting, a phone call, an interview) and pulls apart three to five
- * words that learners routinely swap for one another. The point is always the
- * *distinction*: an English meaning, a Hindi meaning, one line of nuance, an
- * example sentence, a short dialogue, and a speaking challenge.
+ * One lesson is one primary target word, taught in depth: its part of speech, a
+ * pronunciation note, an English definition, a Hindi meaning, nuance, three or four
+ * examples, collocations, the mistake learners make, register and tone. Words that
+ * are only worth a clarification sit in `relatedWords` as a single line each; they
+ * are never lessons of their own.
  *
- * Content lives here as typed static data, exactly like the rest of the
- * Curiosity corpus: selected by day index, shipped server-side only, and never
- * fetched at runtime.
+ * Lesson ids are stable keys for progress and for the publication ledger, so they
+ * keep their original spelling even where the primary word is one of several named.
  */
+
 export const speakBetterLessons: SpeakBetterLesson[] = [
   {
     level: 'A2-B1',
     id: 'teach-learn-study-practise',
-    focus: 'You teach a person, you learn a thing, you study a subject, and you practise a skill.',
-    situation:
-      'A student stops you after class and says, “Sir, will you learn me grammar?” — you want to correct them without embarrassing them, and leave them with the rule.',
-    words: [
+    focus: 'Practise is the verb: you practise a skill by doing it again and again until it feels natural.',
+    situation: 'Your teacher asks how you are preparing for the speaking test in three weeks. You want to explain your routine clearly, and to get the spelling right when you write it down.',
+    word: {
+      word: 'practise',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'PRAK-tis. The verb and the noun sound the same; only the spelling changes.',
+      englishMeaning: 'to do something again and again in order to become better at it.',
+      hindiMeaning: 'अभ्यास करना',
+      nuance: 'Practise (British spelling, verb) is about repetition, not understanding. The noun is “practice” with a “c” — “practice makes perfect”.',
+      examples: [
+        'I practise my English aloud for ten minutes every night.',
+        'Practising at the same time each day is easier than finding motivation.',
+        'We need more practice before the match, so we will practise the set plays again on Saturday.',
+      ],
+      collocations: [
+        'practise a skill',
+        'practise speaking',
+        'practise for an exam',
+        'practise every day',
+      ],
+      commonMistake: '“I practice English every day” → “I practise English every day.” The verb is “practise”, with an s, in British and Indian English. “Practice” is the noun: “I need more practice.”',
+      register: 'Neutral. The spelling follows the English variety: British and Indian English use “practise” for the verb.',
+    },
+    relatedWords: [
       {
         word: 'teach',
-        englishMeaning: 'to help someone else learn something by explaining or showing it.',
-        hindiMeaning: 'सिखाना, पढ़ाना',
-        nuance: 'The teacher is the subject: “I teach you”, never “I learn you”. You teach a person (teach + someone) or teach a subject (teach physics).',
-        examples: [
-          'I teach physics to class ten.',
-          'She teaches at a government school in Ludhiana.',
-        ],
+        note: 'the person who helps: you teach someone something.',
       },
       {
         word: 'learn',
-        englishMeaning: 'to gain knowledge or a skill, usually by study or experience.',
-        hindiMeaning: 'सीखना',
-        nuance: 'The learner does the learning. In standard English a teacher can never “learn” a student — that is the single most common error in Indian English.',
-        examples: [
-          'I learned to type without looking at the keyboard.',
-          'The children learn faster when they are allowed to make mistakes.',
-        ],
+        note: 'what the student does. A teacher teaches; a student learns.',
       },
       {
         word: 'study',
-        englishMeaning: 'to spend time reading, revising or working through a subject on purpose.',
-        hindiMeaning: 'पढ़ाई करना, अध्ययन करना',
-        nuance: 'Study is about time spent acquiring knowledge, not about ability. You study “for” an exam and you study a subject.',
-        examples: [
-          'She studies for two hours every morning before school.',
-          'I studied physics at university, but I studied Hindi on my own.',
-        ],
-      },
-      {
-        word: 'practise',
-        englishMeaning: 'to do something again and again in order to become better at it.',
-        hindiMeaning: 'अभ्यास करना',
-        nuance: 'Practise (British spelling, verb) is about repetition, not understanding. The noun is “practice” with a “c” — “practice makes perfect”.',
-        examples: [
-          'I practise my English aloud for ten minutes every night.',
-          'Practising at the same time each day is easier than finding motivation.',
-        ],
+        note: 'spending time on a subject on purpose, usually for an exam.',
       },
     ],
     dialogue: [
-      { speaker: 'Student', line: 'Sir, will you learn me grammar?' },
-      { speaker: 'Teacher', line: 'I’ll teach you grammar. You’ll learn it.' },
-      { speaker: 'Student', line: 'And how do I remember it?' },
-      { speaker: 'Teacher', line: 'You study the rules once, and then you practise speaking — that is when it stays.' },
+      {
+        speaker: 'Teacher',
+        line: 'How are you preparing for the speaking test?',
+      },
+      {
+        speaker: 'You',
+        line: 'I practise speaking English for ten minutes every morning.',
+      },
+      {
+        speaker: 'Teacher',
+        line: 'And what do you practise most?',
+      },
+      {
+        speaker: 'You',
+        line: 'Short answers to the questions I expect, out loud, until they sound natural.',
+      },
     ],
-    challenge:
-      'Describe your last week at school in four sentences, using teach, learn, study and practise once each — one word per sentence, and nobody else’s role mixed in.',
+    challenge: 'Describe one skill you practise, out loud, in three sentences: what you do, how often, and how you know it is improving.',
   },
   {
     level: 'A2-B1',
     id: 'hear-listen-overhear-listen-in',
-    focus: 'Hearing happens to you; listening is something you do. Overhearing is an accident; listening in is a choice.',
-    situation: 'A parent asks on the phone why their child “hears but does not listen”, and you want to explain the difference in one breath.',
-    words: [
+    focus: 'Listen means paying attention on purpose: you listen to a person, a voice or a piece of advice.',
+    situation: 'On a noisy call, a colleague gives you a date too quickly, and you missed it. You want to ask politely for the detail and show that you were paying attention.',
+    word: {
+      word: 'listen',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'LIS-en. The “t” is silent.',
+      englishMeaning: 'to pay attention with your ears, deliberately and with effort.',
+      hindiMeaning: 'ध्यान से सुनना',
+      nuance: 'Listening is active and cannot be done by accident. It always takes “to” something: listen to a person, a recording, advice.',
+      examples: [
+        'Listen to the whole sentence before you answer.',
+        'He listens to one English podcast while walking to work.',
+        'When the client raised a concern, she listened carefully and wrote down every point.',
+      ],
+      collocations: [
+        'listen to someone',
+        'listen carefully',
+        'listen to advice',
+        'listen attentively',
+      ],
+      idioms: [
+        'listen to reason',
+      ],
+      commonMistake: '“I listened the music” → “I listened to the music.” Listen needs “to” before the thing you pay attention to.',
+      differsFrom: 'Hear is what happens to your ears; listen is what you choose to do with them.',
+      register: 'Neutral everywhere. “Are you listening?” can sound sharp; “Did you catch that?” is softer.',
+    },
+    relatedWords: [
       {
         word: 'hear',
-        englishMeaning: 'to receive sound with your ears, whether or not you want to.',
-        hindiMeaning: 'सुनाई देना, (कानों में) आना',
-        nuance: 'Hearing is passive — it is the sense working, not the mind attending. You can hear something without understanding a word of it.',
-        examples: [
-          'I can hear the ceiling fan while I am teaching.',
-          'Did you hear that noise outside?',
-        ],
-      },
-      {
-        word: 'listen',
-        englishMeaning: 'to pay attention with your ears, deliberately and with effort.',
-        hindiMeaning: 'ध्यान से सुनना',
-        nuance: 'Listening is active and cannot be done by accident. It always takes “to” something: listen to a person, a recording, advice.',
-        examples: [
-          'Listen to the whole sentence before you answer.',
-          'He listens to one English podcast while walking to work.',
-        ],
+        note: 'to receive sound, whether or not you attend to it.',
       },
       {
         word: 'overhear',
-        englishMeaning: 'to hear something by accident, when the speakers did not intend it.',
-        hindiMeaning: 'संयोग से सुन लेना',
-        nuance: 'Overhear has no “to” and no blame — you were simply within earshot. Deliberately staying to hear more changes the word.',
-        examples: [
-          'I overheard two students planning a surprise for the teacher’s day function.',
-          'She overheard the news in the staff room before anyone announced it.',
-        ],
+        note: 'to hear something by accident, when it was not meant for you.',
       },
       {
         word: 'listen in',
-        englishMeaning: 'to listen to a private conversation on purpose, usually without the speakers knowing.',
-        hindiMeaning: 'चुपके से सुनना',
-        nuance: 'Unlike overhear, this is intentional and carries suspicion or disapproval — you “listen in on” someone.',
-        examples: [
-          'Someone was listening in on our phone call.',
-          'I did not mean to eavesdrop, but the door was open and I listened in.',
-        ],
+        note: 'to listen to a private conversation on purpose, often without permission.',
       },
     ],
     dialogue: [
-      { speaker: 'Parent', line: 'He hears everything, but he never listens to me.' },
-      { speaker: 'Teacher', line: 'That is exactly it — hearing costs nothing, listening costs attention.' },
-      { speaker: 'Parent', line: 'So what do I do?' },
-      { speaker: 'Teacher', line: 'Ask him to repeat your instruction back. Listening shows itself when the words come back.' },
+      {
+        speaker: 'Colleague',
+        line: 'The client wants the review moved, and the call is on Thursday.',
+      },
+      {
+        speaker: 'You',
+        line: 'Sorry, I did not listen carefully. Can you say the day again?',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'Thursday, at eleven.',
+      },
+      {
+        speaker: 'You',
+        line: 'Thank you. I have written that down, and I am listening now.',
+      },
     ],
-    challenge:
-      'Speak four sentences in a row: something you heard today but did not listen to, something you listen to every day, something you overheard by accident, and something you would never listen in on.',
+    challenge: 'Play a short voice message or a podcast for two minutes. Then say aloud one thing you heard without listening, and one thing you listened to carefully.',
   },
   {
     level: 'A2-B1',
     id: 'say-tell-speak-talk',
-    focus: 'You say words, you tell a person, you speak a language, and you talk with someone.',
-    situation: 'A student says, “Sir, I will say you one thing”, and you want to give them the four-word pattern they will use for life.',
-    words: [
+    focus: 'Tell always needs a listener: you tell someone something, and the information, the story or the instruction is what you give them.',
+    situation: 'You are the team lead. Tomorrow’s schedule has changed, and the message must reach every person clearly, without the common slip of “say me”.',
+    word: {
+      word: 'tell',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'TEL. A short vowel, as in “bell”.',
+      englishMeaning: 'to give information to a particular listener.',
+      hindiMeaning: 'बताना',
+      nuance: 'Tell needs a person straight after it: “tell me, tell the class”. Tell someone something; tell a story, a lie, the truth.',
+      examples: [
+        'Tell me one thing you understood today.',
+        'He told the class a story about his first day as a teacher.',
+        'Could you tell me the way to the library, please?',
+      ],
+      collocations: [
+        'tell someone something',
+        'tell the truth',
+        'tell a story',
+        'tell me about',
+      ],
+      idioms: [
+        'tell it like it is',
+      ],
+      commonMistake: '“Say me the time” → “Tell me the time.” Say takes the words (“say something”); tell takes the person (“tell someone”).',
+      differsFrom: 'Say is about the words; tell is about the person you give information to.',
+      register: 'Neutral. “Tell me” is direct; a polite request is “Could you tell me…?”',
+    },
+    relatedWords: [
       {
         word: 'say',
-        englishMeaning: 'to produce words; the words themselves are the point.',
-        hindiMeaning: 'कहना',
-        nuance: 'Say takes the words, not the listener: “say something (to someone)”. You cannot “say me” — that is the classic slip.',
-        examples: [
-          'She said she would come early.',
-          'Say that again slowly, please.',
-        ],
-      },
-      {
-        word: 'tell',
-        englishMeaning: 'to give information to a particular listener.',
-        hindiMeaning: 'बताना',
-        nuance: 'Tell needs a person straight after it: “tell me, tell the class”. Tell someone something; tell a story, a lie, the truth.',
-        examples: [
-          'Tell me one thing you understood today.',
-          'He told the class a story about his first day as a teacher.',
-        ],
+        note: 'to produce words; the words themselves are the point.',
       },
       {
         word: 'speak',
-        englishMeaning: 'to use your voice, especially a language, or to address people formally.',
-        hindiMeaning: 'बोलना',
-        nuance: 'Speak is more often one-way or formal: speak English, speak to an audience, speak at a function. You speak “to” someone, not with them.',
-        examples: [
-          'I can read French, but I cannot speak it.',
-          'She spoke to the parents for ten minutes without notes.',
-        ],
+        note: 'to use your voice, especially a language, or to address an audience.',
       },
       {
         word: 'talk',
-        englishMeaning: 'to have a conversation, where both sides speak.',
-        hindiMeaning: 'बात करना, बातचीत करना',
-        nuance: 'Talk is two-way and less formal: talk to or talk with someone, talk about a topic. “Talk to” is often one-sided advice; “talk with” is more equal.',
-        examples: [
-          'Can we talk about the syllabus after lunch?',
-          'I talked with the principal for half an hour.',
-        ],
+        note: 'a two-way conversation about something.',
       },
     ],
     dialogue: [
-      { speaker: 'Student', line: 'Sir, I will say you one thing about yesterday.' },
-      { speaker: 'Teacher', line: 'Tell me. Then we’ll talk about it.' },
-      { speaker: 'Student', line: 'I wanted to speak in the assembly but I got nervous.' },
-      { speaker: 'Teacher', line: 'Say the first line to me now. That is how the rest comes out.' },
+      {
+        speaker: 'Manager',
+        line: 'Did you tell the new joiners about the change?',
+      },
+      {
+        speaker: 'You',
+        line: 'Not yet. Can you tell me the new room number first?',
+      },
+      {
+        speaker: 'Manager',
+        line: 'Room four, and tell them to arrive ten minutes early.',
+      },
+      {
+        speaker: 'You',
+        line: 'I will tell them this afternoon, and I will tell security too.',
+      },
     ],
-    challenge:
-      'Report one real conversation from today in four sentences, using say, tell, speak and talk once each — and check that “tell” is always followed by a person.',
+    challenge: 'Tell three different people something today, out loud: one fact, one instruction and one short story. Put a person straight after tell in each sentence.',
   },
   {
     level: 'A2-B1',
     id: 'see-look-watch-observe',
-    focus: 'You see without trying, you look on purpose, you watch something that changes, and you observe in order to learn.',
-    situation: 'You are sitting with family watching a cricket match and someone asks, “Did you see that catch?” — and you realise you had looked away exactly then.',
-    words: [
+    focus: 'Watch is for something that moves or changes over time: you keep your attention on it until it ends.',
+    situation: 'At the sports centre, a friend’s child is learning to swim. You want to tell the parent that you are following the whole lesson, and to ask the coach for one clear correction.',
+    word: {
+      word: 'watch',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'wotch. The “a” sounds like the “o” in “hot”; it rhymes with “notch”.',
+      englishMeaning: 'to look at something over a period of time, especially something that is moving or changing.',
+      hindiMeaning: '(चलती हुई चीज़ को) देखना',
+      nuance: 'Watch needs time — you watch a match, a film, a child. It implies you keep your attention there, which look does not.',
+      examples: [
+        'We watched the last over together.',
+        'Watch my hands while I write the formula on the board.',
+        'Watch the video once without notes, then watch it again with the transcript open.',
+      ],
+      collocations: [
+        'watch a film',
+        'watch the match',
+        'watch over',
+        'watch the children',
+      ],
+      idioms: [
+        'watch your step',
+        'watch this space',
+      ],
+      commonMistake: '“I watched at the match” → “I watched the match.” Watch takes the thing directly. Look needs “at”: “I looked at the match.”',
+      differsFrom: 'Look is a deliberate turn of the eyes; watch is sustained attention to something that changes.',
+      register: 'Neutral. “Watch out!” is an urgent, informal warning; “Please watch closely” is a neutral request.',
+    },
+    relatedWords: [
       {
         word: 'see',
-        englishMeaning: 'to notice something with your eyes, without deliberately trying.',
-        hindiMeaning: 'दिखाई देना, देखना (अनायास)',
-        nuance: 'Seeing is not something you can switch on — you can open your eyes and still not see what is in front of you. Never “see at” something.',
-        examples: [
-          'I saw the message on the notice board by accident.',
-          'Did you see who came into the class after me?',
-        ],
+        note: 'to notice something without trying.',
       },
       {
         word: 'look',
-        englishMeaning: 'to turn your eyes towards something deliberately, usually for a short time.',
-        hindiMeaning: 'देखना (ध्यान से)',
-        nuance: 'Look takes “at”: look at the board. It is a deliberate act, but it says nothing about how long or whether the object moves.',
-        examples: [
-          'Look at the diagram before you answer.',
-          'I looked at my watch and realised the period was over.',
-        ],
-      },
-      {
-        word: 'watch',
-        englishMeaning: 'to look at something over a period of time, especially something that is moving or changing.',
-        hindiMeaning: '(चलती हुई चीज़ को) देखना',
-        nuance: 'Watch needs time — you watch a match, a film, a child. It implies you keep your attention there, which look does not.',
-        examples: [
-          'We watched the last over together.',
-          'Watch my hands while I write the formula on the board.',
-        ],
+        note: 'to turn your eyes towards something on purpose, often briefly.',
       },
       {
         word: 'observe',
-        englishMeaning: 'to watch carefully and attentively in order to learn something.',
-        hindiMeaning: 'निरीक्षण करना, बारीकी से देखना',
-        nuance: 'Observe is deliberate and purposeful — the observation is meant to produce understanding, a record or a conclusion.',
-        examples: [
-          'A teacher observes how students work in groups.',
-          'I observed three classes before I taught my first one.',
-        ],
+        note: 'to watch carefully in order to learn or to record.',
       },
     ],
     dialogue: [
-      { speaker: 'Cousin', line: 'Did you see that catch? Unbelievable.' },
-      { speaker: 'You', line: 'I missed it — I was looking at the score on my phone.' },
-      { speaker: 'Cousin', line: 'You did not watch a single ball properly.' },
-      { speaker: 'You', line: 'Fair. Next time I’ll watch and observe instead of scrolling.' },
+      {
+        speaker: 'Parent',
+        line: 'Are you watching his stroke?',
+      },
+      {
+        speaker: 'You',
+        line: 'Yes, I am watching his arms the whole length of the pool.',
+      },
+      {
+        speaker: 'Parent',
+        line: 'Good. He gets nervous when people only glance.',
+      },
+      {
+        speaker: 'You',
+        line: 'Then I will watch the whole session, not just the start.',
+      },
     ],
-    challenge:
-      'Sit quietly for one minute, then report: one thing you saw without trying, one thing you looked at on purpose, one thing you watched for at least ten seconds, and one thing you observed closely enough to describe a detail.',
+    challenge: 'Watch something that moves for thirty seconds and describe what changed, out loud, using watch in two sentences. Explain why look would have been too brief.',
   },
   {
     level: 'A2-B1',
     id: 'borrow-lend-loan-return',
-    focus: 'You borrow what you take, you lend what you give, and a loan is a formal arrangement — in both directions the thing goes back.',
-    situation: 'A colleague asks, “Can you borrow me your calculator for the period?” while a student is standing right there listening.',
-    words: [
-      {
-        word: 'borrow',
-        englishMeaning: 'to take something from someone with the intention of giving it back.',
-        hindiMeaning: 'उधार लेना',
-        nuance: 'The borrower receives. Borrow is almost never followed by a person: you borrow a “thing” (from someone), you do not “borrow someone”.',
-        examples: [
-          'May I borrow your marker for a minute?',
-          'I borrowed three books from the library last week.',
-        ],
-      },
+    focus: 'Borrow is what you do when you take something on the understanding that you will give it back.',
+    situation: 'You forgot your charger before an important client call, and a colleague offers help. You want to ask politely, and make sure you return it before the call ends.',
+    word: {
+      word: 'borrow',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'BOR-oh. The ending sounds like the “ow” in “sorrow”.',
+      englishMeaning: 'to take something from someone with the intention of giving it back.',
+      hindiMeaning: 'उधार लेना',
+      nuance: 'The borrower receives. Borrow is almost never followed by a person: you borrow a “thing” (from someone), you do not “borrow someone”.',
+      examples: [
+        'May I borrow your marker for a minute?',
+        'I borrowed three books from the library last week.',
+        'I borrowed the project file from the shared drive, so I will return it tonight.',
+      ],
+      collocations: [
+        'borrow money',
+        'borrow a pen',
+        'borrow from a friend',
+        'borrow time',
+      ],
+      idioms: [
+        'borrow trouble',
+      ],
+      commonMistake: '“Can you borrow me your pen?” → “Could I borrow your pen?” or “Can you lend me your pen?” Borrow is what the receiver does; lend is what the giver does.',
+      differsFrom: 'Lend is the same action seen from the other side: the lender gives, the borrower takes.',
+      register: 'Neutral and everyday. In formal writing: “May I borrow…?”',
+    },
+    relatedWords: [
       {
         word: 'lend',
-        englishMeaning: 'to give something to someone for a short time, expecting it back.',
-        hindiMeaning: 'उधार देना',
-        nuance: 'The lender gives, and lend “does” take a person: lend someone something, or lend something to someone. Zero cost is implied.',
-        examples: [
-          'Can you lend me your calculator for one period?',
-          'He never lends his notes to anyone.',
-        ],
+        note: 'the other direction: you give something to someone for a while.',
       },
       {
         word: 'loan',
-        englishMeaning: 'money (or, in formal use, an item) handed over with an agreement to return it.',
-        hindiMeaning: 'ऋण, कर्ज़ (औपचारिक)',
-        nuance: 'Loan is the formal, institutional word — a bank loan, a housing loan. As a verb it survives mainly in American English: “the bank loaned the money”.',
-        examples: [
-          'We are repaying a home loan over twenty years.',
-          'The bank loaned the society money for the new building.',
-        ],
+        note: 'a formal arrangement, usually money, such as a bank loan.',
       },
       {
         word: 'return',
-        englishMeaning: 'to give back something you borrowed, or to come back.',
-        hindiMeaning: 'लौटाना, वापस करना',
-        nuance: 'Return closes the circle — and it takes the thing, not the person: return a book (to someone). “Return back” is redundant.',
-        examples: [
-          'Please return the register before you leave.',
-          'I returned her notes the same evening.',
-        ],
+        note: 'to give back something you borrowed.',
       },
     ],
     dialogue: [
-      { speaker: 'Colleague', line: 'Can you borrow me your calculator for the next period?' },
-      { speaker: 'You', line: 'I can lend you my calculator — but I need it back by lunch.' },
-      { speaker: 'Colleague', line: 'I’ll borrow it only for one period, I promise.' },
-      { speaker: 'You', line: 'Then return it before the bell, and we’re even.' },
+      {
+        speaker: 'You',
+        line: 'Could I borrow your charger for twenty minutes?',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'Of course. Do you need the adaptor too?',
+      },
+      {
+        speaker: 'You',
+        line: 'Yes, please. I will return both before the call ends.',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'No hurry. Next week I may need one myself.',
+      },
     ],
-    challenge:
-      'Say four sentences about something you have recently taken and given back, using borrow, lend, loan and return once each — and make sure the direction of the item is correct in every one.',
+    challenge: 'Say four sentences about something you borrowed recently: what it was, who it was from, why you needed it, and when you returned it.',
   },
   {
     level: 'A2-B1',
     id: 'remember-remind-recall-forget',
-    focus: 'Remember is inside your own head; remind is something done to someone else. Recall is the effort to bring it back.',
-    situation: 'The Hindi “yaad dilana” becomes “remember me” in English, and a teacher hears it every single day.',
-    words: [
+    focus: 'Remind is what you do for someone else: you bring something back into their memory.',
+    situation: 'Your flatmate keeps forgetting the electricity bill. You want to help without nagging, and without making it sound like their fault.',
+    word: {
+      word: 'remind',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'ri-MIND. Stress on the second syllable.',
+      englishMeaning: 'to make someone else remember something.',
+      hindiMeaning: 'याद दिलाना',
+      nuance: 'Remind always takes a person — remind me, remind the class. You remind someone “of” something, or remind them “to” do something.',
+      examples: [
+        'Remind me to collect the answer sheets.',
+        'The bell reminds the students that the period is over.',
+        'The calendar app reminds me about the review meeting twenty minutes before it starts.',
+      ],
+      collocations: [
+        'remind someone to do something',
+        'remind someone of',
+        'remind me later',
+        'gently remind',
+      ],
+      commonMistake: '“Remember me to call him” → “Remind me to call him.” Remember is what you hold yourself; remind is what you do for someone else.',
+      differsFrom: 'Remember is internal: you hold the memory. Remind is external: someone or something brings it back.',
+      register: 'Neutral. “Could you remind me…?” is polite; “Don’t forget” is firmer.',
+    },
+    relatedWords: [
       {
         word: 'remember',
-        englishMeaning: 'to keep something in your mind, or to bring it back to mind.',
-        hindiMeaning: 'याद रखना, याद होना',
-        nuance: 'Remember needs no object person — you simply remember a fact, a name, an appointment. It can be involuntary or deliberate.',
-        examples: [
-          'I remember my first day as a student teacher.',
-          'Remember to lock the lab before you go.',
-        ],
-      },
-      {
-        word: 'remind',
-        englishMeaning: 'to make someone else remember something.',
-        hindiMeaning: 'याद दिलाना',
-        nuance: 'Remind always takes a person — remind me, remind the class. You remind someone “of” something, or remind them “to” do something.',
-        examples: [
-          'Remind me to collect the answer sheets.',
-          'The bell reminds the students that the period is over.',
-        ],
+        note: 'to keep something in your mind, or to bring it back yourself.',
       },
       {
         word: 'recall',
-        englishMeaning: 'to bring something back to mind with visible effort, as if searching for it.',
-        hindiMeaning: 'स्मरण करना, (प्रयासपूर्वक) याद करना',
-        nuance: 'Recall suggests deliberate retrieval, often of a detail you are not sure about — it is a step more effortful than remember.',
-        examples: [
-          'I cannot recall the exact date of the inspection.',
-          'She recalled the poem line by line after thirty years.',
-        ],
+        note: 'to bring something back to memory, often with effort.',
       },
       {
         word: 'forget',
-        englishMeaning: 'to fail to remember something, or to stop keeping it in mind.',
-        hindiMeaning: 'भूलना',
-        nuance: 'Forget is the absence of remembering. Note the pattern: “I forgot to bring it” (a task) versus “I forgot his name” (a fact).',
-        examples: [
-          'I forgot to take attendance today.',
-          'Never forget what this class achieved together.',
-        ],
+        note: 'to lose something from memory.',
       },
     ],
     dialogue: [
-      { speaker: 'Student', line: 'Sir, please remember me tomorrow about the test.' },
-      { speaker: 'Teacher', line: 'You mean remind you. I will remind you tomorrow.' },
-      { speaker: 'Student', line: 'And what if I forget my admit card?' },
-      { speaker: 'Teacher', line: 'Then recall where you kept it last night — it is usually there.' },
+      {
+        speaker: 'You',
+        line: 'Could you remind me about the electricity bill on Friday?',
+      },
+      {
+        speaker: 'Flatmate',
+        line: 'Sure. Remind me too, if I forget.',
+      },
+      {
+        speaker: 'You',
+        line: 'I will. It is due at noon, and the late fee is high.',
+      },
+      {
+        speaker: 'Flatmate',
+        line: 'Thanks. I do not want to pay that fee again.',
+      },
     ],
-    challenge:
-      'Speak four sentences about the coming week, using remember, remind, recall and forget once each, and make sure “remind” always has a person after it.',
+    challenge: 'Name two things you need reminding about this week, one task and one date. Use remind in both sentences, and say who will do the reminding.',
   },
   {
     level: 'A2-B1',
     id: 'spend-take-waste-pass',
-    focus: 'You spend time on what you choose, time takes what it needs, you waste what has no use, and you pass time while waiting.',
-    situation: 'Talking to a student about the two-month summer break, and how the same holiday can be spent, taken, wasted or passed.',
-    words: [
-      {
-        word: 'spend',
-        englishMeaning: 'to use time (or money) on an activity of your choosing.',
-        hindiMeaning: '(समय) बिताना, खर्च करना',
-        nuance: 'Spend is neutral and deliberate: you spend time “on” something or “doing” something. It is the natural verb for how a person uses their hours.',
-        examples: [
-          'I spend twenty minutes reading before I sleep.',
-          'She spent her holidays learning to drive.',
-        ],
-      },
+    focus: 'Spend is about using time or money: you spend money on something, or spend time doing something.',
+    situation: 'A friend says you have been working too much and asks how you use your evenings. You want to describe your time honestly, without complaining.',
+    word: {
+      word: 'spend',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'SPEND. The vowel is short, as in “end”.',
+      englishMeaning: 'to use time (or money) on an activity of your choosing.',
+      hindiMeaning: '(समय) बिताना, खर्च करना',
+      nuance: 'Spend is neutral and deliberate: you spend time “on” something or “doing” something. It is the natural verb for how a person uses their hours.',
+      examples: [
+        'I spend twenty minutes reading before I sleep.',
+        'She spent her holidays learning to drive.',
+        'The team spent three weeks rewriting the onboarding guide, and it shows.',
+      ],
+      collocations: [
+        'spend time on',
+        'spend money on',
+        'spend a weekend',
+        'spend the evening',
+      ],
+      commonMistake: '“I spent two hours to finish the report” → “I spent two hours finishing the report.” After spend, use the -ing form, not the infinitive.',
+      differsFrom: 'Waste is spending with a bad result; spend itself is neutral.',
+      register: 'Neutral and common. In a professional setting, “allocate time to” is more formal.',
+    },
+    relatedWords: [
       {
         word: 'take',
-        englishMeaning: 'to require a certain amount of time to happen or be done.',
-        hindiMeaning: '(समय) लगना',
-        nuance: 'Nothing is spending here — the task is consuming the time. The thing takes time; the person never takes time (except in “take your time”, which means do not hurry).',
-        examples: [
-          'The staff meeting took two hours.',
-          'Checking thirty notebooks takes time.',
-        ],
+        note: 'needs time or a seat: it takes an hour; you take a bus.',
       },
       {
         word: 'waste',
-        englishMeaning: 'to use time badly, on something with no value.',
-        hindiMeaning: 'बर्बाद करना, व्यर्थ गँवाना',
-        nuance: 'Waste carries judgement, so it is strong — say it about your own time if you like, and about someone else’s only with care.',
-        examples: [
-          'We wasted the whole period arguing about the seating order.',
-          'Do not waste the morning scrolling.',
-        ],
+        note: 'to use time or money with no good result.',
       },
       {
         word: 'pass',
-        englishMeaning: 'to occupy time while you are waiting or have nothing pressing to do.',
-        hindiMeaning: '(समय) काटना, बिताना (इंतज़ार में)',
-        nuance: 'Pass time is about the waiting, not the value: reading on a bench, chatting at a station. It is lighter than spend.',
-        examples: [
-          'We passed the two hours at the station talking about old school days.',
-          'He passes his free periods reading the newspaper.',
-        ],
+        note: 'to get through time, or to succeed in an exam or test.',
       },
     ],
     dialogue: [
-      { speaker: 'Teacher', line: 'How did you pass the two months, Ravi?' },
-      { speaker: 'Student', line: 'I spent most of it helping in my uncle’s shop.' },
-      { speaker: 'Teacher', line: 'Good. Because a break that is wasted takes away more than it gives.' },
-      { speaker: 'Student', line: 'It taught me how much a full day takes when you work.' },
+      {
+        speaker: 'Friend',
+        line: 'You never stop working. How do you spend your evenings?',
+      },
+      {
+        speaker: 'You',
+        line: 'I spend an hour on English and an hour on the house accounts.',
+      },
+      {
+        speaker: 'Friend',
+        line: 'And the rest?',
+      },
+      {
+        speaker: 'You',
+        line: 'I spend most of Sunday with my family, and I protect that part.',
+      },
     ],
-    challenge:
-      'Describe yesterday in four sentences speaking aloud, using spend, take, waste and pass once each — one sentence each, in the correct sense of time.',
+    challenge: 'Describe how you spent yesterday in three sentences, using spend twice: once with time and once with money. Say what you would like to spend more time on.',
   },
   {
     level: 'A2-B1',
     id: 'ask-request-demand-insist',
-    focus: 'Ask is neutral, request is formal and polite, demand assumes authority, and insisting refuses to let the matter drop.',
-    situation: 'You need one day’s leave, and you want the words to match the people you are speaking to — a colleague, the office, an official, or a clerk who is not moving.',
-    words: [
+    focus: 'Request is a polite, formal way of asking for something. It leaves the other person free to say no.',
+    situation: 'You need a document from another department, and a casual message last time got no reply. You want to make a clear, polite request that gets an answer.',
+    word: {
+      word: 'request',
+      partOfSpeech: 'verb',
+      tone: 'professional',
+      pronunciation: 'ri-KWEST. Stress on the second syllable.',
+      englishMeaning: 'to ask for something politely or officially.',
+      hindiMeaning: 'निवेदन करना, अनुरोध करना',
+      nuance: 'Request is formal and modest — right for letters, applications and strangers, and it always acknowledges that the answer may be no.',
+      examples: [
+        'I requested a change in the timetable through the office.',
+        'Please may I request the file for one afternoon?',
+        'I would like to request an extension of two working days for the audit response.',
+      ],
+      collocations: [
+        'make a request',
+        'request a change',
+        'request for information',
+        'on request',
+      ],
+      commonMistake: '“I request you to send the file” sounds stiff in email. Use “Could you send the file?” or “I would be grateful if you could send it.”',
+      differsFrom: 'Demand is firm and can sound hostile; request leaves room for a no.',
+      register: 'Formal and professional. In a meeting, “Could I request…?” is standard; to a friend, “Can I have…?” is natural.',
+    },
+    relatedWords: [
       {
         word: 'ask',
-        englishMeaning: 'to say that you want something or want to know something.',
-        hindiMeaning: 'पूछना, माँगना (सामान्य)',
-        nuance: 'Ask is the everyday, neutral verb — ask for something, ask someone to do something. It makes no claim about how reasonable the want is.',
-        examples: [
-          'I asked today for a day’s leave.',
-          'She asked me to explain the chapter again.',
-        ],
-      },
-      {
-        word: 'request',
-        englishMeaning: 'to ask for something politely or officially.',
-        hindiMeaning: 'निवेदन करना, अनुरोध करना',
-        nuance: 'Request is formal and modest — right for letters, applications and strangers, and it always acknowledges that the answer may be no.',
-        examples: [
-          'I requested a change in the timetable through the office.',
-          'Please may I request the file for one afternoon?',
-        ],
+        note: 'the everyday word, for any question or favour.',
       },
       {
         word: 'demand',
-        englishMeaning: 'to ask for something in a way that assumes it must be given.',
-        hindiMeaning: 'माँग करना, दावे के साथ माँगना',
-        nuance: 'Demand carries authority or entitlement, and often the anger of a refused right. Use it for rights, and think twice before using it for favours.',
-        examples: [
-          'The staff demanded an explanation before signing the register.',
-          'The union demanded a meeting with the director.',
-        ],
+        note: 'to insist firmly, often with an implied consequence.',
       },
       {
         word: 'insist',
-        englishMeaning: 'to keep asking firmly for something after it was refused or questioned.',
-        hindiMeaning: 'ज़िद करना, आग्रह करना',
-        nuance: 'Insist is not loud, it is persistent — it also means refusing to accept a denial, as in “she insisted on paying”.',
-        examples: [
-          'I insisted on taking the earlier train.',
-          'Her mother insisted that we stay for dinner.',
-        ],
+        note: 'to keep saying something is necessary, despite objections.',
       },
     ],
     dialogue: [
-      { speaker: 'You', line: 'I asked the office for one day’s leave.' },
-      { speaker: 'Colleague', line: 'And?' },
-      { speaker: 'You', line: 'They said the register is closed. I requested it in writing instead.' },
-      { speaker: 'Colleague', line: 'Do not demand it. Just insist politely and come back tomorrow.' },
+      {
+        speaker: 'You',
+        line: 'I would like to request the signed contract by Friday, if that is possible.',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'I can send it, but the signatory is away.',
+      },
+      {
+        speaker: 'You',
+        line: 'Thank you. Could you tell me when they are back?',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'Monday. I will request their approval today.',
+      },
     ],
-    challenge:
-      'Think of one thing you want from three different people — a friend, a senior, and an office clerk. Say the same want three times in a row, changing only the strength of the verb, and hear which one sounds right.',
+    challenge: 'Write one request for something you need at work, in two sentences: what you are asking for, and by when. Say it aloud as you would in a meeting.',
   },
   {
     level: 'A2-B1',
     id: 'argue-debate-quarrel-discuss',
-    focus: 'You discuss to understand, debate to win fairly, argue when positions harden, and quarrel when the person becomes the subject.',
-    situation: 'The physics and chemistry teachers both want the same period with the same class, and the staff room is getting louder.',
-    words: [
+    focus: 'Discuss means talking a topic through with others, usually to understand it or to decide. It takes no preposition.',
+    situation: 'A change to working hours affects your team, and your manager wants your view by Friday. You want to propose a time to talk it through, without starting a fight.',
+    word: {
+      word: 'discuss',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'dis-KUSS. Stress on the second syllable.',
+      englishMeaning: 'to talk about something in order to understand it or decide together.',
+      hindiMeaning: 'चर्चा करना, विचार-विमर्श करना',
+      nuance: 'Discussion has no winner — it is the calm verb, and it always takes a topic (discuss the syllabus), never “discuss about”.',
+      examples: [
+        'We discussed the timetable over tea.',
+        'Let us discuss this after the assembly, not now.',
+        'The board will discuss the budget at its meeting on Monday.',
+      ],
+      collocations: [
+        'discuss the options',
+        'discuss with someone',
+        'a point to discuss',
+        'open to discussion',
+      ],
+      commonMistake: '“We discussed about the timetable” → “We discussed the timetable.” Discuss takes no “about”.',
+      differsFrom: 'Argue is about winning a disagreement; discuss is about understanding and deciding together.',
+      register: 'Neutral and professional. “Can we discuss this?” is a calm way to open a difficult conversation.',
+    },
+    relatedWords: [
       {
-        word: 'discuss',
-        englishMeaning: 'to talk about something in order to understand it or decide together.',
-        hindiMeaning: 'चर्चा करना, विचार-विमर्श करना',
-        nuance: 'Discussion has no winner — it is the calm verb, and it always takes a topic (discuss the syllabus), never “discuss about”.',
-        examples: [
-          'We discussed the timetable over tea.',
-          'Let us discuss this after the assembly, not now.',
-        ],
+        word: 'argue',
+        note: 'to disagree forcefully, each side defending a position.',
       },
       {
         word: 'debate',
-        englishMeaning: 'to argue about a subject in an organised way, with sides.',
-        hindiMeaning: 'वाद-विवाद करना',
-        nuance: 'Debate implies rules, sides and evidence — the point is to test the reasons, and it can end with agreement to disagree.',
-        examples: [
-          'The two houses debated the question of school timings.',
-          'We debated whether homework should be reduced.',
-        ],
-      },
-      {
-        word: 'argue',
-        englishMeaning: 'to give reasons for one position, usually against someone, with growing heat.',
-        hindiMeaning: 'बहस करना, तर्क देना',
-        nuance: 'Argue is about positions hardening: argue “with” a person, argue “for” or “against” an idea. It can still be reasonable — until it is not.',
-        examples: [
-          'They argued for twenty minutes about the same paragraph.',
-          'I argued for the earlier slot, and lost.',
-        ],
+        note: 'a structured discussion, often with opposing sides.',
       },
       {
         word: 'quarrel',
-        englishMeaning: 'to fight with words, when the anger is about the person, not just the point.',
-        hindiMeaning: 'झगड़ना, लड़ना-झगड़ना',
-        nuance: 'Quarrel drops the argument and attacks the relationship. It takes “with” a person: quarrel with a colleague, not with a proposal.',
-        examples: [
-          'They quarrelled over a chair and forgot the timetable entirely.',
-          'Do not quarrel with the clerk — you will need her tomorrow.',
-        ],
+        note: 'a petty or bitter argument between people.',
       },
     ],
     dialogue: [
-      { speaker: 'Physics teacher', line: 'We discussed this in the meeting — Monday fourth period is mine.' },
-      { speaker: 'Chemistry teacher', line: 'I am not debating who wants it more.' },
-      { speaker: 'Physics teacher', line: 'Then let us not argue in the corridor either.' },
-      { speaker: 'Chemistry teacher', line: 'Agreed. Let us sit with the timetable and end this without a quarrel.' },
+      {
+        speaker: 'Manager',
+        line: 'What do you think of the new hours?',
+      },
+      {
+        speaker: 'You',
+        line: 'I would like to discuss them with the team first.',
+      },
+      {
+        speaker: 'Manager',
+        line: 'Fair. When can you discuss it?',
+      },
+      {
+        speaker: 'You',
+        line: 'Tomorrow at lunch. We can discuss the pros and cons, and I will send you one summary.',
+      },
     ],
-    challenge:
-      'Recall one disagreement from the last fortnight and describe it four times — once as a discussion, once as a debate, once as an argument, once as a quarrel — and notice how differently the same events sound.',
+    challenge: 'Describe one topic you would like to discuss with someone at work, in three sentences. Say what you hope to decide at the end of the discussion.',
   },
   {
     level: 'A2-B1',
     id: 'think-feel-believe-suppose',
-    focus: 'Think is reasoned, feel is instinctive, believe is settled, and suppose is provisional — the strength of the same opinion, in four sizes.',
-    situation: 'A parent-teacher meeting, where you must give an honest opinion about a child’s ability without sounding either certain or careless.',
-    words: [
+    focus: 'Believe means holding something to be true, with some confidence, even when you cannot prove it.',
+    situation: 'A parent asks whether their child can do well in the board exam. You do not have all the evidence yet, so you want to say what you believe without making a promise.',
+    word: {
+      word: 'believe',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'bi-LEEV. The vowel is long, as in “see”.',
+      englishMeaning: 'to accept something as true, usually after thought or over time.',
+      hindiMeaning: 'मानना, विश्वास करना',
+      nuance: 'Believe is settled and firmer than think. It also carries expectation about another person: “I believe in him” is not the same as “I believe he will pass”.',
+      examples: [
+        'I believe every child in this class can do mathematics.',
+        'I believe the inspection will pass without a remark.',
+        'Many analysts believe the market will recover by spring, but the data is still mixed.',
+      ],
+      collocations: [
+        'believe that',
+        'believe in someone',
+        'strongly believe',
+        'I believe so',
+      ],
+      idioms: [
+        'believe it or not',
+      ],
+      commonMistake: '“I believe in that the plan will work” → “I believe that the plan will work.” “Believe in” is for people or ideas you trust, not for claims.',
+      differsFrom: 'Think is reasoning; feel is instinct; believe is holding something true with some confidence.',
+      register: 'Neutral. “I believe” softens a claim politely in meetings; “I know” is stronger and needs evidence.',
+    },
+    relatedWords: [
       {
         word: 'think',
-        englishMeaning: 'to have an opinion formed by considering the facts.',
-        hindiMeaning: 'सोचना, (मत) लगना',
-        nuance: 'Think is the safe, general verb for a considered view — and it also means the act of using your mind. It is the standard opener for opinions.',
-        examples: [
-          'I think she needs more time with written work.',
-          'I think the new seating helps him concentrate.',
-        ],
+        note: 'to have an opinion, or to reason it through; often less certain.',
       },
       {
         word: 'feel',
-        englishMeaning: 'to have an opinion based on instinct or emotion, not on evidence.',
-        hindiMeaning: 'लगना, महसूस करना',
-        nuance: 'Feel is softer and more personal — it signals that you cannot prove it, and it also names real physical and emotional states.',
-        examples: [
-          'I feel he is quieter this term than last.',
-          'I feel the pressure of the board exam is affecting her sleep.',
-        ],
-      },
-      {
-        word: 'believe',
-        englishMeaning: 'to accept something as true, usually after thought or over time.',
-        hindiMeaning: 'मानना, विश्वास करना',
-        nuance: 'Believe is settled and firmer than think. It also carries expectation about another person: “I believe in him” is not the same as “I believe he will pass”.',
-        examples: [
-          'I believe every child in this class can do mathematics.',
-          'I believe the inspection will pass without a remark.',
-        ],
+        note: 'to have a sense or instinct, sometimes without evidence.',
       },
       {
         word: 'suppose',
-        englishMeaning: 'to assume something is true for now, without being sure.',
-        hindiMeaning: 'मान लेना, अनुमान लगाना',
-        nuance: 'Suppose is explicitly provisional — the weakest of the four, and the honest word when you are filling a gap in what you know.',
-        examples: [
-          'I suppose he was absent because of the fever.',
-          'Suppose we give him one more week before deciding.',
-        ],
+        note: 'to assume something is probably true; a light, tentative word.',
       },
     ],
     dialogue: [
-      { speaker: 'Parent', line: 'Do you think he can improve before the boards?' },
-      { speaker: 'Teacher', line: 'I believe he can. I feel the problem is confidence, not ability.' },
-      { speaker: 'Parent', line: 'And the syllabus?' },
-      { speaker: 'Teacher', line: 'I think we can finish it. I suppose we may need two extra periods a week — I will confirm.' },
+      {
+        speaker: 'Parent',
+        line: 'Do you believe my son can pass the board exam?',
+      },
+      {
+        speaker: 'You',
+        line: 'I believe he can, if he keeps practising the weak topics.',
+      },
+      {
+        speaker: 'Parent',
+        line: 'And if he does not?',
+      },
+      {
+        speaker: 'You',
+        line: 'Then I believe we should change the plan now, not in March.',
+      },
     ],
-    challenge:
-      'Give one opinion about something happening in your school today, then say it four times using think, feel, believe and suppose — and hear exactly how much certainty each version claims.',
+    challenge: 'Say what you believe about one thing in your work or studies, in two sentences: the claim, then the evidence that would change your mind.',
   },
   {
     level: 'A2-B1',
     id: 'advice-advise-suggest-recommend',
-    focus: 'Advice is the noun, advise the verb; suggest offers an option, recommend puts your name behind it.',
-    situation: 'A former student calls to ask which stream to take in class eleven, and you want to help without overselling your own opinion.',
-    words: [
-      {
-        word: 'advice',
-        englishMeaning: 'an opinion offered to someone about what they should do — a noun.',
-        hindiMeaning: 'सलाह, परामर्श',
-        nuance: 'Advice is uncountable: it is “a piece of advice”, never “an advice”. The verb form has a different letter — advise.',
-        examples: [
-          'That is useful advice, and I will follow it.',
-          'He takes advice from everyone and follows none of it.',
-        ],
-      },
+    focus: 'Advice is an uncountable noun: you give advice, ask for advice, or take a piece of advice.',
+    situation: 'You are starting a new job and want to ask a senior colleague for guidance, without seeming unsure of yourself.',
+    word: {
+      word: 'advice',
+      partOfSpeech: 'noun',
+      tone: 'neutral',
+      pronunciation: 'ad-VICE. The noun ends in a soft “s”; the verb advise ends in a “z” sound.',
+      englishMeaning: 'an opinion offered to someone about what they should do — a noun.',
+      hindiMeaning: 'सलाह, परामर्श',
+      nuance: 'Advice is uncountable: it is “a piece of advice”, never “an advice”. The verb form has a different letter — advise.',
+      examples: [
+        'That is useful advice, and I will follow it.',
+        'He takes advice from everyone and follows none of it.',
+        'Her advice on the budget saved us three weeks of argument.',
+      ],
+      collocations: [
+        'give advice',
+        'ask for advice',
+        'a piece of advice',
+        'take someone’s advice',
+      ],
+      commonMistake: '“An advice” or “advices” → “a piece of advice” or “some advice”. Advice is uncountable.',
+      differsFrom: 'Advice is the noun; advise is the verb. Do not write “advice you”.',
+      register: 'Neutral. “My advice is…” is direct; “If I were you…” is more informal.',
+    },
+    relatedWords: [
       {
         word: 'advise',
-        englishMeaning: 'to give someone your opinion about what they should do — the verb.',
-        hindiMeaning: 'सलाह देना',
-        nuance: 'Advise takes a person and a clause or action: advise someone to do something. In law and banking it also means to inform formally.',
-        examples: [
-          'I advised her to take mathematics with physics.',
-          'The doctor advised him to rest for a week.',
-        ],
+        note: 'the verb: to give advice, as in “I advise you to rest.”',
       },
       {
         word: 'suggest',
-        englishMeaning: 'to put forward an idea or option for consideration.',
-        hindiMeaning: 'सुझाव देना, प्रस्ताव रखना',
-        nuance: 'Suggest is the most open of the three — it hands over an option and expects the other person to decide. Use “suggest doing” or “suggest that…”.',
-        examples: [
-          'I suggested that he speak to two seniors first.',
-          'She suggested joining the evening batch.',
-        ],
+        note: 'to put an idea forward for someone to consider.',
       },
       {
         word: 'recommend',
-        englishMeaning: 'to suggest something as being good or suitable, from your own experience.',
-        hindiMeaning: 'सिफ़ारिश करना, सुझाना (भरोसे के साथ)',
-        nuance: 'Recommend puts your judgement behind the option — closer to “this is the one I would choose”, and it is what you write on a reference.',
-        examples: [
-          'I recommend the biology stream for her.',
-          'The principal recommended him for the teachers’ training programme.',
-        ],
+        note: 'to say that something is good, or what you think should be done.',
       },
     ],
     dialogue: [
-      { speaker: 'Student', line: 'Sir, can you suggest a stream for me?' },
-      { speaker: 'Teacher', line: 'Tell me two things you enjoy doing without being asked.' },
-      { speaker: 'Student', line: 'Physics experiments and explaining them to others.' },
-      { speaker: 'Teacher', line: 'Then I recommend science with physics. My advice is to speak to three working engineers before you decide.' },
+      {
+        speaker: 'You',
+        line: 'Could I ask you for some advice on the client report?',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'Of course. What do you need?',
+      },
+      {
+        speaker: 'You',
+        line: 'Your advice on how to structure the summary.',
+      },
+      {
+        speaker: 'Colleague',
+        line: 'Keep it short. And take the advice I gave you last month about the charts.',
+      },
     ],
-    challenge:
-      'Give one piece of guidance to a friend three times — first as advice, then as a suggestion, then as a recommendation — and notice how much of your own judgement each version carries.',
+    challenge: 'Ask someone for one piece of advice, out loud, using advice in the question. Then repeat the advice you received back, in your own words.',
   },
   {
     level: 'A2-B1',
     id: 'sorry-excuse-me-pardon-apologise',
-    focus: 'Excuse me gets attention, sorry is for a fault, pardon invites repetition, and apologise names the fault out loud.',
-    situation: 'You step on a colleague’s foot in a crowded staff room, and then arrive late to the principal’s meeting — two different words for two different moments.',
-    words: [
-      {
-        word: 'excuse me',
-        englishMeaning: 'a polite way to get attention, or to interrupt or pass someone.',
-        hindiMeaning: 'क्षमा करें, सुनिए ज़रा',
-        nuance: 'Excuse me is used “before” the trouble — to interrupt, to pass, to leave a table. It apologises for nothing yet.',
-        examples: [
-          'Excuse me, may I take this chair?',
-          'Excuse me — could you repeat the last line?',
-        ],
-      },
+    focus: 'Apologise is the fuller form of saying sorry: you name what you did, and you mean it.',
+    situation: 'You missed a call with a client because of a scheduling error. You need to say sorry clearly, and take responsibility without over-explaining.',
+    word: {
+      word: 'apologise',
+      partOfSpeech: 'verb',
+      tone: 'neutral',
+      pronunciation: 'uh-POL-uh-jize. Stress on the second syllable. (American spelling: “apologize”.)',
+      englishMeaning: 'to say clearly that you are sorry for a specific fault (British spelling).',
+      hindiMeaning: 'क्षमा माँगना, माफ़ी माँगना',
+      nuance: 'Apologise is deliberate and complete: apologise “to” a person “for” something. It takes about ten words, which is exactly why it means more.',
+      examples: [
+        'I apologised to the class for the delay.',
+        'He apologised for the remark in front of everyone.',
+        'I apologise for the late reply; the report needed a final check before I could send it.',
+      ],
+      collocations: [
+        'apologise for',
+        'apologise to someone',
+        'sincerely apologise',
+        'owe someone an apology',
+      ],
+      commonMistake: '“I apologise you” → “I apologise to you.” And “I apologise for the mistake”: the thing you did comes after “for”.',
+      differsFrom: 'Sorry is a short expression of regret; apologise is the fuller act of owning something specific.',
+      register: 'Neutral to formal. In writing, “I apologise for…” is standard; “Sorry about that” suits everyday talk.',
+    },
+    relatedWords: [
       {
         word: 'sorry',
-        englishMeaning: 'an expression of regret for something you did, or sympathy for someone’s trouble.',
-        hindiMeaning: 'माफ़ कीजिए, खेद है',
-        nuance: 'Sorry is the short, immediate form — used the moment you bump into someone, and also for sympathy (“I am sorry to hear that”) where no fault exists.',
-        examples: [
-          'Sorry — I did not see your bag.',
-          'I am sorry to hear about the transfer.',
-        ],
+        note: 'the everyday word for regret; it can stand on its own.',
+      },
+      {
+        word: 'excuse me',
+        note: 'to get attention, or to pass someone. It is not an apology.',
       },
       {
         word: 'pardon',
-        englishMeaning: 'a request to repeat what was said, or the formal act of forgiving.',
-        hindiMeaning: 'क्षमा, दोबारा कहिए',
-        nuance: 'As a question, “Pardon?” simply asks for a repeat — clearer on the phone than “What?”. As a noun, a pardon is granted by authority, not by a colleague.',
-        examples: [
-          'Pardon? The line broke for a second.',
-          'The government granted him a pardon.',
-        ],
-      },
-      {
-        word: 'apologise',
-        englishMeaning: 'to say clearly that you are sorry for a specific fault (British spelling).',
-        hindiMeaning: 'क्षमा माँगना, माफ़ी माँगना',
-        nuance: 'Apologise is deliberate and complete: apologise “to” a person “for” something. It takes about ten words, which is exactly why it means more.',
-        examples: [
-          'I apologised to the class for the delay.',
-          'He apologised for the remark in front of everyone.',
-        ],
+        note: 'to ask someone to repeat, or to forgive. Polite in conversation.',
       },
     ],
     dialogue: [
-      { speaker: 'You', line: 'Excuse me — may I come through?' },
-      { speaker: 'Colleague', line: 'Careful, that was my foot!' },
-      { speaker: 'You', line: 'Sorry! That was completely my fault.' },
-      { speaker: 'Principal', line: 'You are five minutes late.' },
-      { speaker: 'You', line: 'Sir, I apologise for the delay. There was a traffic block on the canal road.' },
+      {
+        speaker: 'You',
+        line: 'I want to apologise for missing our call this morning.',
+      },
+      {
+        speaker: 'Client',
+        line: 'It happened. What is the new time?',
+      },
+      {
+        speaker: 'You',
+        line: 'Two o’clock. I apologise again for the short notice.',
+      },
+      {
+        speaker: 'Client',
+        line: 'Fine. It is the second time this month, though.',
+      },
     ],
-    challenge:
-      'Replay three moments from today out loud: interrupting someone politely, bumping into something, and reaching somewhere late — using excuse me, sorry and a full apology with “to” and “for”, in that order.',
+    challenge: 'Apologise for something small, out loud, in two sentences: say what you did, and what you will do differently. Do not use “sorry” on its own.',
   },
 ];

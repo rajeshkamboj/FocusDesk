@@ -134,7 +134,7 @@ export function candidateFromScience(card: 'chemistry' | 'physics' | 'biology', 
 }
 
 export function candidateFromSpeakBetter(lesson: SpeakBetterLesson): ContentCandidate<SpeakBetterLesson> {
-  const subjects = [`lesson:${lesson.id}`, ...lesson.words.map((word) => `word:${word.word}`)];
+  const subjects = [`lesson:${lesson.id}`, `word:${lesson.word.word}`];
   return finalize({
     card: 'speak-better',
     id: lesson.id,
@@ -142,7 +142,7 @@ export function candidateFromSpeakBetter(lesson: SpeakBetterLesson): ContentCand
     text: [
       lesson.focus,
       lesson.situation,
-      lesson.words.map((word) => `${word.word}: ${word.englishMeaning} ${word.nuance} ${word.examples.join(' ')}`).join('\n'),
+      `${lesson.word.word}: ${lesson.word.englishMeaning} ${lesson.word.nuance} ${lesson.word.examples.join(' ')}`,
       lesson.dialogue.map((line) => line.line).join('\n'),
       lesson.challenge,
     ].join('\n'),

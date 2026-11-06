@@ -1218,6 +1218,8 @@ async function main() {
         ['unlabelled archive event', { ...payload, history: { date: 'January 1', year: 1900, title: 'T', explanation: 'E', significance: 'S', forThisDate: false } }],
         ['missing history', { ...payload, history: null }],
         ['javascript: link', { ...payload, aiWorld: [{ title: 'T', source: 'S', url: 'javascript:alert(1)', summary: '', publishedAt: new Date().toUTCString(), origin: 'live' as const }] }],
+        ['a Speak Better lesson with a list of words', { ...payload, speakBetter: { ...payload.speakBetter, words: [payload.speakBetter.word, payload.speakBetter.word] } as never }],
+        ['a Speak Better lesson with no primary word', { ...payload, speakBetter: { ...payload.speakBetter, word: undefined } as never }],
       ] as const) {
         assert.ok(invalidDailyFields(broken as typeof payload).length > 0, `${name} passed validation`);
       }

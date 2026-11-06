@@ -41,22 +41,24 @@ export function bandOf(lesson: SpeakBetterLesson): SpeakBetterLevel {
   return lesson.level ?? 'A2-B1';
 }
 
-/** Known words, by lesson id, from a progress ledger. */
-export function knownWordsByLesson(entries: readonly SpeakBetterProgressEntry[]): Map<string, Set<string>> {
-  const map = new Map<string, Set<string>>();
+/**
+ * Every word the reader has marked known, across all lessons.
+ *
+ * Mastery belongs to the word, not to the lesson it happened to appear in: if
+ * the reader knows “listen” from one lesson, a later lesson that teaches “listen”
+ * is not new to them.
+ */
+export function knownWords(entries: readonly SpeakBetterProgressEntry[]): Set<string> {
+  const set = new Set<string>();
   for (const entry of entries) {
-    if (entry.state !== 'known') continue;
-    const set = map.get(entry.lessonId) ?? new Set<string>();
-    set.add(entry.word.trim().toLowerCase());
-    map.set(entry.lessonId, set);
+    if (entry.state === 'known') set.add(entry.word.trim().toLowerCase());
   }
-  return map;
+  return set;
 }
 
-/** How many of a lesson's words the reader has not yet marked known. */
-export function newWordCount(lesson: SpeakBetterLesson, known: Map<string, Set<string>>): number {
-  const knownForLesson = known.get(lesson.id) ?? new Set<string>();
-  return lesson.words.filter((word) => !knownForLesson.has(word.word.trim().toLowerCase())).length;
+/** True when the lesson's one primary word is already known to the reader. */
+export function isMastered(lesson: SpeakBetterLesson, known: ReadonlySet<string>): boolean {
+  return known.has(lesson.word.word.trim().toLowerCase());
 }
 
 /** A stable ordering key for (date, lesson), so the same day always agrees. */
@@ -130,11 +132,10 @@ export function selectDailyLesson(
 /**
  * The browser's refinement of the published lesson.
  *
- * It only steps in when the published lesson would repeat words the reader has
- * already marked as known. In that case it picks the best alternative lesson for
- * the same date whose words are not all known, preferring the highest band the
- * reader has not finished. If no better lesson exists, the published one is kept —
- * the card never swaps content for no reason.
+ * It only steps in when the published lesson's primary word is one the reader has
+ * already marked as known, anywhere in their progress. It then picks the next
+ * alternative for the same date whose word is still new. If none exists, the
+ * published lesson is kept — the card never swaps content for no reason.
  */
 export function refineForReader(
   published: SpeakBetterLesson,
@@ -142,32 +143,27 @@ export function refineForReader(
   progressEntries: readonly SpeakBetterProgressEntry[],
   date: string,
 ): { lesson: SpeakBetterLesson; replaced: boolean; reason?: string } {
-  const known = knownWordsByLesson(progressEntries);
-  const publishedNew = newWordCount(published, known);
-  if (publishedNew > 0) return { lesson: published, replaced: false };
+  const known = knownWords(progressEntries);
+  if (!isMastered(published, known)) return { lesson: published, replaced: false };
 
   const alternatives = curriculum
     .filter((lesson) => lesson.id !== published.id)
     .filter((lesson) => DAILY_BANDS.includes(bandOf(lesson)))
-    .map((lesson) => ({ lesson, fresh: newWordCount(lesson, known) }))
-    .filter((entry) => entry.fresh > 0)
-    .sort((left, right) => {
-      if (left.fresh !== right.fresh) return right.fresh - left.fresh;
-      return dailyScore(date, left.lesson.id) - dailyScore(date, right.lesson.id) || left.lesson.id.localeCompare(right.lesson.id);
-    });
+    .filter((lesson) => !isMastered(lesson, known))
+    .sort((left, right) => dailyScore(date, left.id) - dailyScore(date, right.id) || left.id.localeCompare(right.id));
 
-  const replacement = alternatives[0]?.lesson;
+  const replacement = alternatives[0];
   if (!replacement) {
     return {
       lesson: published,
       replaced: false,
-      reason: 'Every word in today’s lesson is already marked known; no unseen alternative is available at this level yet.',
+      reason: 'The word in today’s lesson is already marked known, and no unseen alternative is available at this level yet.',
     };
   }
   return {
     lesson: replacement,
     replaced: true,
-    reason: 'Today’s published lesson was already known, so a lesson with new words is shown instead.',
+    reason: 'Today’s word is already marked known, so a lesson with a new word is shown instead.',
   };
 }
 

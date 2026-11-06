@@ -53,7 +53,9 @@ For each priority slot (`sikh-history`, then `indian-history`, then `world-histo
    - On February 29 of a leap year (`isIsoLeapYear(year) === true`), verified `02-29` events match with `forThisDate: true`.
    - On February 28 of a non-leap year (`isIsoLeapYear(year) === false`), `02-29` events remain reachable with `forThisDate: false`, `dateMatch: 'leap-day-observed'`, and an explicit leap-year note.
    - Impossible dates (`02-29` in non-leap years, `02-30`, `04-31`) are rejected at parse and validation boundaries.
+   - Leap-day observations on 28 February are drawn from curated entries only (see rule 5).
 5. **Honest Archive Fallback (`forThisDate: false`)**: If no verified anniversary exists for a slot on that date, a curated historical milestone for that category is surfaced with `"From the archive — not an event of this date."` rather than fabricating or guessing a date.
+   - **Only curated entries may carry `forThisDate: false`.** A live or reservoir record has a real date of its own. It is published only when it matches the publication day. The publish validator (`invalidDailyFields`) refuses any `forThisDate: false` entry whose `origin` is not `curated`, and the selector applies the same rule, so an unverified live record is never chosen for an archive or leap-day slot. Regression checks: `npm run curiosity:history`.
 6. **Scholarly Nuance for Sikh History**: Entries involving Bikrami, Julian, Gregorian, Nanakshahi, or Janamsakhi textual variations preserve explicit `datePrecision` (`'exact' | 'month-year' | 'year' | 'approximate' | 'disputed'`) and rendered `calendarNote` explanations rather than flattening scholarly or calendar differences into single uncontextualized assertions.
 
 ---

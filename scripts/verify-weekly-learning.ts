@@ -7,15 +7,21 @@
  *
  * WHAT IS PROVEN HERE
  *   - the pick is identical on all seven days of a week (the seven-day promise);
- *   - it changes on the Monday boundary;
+ *   - it stays identical after *every* status change — Completed, In Progress, Not
+ *     Relevant and Save for Later — because a decision must not re-pick the week;
+ *   - it changes only on the Monday boundary, and that boundary is Asia/Kolkata;
  *   - consecutive weeks change the project as well as the task;
- *   - a completed assignment is not offered again while anything unsettled remains;
- *   - status and save-for-later are independent decisions;
+ *   - status and save-for-later are independent decisions, and saved assignments
+ *     stay reachable after the week rotates;
  *   - a no-op click does not churn the timestamp;
- *   - week arithmetic is Monday-based and timezone-independent.
+ *   - `settings.weeklyLearning` survives normalization, so a decision written to
+ *     local storage is still there when the store is read back (the defect this
+ *     section was extended for: the normalizer rebuilt `settings` from three
+ *     sections and silently dropped the fourth on every read).
  *
- * WHAT IS NOT PROVEN HERE: rendering. The card is a thin shell over these functions,
- * and the visual result needs a browser.
+ * WHAT IS NOT PROVEN HERE: rendering, and the LocalRepository round trip through a
+ * real browser. The card is a thin shell over these functions, the store is
+ * asserted at its shape boundary (normalize), and the visual result needs a browser.
  */
 
 import {
@@ -29,6 +35,8 @@ import {
   weekIndexOf,
   weekStartKey,
 } from '../lib/learnings-weekly';
+import { normalizeAppData } from '../lib/store/normalize';
+import type { WeeklyLearningRecord } from '../lib/types';
 
 let checks = 0;
 
@@ -106,34 +114,151 @@ check(
 );
 
 console.log('');
-console.log('Decisions');
+console.log('A decision never changes the week');
 const base = selectWeeklyAssignment({ date: noonIst(monday) });
-let records = applyWeeklyDecision({}, base.assignment.id, { status: 'in-progress' });
-check('a status is stored under the assignment id', records[base.assignment.id]?.status === 'in-progress');
-records = applyWeeklyDecision(records, base.assignment.id, { savedForLater: true });
-check('saving does not clear the status', records[base.assignment.id]?.status === 'in-progress');
-check('saving sets the flag', records[base.assignment.id]?.savedForLater === true);
-records = applyWeeklyDecision(records, base.assignment.id, { status: 'completed' });
-check('completing does not clear the save flag', records[base.assignment.id]?.savedForLater === true);
-check('the completed assignment is still listed as saved', savedAssignments(records).length === 1);
+const STATUSES = ['not-started', 'in-progress', 'completed', 'not-relevant'] as const;
 
-const laterPick = selectWeeklyAssignment({ date: noonIst(monday), records });
+for (const status of STATUSES) {
+  const decided = applyWeeklyDecision({}, base.assignment.id, { status });
+  const picked = selectWeeklyAssignment({ date: noonIst(monday), records: decided });
+  check(
+    `a “${status}” decision keeps the same assignment`,
+    picked.assignment.id === base.assignment.id,
+    `${picked.assignment.id} vs ${base.assignment.id}`,
+  );
+}
+
+const savedOnly = applyWeeklyDecision({}, base.assignment.id, { savedForLater: true });
 check(
-  'a completed assignment is not offered again in the same week',
-  laterPick.assignment.id !== base.assignment.id,
-  laterPick.assignment.id,
+  'Save for Later keeps the same assignment',
+  selectWeeklyAssignment({ date: noonIst(monday), records: savedOnly }).assignment.id === base.assignment.id,
 );
 
-const stamped = records[base.assignment.id]!.updatedAt;
-const unchanged = applyWeeklyDecision(records, base.assignment.id, { status: 'completed' });
+const completedAndSaved = applyWeeklyDecision(savedOnly, base.assignment.id, { status: 'completed' });
+check('status and save-for-later are independent on one record', completedAndSaved[base.assignment.id]?.savedForLater === true && completedAndSaved[base.assignment.id]?.status === 'completed');
+check(
+  'a completed-and-saved assignment is still the week’s assignment',
+  selectWeeklyAssignment({ date: noonIst(monday), records: completedAndSaved }).assignment.id === base.assignment.id,
+);
+
+const stamped = completedAndSaved[base.assignment.id]!.updatedAt;
+const unchanged = applyWeeklyDecision(completedAndSaved, base.assignment.id, { status: 'completed' });
 check('a no-op decision keeps the original timestamp', unchanged[base.assignment.id]?.updatedAt === stamped);
 
-let allSettled: Record<string, { status: 'completed'; savedForLater: boolean; updatedAt: string }> = {};
+let everythingDecided: Record<string, WeeklyLearningRecord> = {};
 for (const assignment of WEEKLY_ASSIGNMENTS) {
-  allSettled = applyWeeklyDecision(allSettled, assignment.id, { status: 'completed' }) as typeof allSettled;
+  everythingDecided = applyWeeklyDecision(everythingDecided, assignment.id, { status: 'completed', savedForLater: true });
 }
-const recycled = selectWeeklyAssignment({ date: noonIst(monday), records: allSettled });
-check('when everything is settled the card says so instead of inventing one', recycled.recycled === true);
+check(
+  'a week where every assignment is decided still has one assignment',
+  selectWeeklyAssignment({ date: noonIst('2026-11-15'), records: everythingDecided }).assignment.id === base.assignment.id,
+);
+check(
+  'every saved assignment stays reachable while the week is current',
+  savedAssignments(everythingDecided).length === WEEKLY_ASSIGNMENTS.length,
+);
+
+console.log('');
+console.log('Only a new week re-picks');
+const nextMonday = selectWeeklyAssignment({ date: noonIst('2026-11-16'), records: everythingDecided });
+check('the next Monday picks a different assignment even with a fully decided week', nextMonday.assignment.id !== base.assignment.id, nextMonday.assignment.id);
+const savedAfterRotation = savedAssignments(everythingDecided);
+check(
+  'the assignments saved in the old week are still listed after rotation',
+  savedAfterRotation.some((assignment) => assignment.id === base.assignment.id),
+);
+
+// 2026-11-15T18:29:00Z is Sunday 23:59 IST; 18:30Z is Monday 00:00 IST.
+const sundayLastMinute = new Date('2026-11-15T18:29:00.000Z');
+const mondayFirstMinute = new Date('2026-11-15T18:30:00.000Z');
+check(
+  'the Asia/Kolkata Monday boundary is where the week turns',
+  weekStartKey(sundayLastMinute) === '2026-11-09' && weekStartKey(mondayFirstMinute) === '2026-11-16',
+  `${weekStartKey(sundayLastMinute)} / ${weekStartKey(mondayFirstMinute)}`,
+);
+check(
+  'the assignment changes exactly at that minute',
+  selectWeeklyAssignment({ date: sundayLastMinute }).assignment.id !==
+    selectWeeklyAssignment({ date: mondayFirstMinute }).assignment.id,
+);
+
+const weekLong = new Set(
+  weekDays(monday).map(
+    (day) => selectWeeklyAssignment({ date: noonIst(day), records: everythingDecided }).assignment.id,
+  ),
+);
+check('all seven days still agree after decisions were made', weekLong.size === 1, [...weekLong].join(', '));
+
+console.log('');
+console.log('A saved decision survives the settings normalizer');
+const oneDecision = applyWeeklyDecision({}, base.assignment.id, { status: 'completed', savedForLater: true }, '2026-11-09T06:30:00.000Z');
+const reloaded = normalizeAppData({ settings: { weeklyLearning: { records: oneDecision } } });
+check(
+  'the status survives a save-and-reload',
+  reloaded.settings.weeklyLearning?.records[base.assignment.id]?.status === 'completed',
+  JSON.stringify(reloaded.settings.weeklyLearning?.records[base.assignment.id]),
+);
+check(
+  'the save-for-later flag survives with it',
+  reloaded.settings.weeklyLearning?.records[base.assignment.id]?.savedForLater === true,
+);
+check(
+  'the timestamp survives',
+  reloaded.settings.weeklyLearning?.records[base.assignment.id]?.updatedAt === '2026-11-09T06:30:00.000Z',
+);
+check(
+  'the reloaded records are exactly what was written',
+  JSON.stringify(reloaded.settings.weeklyLearning?.records) === JSON.stringify(oneDecision),
+);
+
+const oldBackup = normalizeAppData({ settings: { general: { theme: 'dark' }, notifications: {}, appearance: {} } });
+check(
+  'an older backup without the key normalizes to an empty record map',
+  JSON.stringify(oldBackup.settings.weeklyLearning) === JSON.stringify({ records: {} }),
+);
+check('an older backup keeps its other settings', (oldBackup.settings.general as { theme?: string }).theme === 'dark');
+check('a backup with no settings at all still normalizes', normalizeAppData({}).settings.weeklyLearning?.records !== undefined);
+check('a null settings object still normalizes', normalizeAppData({ settings: null }).settings.weeklyLearning?.records !== undefined);
+
+const damaged = normalizeAppData({
+  settings: {
+    weeklyLearning: {
+      records: {
+        'weekly-ok': { status: 'in-progress', savedForLater: true, updatedAt: '2026-11-09T06:30:00.000Z' },
+        'weekly-bad-status': { status: 'banana', savedForLater: false, updatedAt: '2026-11-09T06:30:00.000Z' },
+        'weekly-bad-date': { status: 'completed', savedForLater: false, updatedAt: 'not a date' },
+        'weekly-not-an-object': 'nope',
+        '': { status: 'completed', savedForLater: false, updatedAt: '2026-11-09T06:30:00.000Z' },
+      },
+    },
+  },
+});
+const damagedRecords = damaged.settings.weeklyLearning?.records ?? {};
+check('a valid record in a damaged map is kept', damagedRecords['weekly-ok']?.status === 'in-progress');
+check('an unknown status becomes not-started rather than throwing', damagedRecords['weekly-bad-status']?.status === 'not-started');
+check('an unparseable timestamp becomes empty rather than printing Invalid Date', damagedRecords['weekly-bad-date']?.updatedAt === '');
+check('a non-object record is dropped', !('weekly-not-an-object' in damagedRecords));
+check('an empty id is dropped', !('' in damagedRecords));
+check(
+  'normalizing twice changes nothing',
+  JSON.stringify(normalizeAppData(damaged)) === JSON.stringify(damaged),
+);
+
+const secondWeek = normalizeAppData({
+  settings: {
+    weeklyLearning: {
+      records: applyWeeklyDecision({}, nextMonday.assignment.id, { status: 'in-progress', savedForLater: true }, '2026-11-16T06:30:00.000Z'),
+    },
+  },
+});
+check(
+  'a record for another week is preserved too, not pruned at read time',
+  secondWeek.settings.weeklyLearning?.records[nextMonday.assignment.id]?.status === 'in-progress',
+);
+check(
+  'saved assignments are reachable from the normalized records',
+  savedAssignments(secondWeek.settings.weeklyLearning?.records ?? {}).some((assignment) => assignment.id === nextMonday.assignment.id),
+);
 
 console.log('');
 if (process.exitCode) {

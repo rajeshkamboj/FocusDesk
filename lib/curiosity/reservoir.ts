@@ -536,6 +536,20 @@ export function curatedReservoirDrafts(): CandidateDraft[] {
     }
   }
 
+  /*
+    A reservoir description is a summary, not the card. The 1800-character gate is
+    right for a candidate row, but the long-form historical entries run past it on
+    purpose — the reader gets the full story from `mythCharacters` at publish time,
+    not from this row. Trimming here keeps the gate honest instead of widening it or
+    cutting the prose a reader is meant to see.
+  */
+  const summaryFor = (text: string): string => {
+    if (text.length <= 1780) return text;
+    const cut = text.slice(0, 1780);
+    const boundary = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+    return `${boundary > 400 ? cut.slice(0, boundary + 1) : cut}…`;
+  };
+
   for (const m of mythCharacters) {
     drafts.push({
       id: m.id,
@@ -544,8 +558,8 @@ export function curatedReservoirDrafts(): CandidateDraft[] {
       category: 'mythology',
       subcategory: m.tradition,
       title: m.name,
-      description: m.story,
-      significance: m.analysis,
+      description: summaryFor(m.story),
+      significance: summaryFor(m.analysis),
       sourceName: m.sources[0] ?? 'Wikipedia',
       attribution: `Tradition sources: ${m.sources.slice(0, 2).join('; ')} · Reference via Wikipedia (CC BY-SA 4.0).`,
       license: 'CC BY-SA 4.0',

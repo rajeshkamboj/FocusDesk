@@ -1,4 +1,4 @@
-import type { BookCandidate, CuriosityPoolEntry } from '../types';
+import type { BookCandidate, BookGenreMetadata, BestsellerEvidence, CuriosityPoolEntry } from '../types';
 
 /**
  * One Book — the pool of candidates the recommendation rotates through.
@@ -25,7 +25,7 @@ import type { BookCandidate, CuriosityPoolEntry } from '../types';
  * link, because a reader should land on the catalogue entry the card’s
  * publication data came from.
  */
-export const bookPool: CuriosityPoolEntry<BookCandidate>[] = [
+const authoredBookPool: CuriosityPoolEntry<BookCandidate>[] = [
   {
     id: 'book-design-of-everyday-things',
     category: 'book',
@@ -407,4 +407,779 @@ export const bookPool: CuriosityPoolEntry<BookCandidate>[] = [
       subjects: ['Time management', 'Philosophy of life', 'Success'],
     },
   },
+];
+
+
+/* ------------------------------------------------------------------ */
+/* Genre and bestseller evidence                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * WHAT CHANGED, AND WHAT DID NOT
+ *
+ * The authored shelf above is unchanged: same ids, same wording, same available
+ * dates, so every existing recommendation history still resolves. What is added is
+ * (a) a genre for each entry, and (b) — only where a credible record exists — a
+ * bestseller citation.
+ *
+ * THE EVIDENCE RULE
+ * A title may be printed as a bestseller only when `bestseller` names the body that
+ * recognised it. Twenty of the twenty-five entries above have no such record: they
+ * are excellent books that this repository cannot *verify* as bestsellers, so they
+ * stay in the pool, keep their history, and are simply not eligible for the card.
+ * Nothing was deleted and no claim was invented to keep them in rotation.
+ *
+ * WHERE THE RECORDS COME FROM
+ * The evidence below records the recognising list and, where it is known, the
+ * period. The exact week is deliberately left out when this repository does not
+ * hold it, and the note says so: an approximate citation is honest, a fabricated
+ * one is not. See `docs/book-bestseller-evidence.md` for the full list and its
+ * limits.
+ */
+const BOOK_METADATA: Record<string, BookGenreMetadata> = {
+  'book-range': {
+    genre: 'personal-development',
+    audience: 'Anyone deciding whether to specialise early or build breadth first.',
+    expect: 'Case studies from sport, science and music, and a direct argument against early specialisation.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '2019',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-thinking-fast-and-slow': {
+    genre: 'psychology',
+    audience: 'Readers who want the research behind everyday judgement errors.',
+    expect: 'Two systems of thinking, dozens of experiments, and a patient account of what they do and do not show.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '2011',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-short-history-of-nearly-everything': {
+    genre: 'popular-non-fiction',
+    audience: 'Curious adults who never studied science formally.',
+    expect: 'The history of the planet and of the people who worked it out, told with jokes and footnotes.',
+    bestseller: {
+      source: 'The Sunday Times',
+      kind: 'list-entry',
+      period: '2003',
+      note: 'Sunday Times bestseller; the exact position and week are not recorded in this repository.',
+    },
+  },
+  'book-sapiens': {
+    genre: 'history',
+    audience: 'Readers new to big-picture human history.',
+    expect: 'A sweeping argument from foraging bands to global empires, with confident claims worth arguing with.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '2015',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-guns-germs-and-steel': {
+    genre: 'history',
+    audience: 'Readers interested in why global power diverged, and comfortable with a contested thesis.',
+    expect: 'A geographical explanation of history that has been debated hard since publication.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '1997',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-factfulness': {
+    genre: 'popular-non-fiction',
+    audience: 'Readers who want their picture of the world corrected by data.',
+    expect: 'Ten instincts that distort how we read the news, each with a test you can apply immediately.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '2018',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-immortal-life-of-henrietta-lacks': {
+    genre: 'popular-non-fiction',
+    secondaryGenre: 'science',
+    audience: 'Readers interested in medicine, consent and the people behind research.',
+    expect: 'A family history and a science history braided together, with the ethics kept in view.',
+    bestseller: {
+      source: 'The New York Times',
+      list: 'Hardcover Nonfiction',
+      kind: 'list-entry',
+      period: '2010',
+      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+    },
+  },
+  'book-the-information': { genre: 'science' },
+  'book-make-it-stick': { genre: 'psychology' },
+  'book-designing-data-intensive-applications': { genre: 'technology' },
+  'book-the-pragmatic-programmer': { genre: 'technology' },
+  'book-code': { genre: 'technology' },
+  'book-eloquent-javascript': { genre: 'technology' },
+  'book-godel-escher-bach': { genre: 'philosophy' },
+  'book-seven-brief-lessons-on-physics': { genre: 'science' },
+  'book-what-is-life': { genre: 'science' },
+  'book-the-selfish-gene': { genre: 'science' },
+  'book-pedagogy-of-the-oppressed': { genre: 'philosophy' },
+  'book-how-to-solve-it': { genre: 'other' },
+  'book-on-writing-well': { genre: 'other' },
+  'book-thinking-in-systems': { genre: 'science' },
+  'book-death-and-life-of-american-cities': { genre: 'other' },
+  'book-art-of-learning': { genre: 'personal-development' },
+  'book-four-thousand-weeks': { genre: 'philosophy' },
+  'book-design-of-everyday-things': { genre: 'other' },
+};
+
+function nyTimes(
+  list: string,
+  period: string,
+  rank?: string,
+): BestsellerEvidence {
+  return {
+    source: 'The New York Times',
+    list,
+    ...(rank ? { rank } : {}),
+    kind: 'list-entry',
+    period,
+    note: `New York Times bestseller (${list}); the exact week is not recorded in this repository.`,
+  };
+}
+
+function sundayTimes(period: string, rank?: string): BestsellerEvidence {
+  return {
+    source: 'The Sunday Times',
+    ...(rank ? { rank } : {}),
+    kind: 'list-entry',
+    period,
+    note: 'Sunday Times bestseller; the exact position and week are not recorded in this repository.',
+  };
+}
+
+/**
+ * The genre shelf.
+ *
+ * Thirty titles across fifteen genres, every one carrying a named bestseller
+ * record. The synopsis and the reason are this repository's own words; the
+ * bestseller line is the citation and nothing else. Open Library still supplies —
+ * or declines to supply — the cover and publication metadata at publish time.
+ */
+const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
+  {
+    id: 'shelf-project-hail-mary',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['science fiction', 'first contact'],
+    item: {
+      title: 'Project Hail Mary',
+      author: 'Andy Weir',
+      genre: 'science-fiction',
+      firstPublished: 2021,
+      synopsis:
+        'A lone astronaut wakes with no memory of who he is and one job: work out why the sun is dimming, with a laboratory, a robot and a great deal of improvisation.',
+      why: 'The best modern example of problem-solving as narrative — every chapter is a constraint met with a calculation and a joke.',
+      audience: 'Readers who like engineering puzzles and do not need everything to be grim.',
+      expect: 'Hard science, a two-hander friendship, and a plot that runs on competence rather than coincidence.',
+      url: 'https://openlibrary.org/search?q=Project+Hail+Mary+Weir',
+      subjects: ['Science fiction', 'Space flight', 'Problem solving'],
+      bestseller: nyTimes('Hardcover Fiction', '2021', '#1'),
+    },
+  },
+  {
+    id: 'shelf-the-martian',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['science fiction', 'survival'],
+    item: {
+      title: 'The Martian',
+      author: 'Andy Weir',
+      genre: 'science-fiction',
+      firstPublished: 2014,
+      synopsis:
+        'An astronaut is left behind on Mars and has to keep himself alive with botany, chemistry and a log of everything that goes wrong.',
+      why: 'It makes competence gripping, and it is unusually honest about how much work survival takes.',
+      audience: 'Readers who enjoy procedural detail and dry humour.',
+      expect: 'A diary of fixes, failures and one very long wait.',
+      url: 'https://openlibrary.org/search?q=The+Martian+Weir',
+      subjects: ['Science fiction', 'Mars (Planet)', 'Survival'],
+      bestseller: nyTimes('Paperback Fiction', '2014'),
+    },
+  },
+  {
+    id: 'shelf-ready-player-one',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['science fiction', 'games'],
+    item: {
+      title: 'Ready Player One',
+      author: 'Ernest Cline',
+      genre: 'science-fiction',
+      firstPublished: 2011,
+      synopsis:
+        'A teenager hunts a fortune hidden inside a global virtual world, using an encyclopaedic knowledge of the 1980s.',
+      why: 'A fast, generous book about fandom and the economics of escape.',
+      audience: 'Readers who grew up with games and eighties films.',
+      expect: 'A treasure hunt, heavy nostalgia and a very readable pace.',
+      url: 'https://openlibrary.org/search?q=Ready+Player+One+Cline',
+      subjects: ['Science fiction', 'Virtual reality', 'Games'],
+      bestseller: nyTimes('Hardcover Fiction', '2011'),
+    },
+  },
+  {
+    id: 'shelf-circe',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['fantasy', 'mythology'],
+    item: {
+      title: 'Circe',
+      author: 'Madeline Miller',
+      genre: 'fantasy',
+      secondaryGenre: 'literary-fiction',
+      firstPublished: 2018,
+      synopsis:
+        'The witch of the Odyssey tells her own life — exile, transformation and a long argument with the gods about what a woman is allowed to be.',
+      why: 'It takes a minor myth and makes it a complete character study without losing the epic texture.',
+      audience: 'Readers who like mythology retold with psychological depth.',
+      expect: 'Quiet, precise prose and a slow accumulation of power.',
+      url: 'https://openlibrary.org/search?q=Circe+Madeline+Miller',
+      subjects: ['Fantasy fiction', 'Mythology, Greek', 'Women'],
+      bestseller: nyTimes('Hardcover Fiction', '2018'),
+    },
+  },
+  {
+    id: 'shelf-name-of-the-wind',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['fantasy', 'music'],
+    item: {
+      title: 'The Name of the Wind',
+      author: 'Patrick Rothfuss',
+      genre: 'fantasy',
+      firstPublished: 2007,
+      synopsis:
+        'A legendary magician tells his own story over three days, beginning with a childhood in a travelling troupe and an education paid for in grudges.',
+      why: 'One of the few fantasy novels where the prose itself is the pleasure.',
+      audience: 'Readers ready for a long, voice-driven series.',
+      expect: 'A frame narrative, a magic system built on sympathy, and a narrator who is not entirely trustworthy.',
+      url: 'https://openlibrary.org/search?q=The+Name+of+the+Wind+Rothfuss',
+      subjects: ['Fantasy fiction', 'Magic', 'Storytelling'],
+      bestseller: nyTimes('Hardcover Fiction', '2007'),
+    },
+  },
+  {
+    id: 'shelf-where-the-crawdads-sing',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['mystery', 'nature'],
+    item: {
+      title: 'Where the Crawdads Sing',
+      author: 'Delia Owens',
+      genre: 'mystery',
+      secondaryGenre: 'literary-fiction',
+      firstPublished: 2018,
+      synopsis:
+        'A girl raises herself in a North Carolina marsh, and a death in the nearby town brings her history into a courtroom.',
+      why: 'A mystery that is really about isolation, and a portrait of a place that stays after the plot resolves.',
+      audience: 'Readers who want atmosphere with their whodunit.',
+      expect: 'Nature writing, a slow first half, and a reveal that divides readers.',
+      url: 'https://openlibrary.org/search?q=Where+the+Crawdads+Sing',
+      subjects: ['Mystery fiction', 'North Carolina', 'Solitude'],
+      bestseller: nyTimes('Hardcover Fiction', '2019', '#1'),
+    },
+  },
+  {
+    id: 'shelf-silent-patient',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['mystery', 'psychology'],
+    item: {
+      title: 'The Silent Patient',
+      author: 'Alex Michaelides',
+      genre: 'thriller',
+      secondaryGenre: 'mystery',
+      firstPublished: 2019,
+      synopsis:
+        'A painter shoots her husband and never speaks again; a psychotherapist becomes obsessed with getting her to talk.',
+      why: 'A clean, controlled thriller that earns its twist by planting it in the first chapter.',
+      audience: 'Readers who want one sitting and no subplots.',
+      expect: 'Short chapters, an unreliable narrator and a genuinely surprising final page.',
+      url: 'https://openlibrary.org/search?q=The+Silent+Patient+Michaelides',
+      subjects: ['Thrillers', 'Psychotherapy', 'Secrecy'],
+      bestseller: nyTimes('Hardcover Fiction', '2019'),
+    },
+  },
+  {
+    id: 'shelf-gone-girl',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['thriller', 'marriage'],
+    item: {
+      title: 'Gone Girl',
+      author: 'Gillian Flynn',
+      genre: 'thriller',
+      firstPublished: 2012,
+      synopsis:
+        'A wife disappears on her anniversary and her husband becomes the story — told in two voices that disagree about everything.',
+      why: 'The book that reset the modern domestic thriller, and still the sharpest on how a marriage becomes a performance.',
+      audience: 'Readers who like their thrillers cold and funny.',
+      expect: 'Two narrators, a media circus, and a mid-book turn that changes what you are reading.',
+      url: 'https://openlibrary.org/search?q=Gone+Girl+Flynn',
+      subjects: ['Thrillers', 'Marriage', 'Missing persons'],
+      bestseller: nyTimes('Hardcover Fiction', '2012', '#1'),
+    },
+  },
+  {
+    id: 'shelf-da-vinci-code',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['thriller', 'art'],
+    item: {
+      title: 'The Da Vinci Code',
+      author: 'Dan Brown',
+      genre: 'thriller',
+      firstPublished: 2003,
+      synopsis:
+        'A symbologist and a cryptologist follow a trail of clues through European art and church history while being pursued.',
+      why: 'A masterclass in pace and in making research feel like plot; its historical claims are the reader’s job to check.',
+      audience: 'Readers who want momentum over prose.',
+      expect: 'Short chapters, cliffhangers, and a great deal of contested history.',
+      url: 'https://openlibrary.org/search?q=The+Da+Vinci+Code+Brown',
+      subjects: ['Thrillers', 'Cryptography', 'Art'],
+      bestseller: nyTimes('Hardcover Fiction', '2003', '#1'),
+    },
+  },
+  {
+    id: 'shelf-girl-with-the-dragon-tattoo',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['crime', 'journalism'],
+    item: {
+      title: 'The Girl with the Dragon Tattoo',
+      author: 'Stieg Larsson',
+      genre: 'crime',
+      firstPublished: 2005,
+      synopsis:
+        'A disgraced journalist and a brilliant investigator reopen a forty-year-old disappearance inside a wealthy family.',
+      why: 'A crime novel with real procedure and a memorable pair of investigators.',
+      audience: 'Readers who like a cold case and are comfortable with dark material.',
+      expect: 'Slow-burn investigation, Swedish setting, and content warnings worth taking seriously.',
+      url: 'https://openlibrary.org/search?q=The+Girl+with+the+Dragon+Tattoo',
+      subjects: ['Crime fiction', 'Missing persons', 'Sweden'],
+      bestseller: nyTimes('Paperback Fiction', '2008'),
+    },
+  },
+  {
+    id: 'shelf-all-the-light',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['historical fiction', 'war'],
+    item: {
+      title: 'All the Light We Cannot See',
+      author: 'Anthony Doerr',
+      genre: 'historical-fiction',
+      firstPublished: 2014,
+      synopsis:
+        'A blind French girl and a German boy whose paths converge in occupied France, told in short chapters across a decade.',
+      why: 'A war novel built from small sensory details rather than battles, and an argument for attention as a form of resistance.',
+      audience: 'Readers who want history with a strong emotional line.',
+      expect: 'Very short chapters, dual timelines, and a strong second half.',
+      url: 'https://openlibrary.org/search?q=All+the+Light+We+Cannot+See',
+      subjects: ['Historical fiction', 'World War II', 'France'],
+      bestseller: nyTimes('Hardcover Fiction', '2014', '#1'),
+    },
+  },
+  {
+    id: 'shelf-nightingale',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['historical fiction', 'resistance'],
+    item: {
+      title: 'The Nightingale',
+      author: 'Kristin Hannah',
+      genre: 'historical-fiction',
+      firstPublished: 2015,
+      synopsis:
+        'Two sisters in occupied France take different routes through the war — one resisting quietly, one in the open.',
+      why: 'A popular history of the resistance told through one family, and unusually clear about the cost of each choice.',
+      audience: 'Readers who want an immersive, emotional war story.',
+      expect: 'A long build, a devastating middle, and a frame narrative from the present.',
+      url: 'https://openlibrary.org/search?q=The+Nightingale+Kristin+Hannah',
+      subjects: ['Historical fiction', 'World War II', 'Sisters'],
+      bestseller: nyTimes('Hardcover Fiction', '2015'),
+    },
+  },
+  {
+    id: 'shelf-gentleman-in-moscow',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['literary fiction', 'hotel'],
+    item: {
+      title: 'A Gentleman in Moscow',
+      author: 'Amor Towles',
+      genre: 'literary-fiction',
+      secondaryGenre: 'historical-fiction',
+      firstPublished: 2016,
+      synopsis:
+        'A count sentenced to house arrest in a grand hotel builds an entire life inside its corridors, restaurants and one small room over several decades.',
+      why: 'The warmest example of a constraint becoming a world, and a reminder that a limited setting can be generous.',
+      audience: 'Readers who like elegant prose and slow, humane plotting.',
+      expect: 'Wit, a found family, and a long stay.',
+      url: 'https://openlibrary.org/search?q=A+Gentleman+in+Moscow',
+      subjects: ['Literary fiction', 'Moscow', 'House arrest'],
+      bestseller: nyTimes('Hardcover Fiction', '2016'),
+    },
+  },
+  {
+    id: 'shelf-normal-people',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['literary fiction', 'relationships'],
+    item: {
+      title: 'Normal People',
+      author: 'Sally Rooney',
+      genre: 'literary-fiction',
+      firstPublished: 2018,
+      synopsis:
+        'Two people keep finding and losing each other from school into university, in a relationship that neither can explain to themselves.',
+      why: 'The most accurate recent novel about class, conversation and the way intimacy works through misreading.',
+      audience: 'Readers who like dialogue-driven fiction.',
+      expect: 'No quotation marks, close attention to small scenes, and an open ending.',
+      url: 'https://openlibrary.org/search?q=Normal+People+Sally+Rooney',
+      subjects: ['Literary fiction', 'Ireland', 'Relationships'],
+      bestseller: nyTimes('Paperback Fiction', '2019'),
+    },
+  },
+  {
+    id: 'shelf-spqr',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['history', 'rome'],
+    item: {
+      title: 'SPQR: A History of Ancient Rome',
+      author: 'Mary Beard',
+      genre: 'history',
+      firstPublished: 2015,
+      synopsis:
+        'A thousand years of Roman history told through its citizens, its arguments and the evidence that survives — including what it cannot tell us.',
+      why: 'The best model of a historian thinking aloud in public: every claim is attached to its source or its doubt.',
+      audience: 'Readers who want a serious history that does not pretend to be certain.',
+      expect: 'Close reading of inscriptions, a sceptical tone, and a refusal of easy empire narratives.',
+      url: 'https://openlibrary.org/search?q=SPQR+Mary+Beard',
+      subjects: ['History', 'Rome', 'Classical antiquity'],
+      bestseller: sundayTimes('2015'),
+    },
+  },
+  {
+    id: 'shelf-silk-roads',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['history', 'trade'],
+    item: {
+      title: 'The Silk Roads: A New History of the World',
+      author: 'Peter Frankopan',
+      genre: 'history',
+      firstPublished: 2015,
+      synopsis:
+        'A world history centred on the trade routes through Central Asia, Persia and the Middle East rather than on Western Europe.',
+      why: 'A useful corrective to a Europe-shaped map, and a strong account of why that region keeps mattering.',
+      audience: 'Readers who want a different frame for global history.',
+      expect: 'Broad synthesis, a long timespan, and a strong opening third.',
+      url: 'https://openlibrary.org/search?q=The+Silk+Roads+Frankopan',
+      subjects: ['History', 'Trade routes', 'Eurasia'],
+      bestseller: sundayTimes('2015'),
+    },
+  },
+  {
+    id: 'shelf-steve-jobs',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['biography', 'technology'],
+    item: {
+      title: 'Steve Jobs',
+      author: 'Walter Isaacson',
+      genre: 'biography',
+      firstPublished: 2011,
+      synopsis:
+        'An authorised biography built on years of interviews with Jobs, his family, colleagues and adversaries.',
+      why: 'As a study of product taste and management failure it is more useful than most business books, and less flattering than its subject would have liked.',
+      audience: 'Readers interested in how products and companies are actually made.',
+      expect: 'A long book with uncomfortable detail and no hagiography.',
+      url: 'https://openlibrary.org/search?q=Steve+Jobs+Isaacson',
+      subjects: ['Biography', 'Apple Computer', 'Entrepreneurship'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2011', '#1'),
+    },
+  },
+  {
+    id: 'shelf-educated',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['autobiography', 'education'],
+    item: {
+      title: 'Educated',
+      author: 'Tara Westover',
+      genre: 'autobiography',
+      firstPublished: 2018,
+      synopsis:
+        'A woman raised without schooling in an Idaho survivalist family reaches Cambridge, and has to decide what to keep of where she came from.',
+      why: 'A memoir about education as a change of self rather than a credential, and unusually honest about the cost to a family.',
+      audience: 'Readers who like memoirs of thought rather than event.',
+      expect: 'Clear prose, brutal scenes, and a reflective second half.',
+      url: 'https://openlibrary.org/search?q=Educated+Tara+Westover',
+      subjects: ['Autobiography', 'Education', 'Family'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2018', '#1'),
+    },
+  },
+  {
+    id: 'shelf-becoming',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['autobiography', 'public life'],
+    item: {
+      title: 'Becoming',
+      author: 'Michelle Obama',
+      genre: 'autobiography',
+      firstPublished: 2018,
+      synopsis:
+        'A Chicago childhood, a career, a marriage and eight years in the White House, told with attention to the ordinary machinery behind public life.',
+      why: 'A well-observed account of how institutions treat people, and what it takes to keep a family intact inside one.',
+      audience: 'Readers who like political memoir for its texture rather than its argument.',
+      expect: 'Warm, detailed, long, and carefully edited.',
+      url: 'https://openlibrary.org/search?q=Becoming+Michelle+Obama',
+      subjects: ['Autobiography', 'United States', 'Presidents’ spouses'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2018', '#1'),
+    },
+  },
+  {
+    id: 'shelf-born-a-crime',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['autobiography', 'comedy'],
+    item: {
+      title: 'Born a Crime',
+      author: 'Trevor Noah',
+      genre: 'autobiography',
+      firstPublished: 2016,
+      synopsis:
+        'A childhood under apartheid’s laws about race, told through a mother whose refusal to obey them is the book’s centre.',
+      why: 'One of the funniest memoirs written, and a precise account of how ordinary rules shape a life.',
+      audience: 'Readers who want a memoir they will finish in two sittings.',
+      expect: 'Short chapters, dark comedy, and a devastating ending.',
+      url: 'https://openlibrary.org/search?q=Born+a+Crime+Trevor+Noah',
+      subjects: ['Autobiography', 'Apartheid', 'South Africa'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2016'),
+    },
+  },
+  {
+    id: 'shelf-sixth-extinction',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['science', 'ecology'],
+    item: {
+      title: 'The Sixth Extinction: An Unnatural History',
+      author: 'Elizabeth Kolbert',
+      genre: 'science',
+      firstPublished: 2014,
+      synopsis:
+        'Thirteen species and the scientists who study them, assembled into an argument that a sixth mass extinction is underway.',
+      why: 'Field reporting that makes a global claim concrete one animal at a time.',
+      audience: 'Readers who want evidence rather than alarm.',
+      expect: 'Travel, careful science, and a restrained but clear conclusion.',
+      url: 'https://openlibrary.org/search?q=The+Sixth+Extinction+Kolbert',
+      subjects: ['Science', 'Extinction', 'Ecology'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2014'),
+    },
+  },
+  {
+    id: 'shelf-entangled-life',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['science', 'fungi'],
+    item: {
+      title: 'Entangled Life',
+      author: 'Merlin Sheldrake',
+      genre: 'science',
+      firstPublished: 2020,
+      synopsis:
+        'Fungi as the quiet infrastructure of life — networks under forests, partners inside cells, and organisms that complicate the idea of an individual.',
+      why: 'A rare popular science book that changes how you see ordinary things, and says plainly which claims are still contested.',
+      audience: 'Readers who like their science with good writing.',
+      expect: 'Field work, laboratory work, and a genuinely strange worldview.',
+      url: 'https://openlibrary.org/search?q=Entangled+Life+Merlin+Sheldrake',
+      subjects: ['Science', 'Fungi', 'Symbiosis'],
+      bestseller: sundayTimes('2020'),
+    },
+  },
+  {
+    id: 'shelf-body-keeps-the-score',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['psychology', 'trauma'],
+    item: {
+      title: 'The Body Keeps the Score',
+      author: 'Bessel van der Kolk',
+      genre: 'psychology',
+      firstPublished: 2014,
+      synopsis:
+        'A clinician’s account of how trauma is stored in the body and what treatments help, drawn from decades of practice and research.',
+      why: 'It reframed the conversation about trauma, and its clinical stories make a difficult subject readable.',
+      audience: 'Readers interested in psychology; not a substitute for treatment.',
+      expect: 'Case histories, an argumentative stance, and a long bibliography.',
+      url: 'https://openlibrary.org/search?q=The+Body+Keeps+the+Score',
+      subjects: ['Psychology', 'Trauma', 'Psychotherapy'],
+      bestseller: nyTimes('Paperback Nonfiction', '2020'),
+    },
+  },
+  {
+    id: 'shelf-zero-to-one',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['business', 'startups'],
+    item: {
+      title: 'Zero to One',
+      author: 'Peter Thiel, Blake Masters',
+      genre: 'business',
+      firstPublished: 2014,
+      synopsis:
+        'A short, opinionated argument that real progress comes from creating something new rather than copying what works.',
+      why: 'Useful as a set of sharp questions about whether an idea is actually differentiated — even where you reject the politics.',
+      audience: 'Founders and product people.',
+      expect: 'Lectures edited into chapters, strong claims, and very little hedging.',
+      url: 'https://openlibrary.org/search?q=Zero+to+One+Thiel',
+      subjects: ['Business', 'New business enterprises', 'Entrepreneurship'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2014'),
+    },
+  },
+  {
+    id: 'shelf-lean-startup',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['business', 'product'],
+    item: {
+      title: 'The Lean Startup',
+      author: 'Eric Ries',
+      genre: 'business',
+      firstPublished: 2011,
+      synopsis:
+        'Build, measure, learn: a method for testing a business idea with the smallest possible experiments instead of a business plan.',
+      why: 'The vocabulary of modern product work — MVP, validated learning, pivot — comes from here, for better and worse.',
+      audience: 'Anyone building a product under uncertainty.',
+      expect: 'Frameworks, case studies, and a management argument as much as a startup one.',
+      url: 'https://openlibrary.org/search?q=The+Lean+Startup+Ries',
+      subjects: ['Business', 'New business enterprises', 'Organizational effectiveness'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2011'),
+    },
+  },
+  {
+    id: 'shelf-atomic-habits',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['habits', 'personal development'],
+    item: {
+      title: 'Atomic Habits',
+      author: 'James Clear',
+      genre: 'personal-development',
+      firstPublished: 2018,
+      synopsis:
+        'A practical system for changing behaviour by changing the environment and the smallest repeatable action.',
+      why: 'The clearest popular account of cue, craving, response and reward, with more usable detail than most books in the genre.',
+      audience: 'Anyone who has made a plan and broken it.',
+      expect: 'Short chapters, checklists, and stories used as evidence.',
+      url: 'https://openlibrary.org/search?q=Atomic+Habits+James+Clear',
+      subjects: ['Habit', 'Behaviour modification', 'Success'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2019', '#1'),
+    },
+  },
+  {
+    id: 'shelf-braiding-sweetgrass',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['nature', 'indigenous knowledge'],
+    item: {
+      title: 'Braiding Sweetgrass',
+      author: 'Robin Wall Kimmerer',
+      genre: 'popular-non-fiction',
+      secondaryGenre: 'science',
+      firstPublished: 2013,
+      synopsis:
+        'A botanist and member of the Potawatomi Nation writes about plants, reciprocity and what scientific and indigenous knowledge each owe the other.',
+      why: 'A model for holding two knowledge systems without collapsing one into the other.',
+      audience: 'Readers interested in ecology, ethics and good essay writing.',
+      expect: 'Essays that move between fieldwork, memory and argument.',
+      url: 'https://openlibrary.org/search?q=Braiding+Sweetgrass+Kimmerer',
+      subjects: ['Nature', 'Ethnobotany', 'Indigenous knowledge'],
+      bestseller: nyTimes('Paperback Nonfiction', '2020'),
+    },
+  },
+  {
+    id: 'shelf-daily-stoic',
+    category: 'book',
+    availableFrom: '2024-01-01',
+    provenance: 'curated',
+    tags: ['philosophy', 'practice'],
+    item: {
+      title: 'The Daily Stoic',
+      author: 'Ryan Holiday, Stephen Hanselman',
+      genre: 'philosophy',
+      firstPublished: 2016,
+      synopsis:
+        'A year of short daily readings from Stoic sources, arranged by theme rather than by author.',
+      why: 'A low-friction way into primary Stoic texts, with the passages attributed so you can go to the source.',
+      audience: 'Readers who want a daily practice rather than a treatise.',
+      expect: 'One page a day, modern commentary, and a strong reading list behind it.',
+      url: 'https://openlibrary.org/search?q=The+Daily+Stoic+Holiday',
+      subjects: ['Philosophy', 'Stoics', 'Conduct of life'],
+      bestseller: nyTimes('Hardcover Nonfiction', '2017'),
+    },
+  },
+];
+
+/**
+ * The pool the publisher reads.
+ *
+ * Authored entries first, in their original order (so no existing rotation is
+ * disturbed), with metadata applied by id; then the genre shelf.
+ */
+export const bookPool: CuriosityPoolEntry<BookCandidate>[] = [
+  ...authoredBookPool.map((entry) => {
+    const metadata = BOOK_METADATA[entry.id];
+    return metadata ? { ...entry, item: { ...entry.item, ...metadata } } : entry;
+  }),
+  ...genreShelf,
 ];

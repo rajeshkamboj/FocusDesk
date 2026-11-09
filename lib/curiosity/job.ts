@@ -1264,10 +1264,11 @@ export function invalidBookFields(book: BookRecommendation): string[] {
   */
   if (book.bestseller) {
     /*
-      Structural, not merely present. A `list-entry` must name the list and the
-      period; anything weaker belongs under `publisher-stated`, where the card says
-      whose claim it is. `hasVerifiedBestseller` is the single definition — the
-      publisher's selection gate and this validator cannot drift apart.
+      Structural, not merely present. A `list-entry` must name the list and a dated
+      period, a `list-year` must name the list and a year, and anything weaker
+      belongs under `publisher-stated`, where the card says whose claim it is.
+      `hasVerifiedBestseller` is the single definition — the publisher's selection
+      gate and this validator cannot drift apart.
     */
     check('book.bestseller is well formed', hasVerifiedBestseller(book));
     if (book.bestseller.url) check('book.bestseller url', !invalidUrl(book.bestseller.url));

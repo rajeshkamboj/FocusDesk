@@ -992,6 +992,21 @@ export const BOOK_GENRE_LABELS: Record<BookGenre, string> = {
  * counts, Amazon ratings, catalogue presence) are not evidence and have nowhere
  * to go in this shape.
  */
+/**
+ * How strong the bestseller record is. Three different claims, three labels:
+ *
+ *  - `list-entry` — a **dated** appearance on a named list: the list, the date of
+ *    that list and (when known) the rank. This is the only kind the card may print
+ *    as a plain recommendation of where the book stood.
+ *  - `list-year` — the book is recorded on a named list **in a year**, but no dated
+ *    appearance is recorded. A year is not a week: the card says "year-level
+ *    record, no dated list entry" rather than letting a bare year read like one.
+ *  - `publisher-stated` — the claim exists only in the publisher's own copy
+ *    ("#1 New York Times bestseller"). It is real, checkable as a claim, and weaker
+ *    than either of the others; the card says whose claim it is.
+ */
+export type BestsellerKind = 'list-entry' | 'list-year' | 'publisher-stated';
+
 export interface BestsellerEvidence {
   /** The recognising body, e.g. "The New York Times". */
   source: string;
@@ -999,16 +1014,20 @@ export interface BestsellerEvidence {
   list?: string;
   /** Where on the list, when the record states it, e.g. "#1". */
   rank?: string;
-  /** The ranking period, when the record states it, e.g. "week of 12 May 2019". */
+  /**
+   * The **dated** appearance, e.g. "13 February 2010". Required by `list-entry`,
+   * forbidden elsewhere — a bare year here is exactly the conflation this field
+   * and `year` exist to prevent.
+   */
   period?: string;
+  /**
+   * The year of the recorded appearance, for `list-year` records. Required there,
+   * forbidden on the other two kinds.
+   */
+  year?: number;
   /** A page a reader can check, when a stable one exists. */
   url?: string;
-  /**
-   * `list-entry` — the title was recorded on the named list.
-   * `publisher-stated` — the publisher's own page states the bestseller status,
-   * which is weaker than an independent list and is said so on the card.
-   */
-  kind: 'list-entry' | 'publisher-stated';
+  kind: BestsellerKind;
   /** Anything a reader should know about the strength of this evidence. */
   note?: string;
 }

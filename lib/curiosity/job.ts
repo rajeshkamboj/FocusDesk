@@ -1245,12 +1245,25 @@ export function invalidBookFields(book: BookRecommendation): string[] {
   check('book.url', !invalidUrl(book.url));
   if (book.coverUrl) check('book.coverUrl', !invalidUrl(book.coverUrl));
   /*
-    Bestseller evidence is required to publish and must be well-formed. A card may
-    not say "bestseller" on the strength of popularity, so an entry without a named
-    source is refused here rather than labelled loosely at render time.
+    Bestseller evidence is optional, and must be well-formed when present.
+
+    Two different rules are easy to confuse here, and conflating them would be a
+    regression in both directions:
+
+      - *Selection* requires evidence: the publisher only chooses from
+        `bestsellerEligibleEntries`, so a new card cannot be published for a title
+        that has never appeared on a credible list.
+      - *Validation* must not require it: a snapshot published before this rule
+        existed, a reused card, and the curated fallback are all legitimate
+        evidence-free records, and refusing them would blank a page that a reader
+        has already seen. The word "bestseller" simply never appears on those cards,
+        because the card renders the label only from this field.
+
+    So: no field, no label, no complaint. A field that exists is held to the
+    standard below.
   */
-  check('book.bestseller evidence', Boolean(book.bestseller && book.bestseller.source?.trim()));
   if (book.bestseller) {
+    check('book.bestseller source', !blank(book.bestseller.source));
     check('book.bestseller kind', book.bestseller.kind === 'list-entry' || book.bestseller.kind === 'publisher-stated');
     if (book.bestseller.url) check('book.bestseller url', !invalidUrl(book.bestseller.url));
   }

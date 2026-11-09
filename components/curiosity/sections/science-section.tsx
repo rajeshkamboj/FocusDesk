@@ -59,7 +59,14 @@ export function ScienceSection({
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Choose a level</p>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-2">{SCIENCE_EDUCATION_LEVEL_HINTS[level]}</p>
           </div>
-          <div role="group" aria-label="Science educational level" className="flex gap-1.5 rounded-full border border-line bg-surface-2/60 p-1">
+          {/* Wraps: the two labels are long enough to exceed 320px side by side, and
+              a control that overflows the card is a control half the readers cannot
+              reach. The selected state is unchanged. */}
+          <div
+            role="group"
+            aria-label="Science educational level"
+            className="flex max-w-full flex-wrap gap-1.5 rounded-full border border-line bg-surface-2/60 p-1"
+          >
             {SCIENCE_EDUCATION_LEVELS.map((option) => {
               const selected = level === option;
               return (
@@ -68,7 +75,7 @@ export function ScienceSection({
                   type="button"
                   aria-pressed={selected}
                   onClick={() => setLevel(option)}
-                  className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+                  className={`max-w-full rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
                     selected ? 'bg-accent-soft text-accent-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'
                   }`}
                 >

@@ -16,9 +16,11 @@
  *      rest of the app already uses.
  *   2. **Rotation without a history table.** The corpus is interleaved
  *      round-robin across projects, so advancing one slot per week changes the
- *      project as well as the task. Completed and not-relevant assignments are
- *      skipped using the reader's own stored decisions — no second ledger, no
- *      migration.
+ *      project as well as the task. The reader's decisions are *recorded*, never
+ *      used to re-pick: an assignment marked completed stays on screen, marked
+ *      completed, until the week ends. Jumping to the next task the moment
+ *      someone finishes this one would make the state unreadable and would turn
+ *      a weekly commitment into an endless queue.
  *
  * WHAT IS STORED
  *   Only the reader's decisions (`WeeklyLearningRecord` per assignment id), inside
@@ -456,55 +458,39 @@ export function rotationOrder(
   return ordered;
 }
 
-/** Assignments the reader has marked completed or not relevant. */
-function settled(set: Readonly<Record<string, WeeklyLearningRecord>>): Set<string> {
-  return new Set(
-    Object.entries(set)
-      .filter(([, record]) => record.status === 'completed' || record.status === 'not-relevant')
-      .map(([id]) => id),
-  );
-}
-
 export interface WeeklySelection {
   assignment: WeeklyAssignment;
   /** Monday of the week the assignment belongs to, `YYYY-MM-DD`. */
   weekStart: string;
   weekIndex: number;
-  /**
-   * True when every assignment had already been settled and the rotation wrapped
-   * back to an earlier one. The card says so instead of pretending it is new.
-   */
-  recycled: boolean;
 }
 
 /**
  * This week's assignment.
  *
- * Deterministic in `(weekStart, records)`: the same week and the same decisions give
- * the same assignment on every device, and only a new week or a new decision can
- * change it. That is the seven-day stability guarantee in one function.
+ * Deterministic in `weekStart` alone: the same week gives the same assignment on
+ * every device, on every reload, and after any number of status changes. The
+ * reader's records are not an input to the choice — they are only read by the card
+ * to decide what to show beside it. That is what makes the seven-day promise hold
+ * *after* interaction, not just before it.
  */
 export function selectWeeklyAssignment(options: {
   date?: Date;
+  /**
+   * Accepted for call-site compatibility and deliberately **not used** to pick.
+   * A reader's status must never change which assignment the week is about.
+   */
   records?: Readonly<Record<string, WeeklyLearningRecord>>;
   pool?: readonly WeeklyAssignment[];
 } = {}): WeeklySelection {
   const pool = options.pool ?? WEEKLY_ASSIGNMENTS;
-  const records = options.records ?? {};
   const weekStart = weekStartKey(options.date);
   const index = weekIndexOf(weekStart);
   const ordered = rotationOrder(pool);
   if (ordered.length === 0) throw new Error('the weekly learning corpus is empty');
 
-  const settledIds = settled(records);
   const start = ((index % ordered.length) + ordered.length) % ordered.length;
-  for (let step = 0; step < ordered.length; step += 1) {
-    const candidate = ordered[(start + step) % ordered.length];
-    if (!settledIds.has(candidate.id)) {
-      return { assignment: candidate, weekStart, weekIndex: index, recycled: false };
-    }
-  }
-  return { assignment: ordered[start], weekStart, weekIndex: index, recycled: true };
+  return { assignment: ordered[start], weekStart, weekIndex: index };
 }
 
 /** Assignments the reader saved for later, newest decision first. */

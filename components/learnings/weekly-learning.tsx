@@ -138,7 +138,7 @@ export function WeeklyLearningCard({
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
                     selected
                       ? done
-                        ? 'border-accent bg-accent text-white'
+                        ? 'border-accent bg-accent-soft text-accent-ink'
                         : 'border-accent/40 bg-accent-soft text-accent-ink'
                       : 'border-line bg-surface-2/50 text-ink-2 hover:text-ink'
                   }`}
@@ -164,12 +164,6 @@ export function WeeklyLearningCard({
           {status === 'in-progress' ? (
             <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
               Picked up. It stays on this card until Monday, so you can leave the tab and come back.
-            </p>
-          ) : null}
-          {selection.recycled ? (
-            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
-              This is a repeat: every assignment in the rotation has been completed or set aside. Reopen one of them
-              by changing its progress above.
             </p>
           ) : null}
         </div>

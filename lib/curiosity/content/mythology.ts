@@ -1,7 +1,17 @@
 import type { MythCharacter } from '../types';
+import { historicalCharacters } from './mythology-historical';
+import { withClassification } from '../mythology-catalog';
 
 /**
- * Mythology — Character of the Day.
+ * Mythology + Historical — Character of the Day.
+ *
+ * The section was renamed and widened to carry historical, religious and legendary
+ * figures beside the mythological ones, across traditions. Two things did not
+ * change: every original entry keeps its id, its text and its place in the
+ * rotation, and every claim still carries its evidence layer. What was added is a
+ * classification (`mythology-catalog.ts` labels the original 24 by id, and the new
+ * entries state their own), so a Sikh Guru is never displayed as a mythological
+ * character and a Mauryan emperor is never displayed as a story.
  *
  * Two rules govern this file, and both are structural rather than stylistic:
  *
@@ -17,7 +27,7 @@ import type { MythCharacter } from '../types';
  * Authored as typed static data, like the rest of the Curiosity corpus:
  * deterministic day-index selection, shipped server-side only.
  */
-export const mythCharacters: MythCharacter[] = [
+const authoredMythCharacters: MythCharacter[] = [
   {
     id: 'arjuna',
     name: 'Arjuna',
@@ -1128,4 +1138,15 @@ export const mythCharacters: MythCharacter[] = [
     analysis:
       'Ọ̀ṣun is a good corrective to the habit of reading every goddess as a love figure. In her own tradition she is water, fertility and the condition on which creation continues — and her story is as much about what happens when a community forgets to include her as it is about sweetness.',
   },
+];
+
+/**
+ * The full collection: the original authored corpus, classified in place, plus the
+ * historical and religious figures. Order matters — the original 24 keep their
+ * positions, so the daily rotation that produced every existing reader's history is
+ * unchanged; the new entries follow.
+ */
+export const mythCharacters: MythCharacter[] = [
+  ...authoredMythCharacters.map(withClassification),
+  ...historicalCharacters.map(withClassification),
 ];

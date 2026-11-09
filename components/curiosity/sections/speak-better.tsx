@@ -249,6 +249,46 @@ export function SpeakBetterSection({
           </div>
         </div>
 
+        {shown.origin === 'discovered' && shown.discovery ? (
+          <details className="rounded-lg border border-line/70 bg-surface-2/30 px-3 py-2 text-[11.5px] leading-relaxed text-ink-3">
+            <summary className="cursor-pointer text-[11px] font-medium text-ink-2">
+              Where this word came from
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              <p>
+                Found by the scheduled vocabulary run and approved on {shown.discovery.approvedOn}. The teaching text is
+                an edited gloss ({shown.discovery.glossRevision}); the dictionary and frequency data come from the
+                sources below.
+                {shown.discovery.frequencyPerMillion !== undefined
+                  ? ` Frequency: about ${shown.discovery.frequencyPerMillion} occurrences per million words, which maps to ${shown.discovery.frequencyBand ?? 'the published band'}.`
+                  : ''}
+              </p>
+              <ul className="space-y-1">
+                {shown.discovery.sources.map((source) => (
+                  <li key={source.id}>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent hover:underline"
+                    >
+                      {source.name}
+                    </a>
+                    <span className="text-ink-3">
+                      {' · '}
+                      {source.license}
+                      {source.status === 'failed' ? ' · did not answer; this lesson used the remaining sources' : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {shown.discovery.quality.length > 0 ? (
+                <p>Checks passed: {shown.discovery.quality.join(', ')}.</p>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+
         {refined.replaced ? (
           <p className="rounded-lg border border-line bg-surface-2/50 px-3 py-2 text-[11.5px] leading-relaxed text-ink-3">
             {refined.reason ?? 'A lesson with a new word is shown because today’s published word was already known.'}

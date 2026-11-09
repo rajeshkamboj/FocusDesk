@@ -171,5 +171,6 @@ export function refineForReader(
 export function levelLabel(lesson: SpeakBetterLesson): string {
   const level = bandOf(lesson);
   const basis = lesson.levelBasis ?? 'curated';
+  if (basis === 'estimated-frequency') return `${level} · level estimated from word frequency`;
   return basis === 'estimated' ? `${level} · estimated level` : `${level} · curated level`;
 }

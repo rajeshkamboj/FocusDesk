@@ -553,6 +553,13 @@ export function scienceConceptFromRecord(
     topic: record.title.replace(/\s+/g, ' ').trim().slice(0, 220),
     aliases: [record.title, record.doi ? `doi:${record.doi}` : ''].filter(Boolean),
     origin: 'research',
+    /*
+      A research record is the **undergraduate** level. It used to be the default
+      card; the two-level structure demotes it, and there is no third level for it
+      to be promoted into.
+    */
+    educationLevel: 'undergraduate',
+    levelBasis: 'derived-from-record',
     provenance,
     provenanceLabel: RESEARCH_PROVENANCE_LABELS[provenance],
     ...(published ? { publishedOn: published } : {}),
@@ -564,6 +571,11 @@ export function scienceConceptFromRecord(
     simple,
     connection,
     surprising,
+    /**
+     * The sixth question every Science card should answer. For a single paper the
+     * honest answer is always the same: whether the result outlives its own sample.
+     */
+    unknown: 'Whether the result replicates. One paper is one sample, and its own limitations section is where to look before repeating the claim.',
     question: `The paper's own abstract and figures are at the link. What would you want to check before repeating this result?`,
     source: {
       url: record.url,

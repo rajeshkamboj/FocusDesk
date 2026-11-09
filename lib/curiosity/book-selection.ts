@@ -33,43 +33,84 @@ export function genreOf(book: BookCandidate): BookGenre {
   return book.genre ?? 'other';
 }
 
+/** At least two non-space characters — enough to name something. */
+function hasText(value: string | undefined): value is string {
+  return typeof value === 'string' && value.trim().length >= 2;
+}
+
+/** A bare year is not a dated list appearance; `list-year` exists for those. */
+const BARE_YEAR = /^\d{4}$/;
+
 /**
  * True when the book carries a usable evidence record.
  *
- * `publisher-stated` is accepted because it is a real, checkable claim by the
- * publisher — but the card prints it as weaker than an independent list, and this
- * function is not allowed to upgrade it.
+ * Three kinds, three different tests — the asymmetry is the point:
+ *
+ *  - `list-entry` must name the list **and** a dated appearance, and that date
+ *    must not be a bare year. A year wearing the `list-entry` label is exactly the
+ *    conflation this module exists to stop, so it is refused rather than printed
+ *    as though the book had been on a specific week's list.
+ *  - `list-year` must name the list and carry a plausible integer year, and must
+ *    not also carry `period`: if both are present the record is ambiguous about
+ *    whether an appearance was ever checked, and ambiguity is refused.
+ *  - `publisher-stated` needs neither list nor date, because it claims only that a
+ *    named publisher says so — and it must carry neither, since a date would turn
+ *    the publisher's sentence into a list appearance nobody verified.
+ *
+ * Anything else is treated as no evidence at all, which means no bestseller claim
+ * on the card and no eligibility for publication.
  */
 export function hasVerifiedBestseller(book: BookCandidate): boolean {
   const evidence: BestsellerEvidence | undefined = book.bestseller;
   if (!evidence) return false;
-  if (!evidence.source || evidence.source.trim().length < 2) return false;
-  if (evidence.kind !== 'list-entry' && evidence.kind !== 'publisher-stated') return false;
-  /*
-    A list entry is only a list entry if it can name the list and the period it
-    belongs to. Without both, the record is an unverified assertion wearing the
-    stronger label — exactly the failure this field exists to prevent — so it is
-    treated as no evidence at all. `publisher-stated` deliberately needs neither:
-    it claims only that a named publisher says so, and the card prints it that way.
-  */
-  if (evidence.kind === 'list-entry') {
-    if (!evidence.list || evidence.list.trim().length < 2) return false;
-    if (!evidence.period || evidence.period.trim().length < 2) return false;
+  if (!hasText(evidence.source)) return false;
+
+  switch (evidence.kind) {
+    case 'list-entry':
+      if (!hasText(evidence.list)) return false;
+      if (!hasText(evidence.period)) return false;
+      if (BARE_YEAR.test(evidence.period.trim())) return false;
+      if (evidence.year !== undefined) return false;
+      return true;
+    case 'list-year': {
+      if (!hasText(evidence.list)) return false;
+      const year = evidence.year;
+      if (year === undefined || !Number.isInteger(year) || year < 1800 || year > 2200) return false;
+      if (evidence.period !== undefined) return false;
+      return true;
+    }
+    case 'publisher-stated':
+      if (evidence.period !== undefined || evidence.year !== undefined) return false;
+      return true;
+    default:
+      return false;
   }
-  return true;
 }
 
-/** The line the card prints under the title. Never invents a rank or a period. */
+/** Printed after a year-level record, so the year never reads as a list week. */
+export const YEAR_LEVEL_SUFFIX = 'year-level record, no dated list entry verified';
+
+/**
+ * The line the card prints under the title. Never invents a rank or a date.
+ *
+ * A dated entry prints its date. A year-level record prints its year and then says
+ * in as many words that no dated entry was verified. A publisher's claim says
+ * whose claim it is.
+ */
 export function bestsellerEvidenceLine(book: BookCandidate): string | null {
   if (!hasVerifiedBestseller(book)) return null;
   const evidence = book.bestseller!;
-  const parts = [
-    evidence.kind === 'publisher-stated' ? `${evidence.source} (publisher's own record)` : evidence.source,
-    evidence.list,
-    evidence.rank,
-    evidence.period,
-  ].filter(Boolean);
-  return parts.join(' · ');
+  if (evidence.kind === 'publisher-stated') {
+    const claim = [evidence.source + " (publisher's own record)", evidence.list, evidence.rank].filter(Boolean);
+    return claim.join(' · ');
+  }
+  const parts = [evidence.source, evidence.list, evidence.rank];
+  if (evidence.kind === 'list-year') {
+    parts.push(`${evidence.year}`, YEAR_LEVEL_SUFFIX);
+  } else {
+    parts.push(evidence.period);
+  }
+  return parts.filter(Boolean).join(' · ');
 }
 
 export interface BookRotationContext {

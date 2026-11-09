@@ -132,9 +132,10 @@ thin because the record is thin. Nothing is invented to satisfy a layout.
 - Selection: `bestsellerEligibleEntries` → no consecutive author → no consecutive
   genre → existing date rotation. Cadence unchanged (a book every three days).
 - The pool is 53 entries (25 authored + 28 genre shelf) across 18 genre values, and
-  34 carry usable evidence — 7 authored and 27 shelf, of which 30 are dated
-  `list-entry` records and 4 are `publisher-stated`. Selection, validation and the
-  card all read the same definition; see `docs/book-bestseller-evidence.md`.
+  34 carry usable evidence — 7 authored and 27 shelf: 7 dated `list-entry`
+  records, 14 year-level `list-year` records and 13 `publisher-stated`. A year is
+  never printed as a dated list appearance. Selection, validation and the card all
+  read the same definition; see `docs/book-bestseller-evidence.md`.
 - Entries without evidence are retained, not deleted, and simply cannot be chosen
   for a new card.
 

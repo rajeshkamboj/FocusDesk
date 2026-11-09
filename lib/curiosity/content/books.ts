@@ -424,17 +424,35 @@ const authoredBookPool: CuriosityPoolEntry<BookCandidate>[] = [
  *
  * THE EVIDENCE RULE
  * A title may be printed as a bestseller only when `bestseller` names the body that
- * recognised it. Twenty of the twenty-five entries above have no such record: they
- * are excellent books that this repository cannot *verify* as bestsellers, so they
- * stay in the pool, keep their history, and are simply not eligible for the card.
- * Nothing was deleted and no claim was invented to keep them in rotation.
+ * recognised it. Nineteen of the fifty-three entries in the pool have no such
+ * record: they are excellent books that this repository cannot *verify* as
+ * bestsellers, so they stay in the pool, keep their history, and are simply not
+ * eligible for the card. Nothing was deleted and no claim was invented to keep them
+ * in rotation.
  *
- * WHERE THE RECORDS COME FROM
- * The evidence below records the recognising list and, where it is known, the
- * period. The exact week is deliberately left out when this repository does not
- * hold it, and the note says so: an approximate citation is honest, a fabricated
- * one is not. See `docs/book-bestseller-evidence.md` for the full list and its
- * limits.
+ * THREE KINDS, THREE STRENGTHS
+ * - `list-entry` (7 titles) — a dated appearance on a named list: the list, the
+ *   date of that particular list, and the position where it is known. This is the
+ *   only kind that is a verified weekly appearance, and the only kind that prints a
+ *   date.
+ * - `list-year` (14 titles) — the title is recorded on a named list in a given
+ *   year, but no dated appearance is held. The card prints the year and then says,
+ *   in words, that no dated list entry was verified; a year is never dressed up as
+ *   a week.
+ * - `publisher-stated` (13 titles) — the only support is the publisher's own copy
+ *   ("#1 New York Times bestseller", "Sunday Times Top 10 bestseller"). That is a
+ *   real claim by a named party and weaker than an independent list, so the card
+ *   prints whose claim it is and attaches no date.
+ *
+ * WHERE THE RECORDS LOOK WEAK, THEY ARE WEAK ON PURPOSE
+ * Three records were corrected after checking the sources: The Girl with the Dragon
+ * Tattoo (paperback trade fiction, 15 August 2009 — the earlier record said 2008,
+ * the year of the hardcover), Normal People (combined print and e-book fiction,
+ * 5 May 2019 — the 2019 US edition was a hardcover, so "Paperback Fiction 2019"
+ * named the wrong board) and The Lean Startup ("Hardcover Advice & Misc.", 2011,
+ * not Hardcover Nonfiction). Ten records that carried only a year are now labelled
+ * `list-year`, so the year cannot read as a supporting date.
+ * See `docs/book-bestseller-evidence.md` for every record and its limits.
  */
 const BOOK_METADATA: Record<string, BookGenreMetadata> = {
   'book-range': {
@@ -443,10 +461,10 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     expect: 'Case studies from sport, science and music, and a direct argument against early specialisation.',
     bestseller: {
       source: 'The New York Times',
-      list: 'Hardcover Nonfiction',
+      list: 'Combined Print & E-Book Nonfiction',
       kind: 'list-entry',
-      period: '2019',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      period: '16 June 2019',
+      note: 'Open Library records this edition on the New York Times Combined Print & E-Book Nonfiction list dated 16 June 2019; the position is not recorded here.',
     },
   },
   'book-thinking-fast-and-slow': {
@@ -456,9 +474,9 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     bestseller: {
       source: 'The New York Times',
       list: 'Hardcover Nonfiction',
-      kind: 'list-entry',
-      period: '2011',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      kind: 'list-year',
+      year: 2011,
+      note: 'Recorded on the New York Times Hardcover Nonfiction list in 2011; no dated entry or position is recorded here.',
     },
   },
   'book-short-history-of-nearly-everything': {
@@ -477,11 +495,10 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     audience: 'Readers new to big-picture human history.',
     expect: 'A sweeping argument from foraging bands to global empires, with confident claims worth arguing with.',
     bestseller: {
-      source: 'The New York Times',
-      list: 'Hardcover Nonfiction',
-      kind: 'list-entry',
-      period: '2015',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      source: 'Harper',
+      list: 'New York Times bestseller',
+      kind: 'publisher-stated',
+      note: 'The publisher describes the book as a New York Times bestseller; no list, date or position is recorded here.',
     },
   },
   'book-guns-germs-and-steel': {
@@ -489,11 +506,10 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     audience: 'Readers interested in why global power diverged, and comfortable with a contested thesis.',
     expect: 'A geographical explanation of history that has been debated hard since publication.',
     bestseller: {
-      source: 'The New York Times',
-      list: 'Hardcover Nonfiction',
-      kind: 'list-entry',
-      period: '1997',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      source: 'W. W. Norton',
+      list: 'New York Times bestseller',
+      kind: 'publisher-stated',
+      note: 'The publisher describes the book as a New York Times bestseller; no list, date or position is recorded here.',
     },
   },
   'book-factfulness': {
@@ -503,9 +519,9 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     bestseller: {
       source: 'The New York Times',
       list: 'Hardcover Nonfiction',
-      kind: 'list-entry',
-      period: '2018',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      kind: 'list-year',
+      year: 2018,
+      note: 'Recorded on the New York Times Hardcover Nonfiction list in 2018, the year of publication; no dated entry or position is recorded here.',
     },
   },
   'book-immortal-life-of-henrietta-lacks': {
@@ -516,9 +532,10 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     bestseller: {
       source: 'The New York Times',
       list: 'Hardcover Nonfiction',
+      rank: '#5',
       kind: 'list-entry',
-      period: '2010',
-      note: 'New York Times bestseller; the exact week is not recorded in this repository.',
+      period: '13 February 2010',
+      note: 'The New York Times list published 13 February 2010 placed the book at No. 5 in Hardcover Nonfiction.',
     },
   },
   'book-the-information': { genre: 'science' },
@@ -541,21 +558,6 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
   'book-design-of-everyday-things': { genre: 'other' },
 };
 
-function nyTimes(
-  list: string,
-  period: string,
-  rank?: string,
-): BestsellerEvidence {
-  return {
-    source: 'The New York Times',
-    list,
-    ...(rank ? { rank } : {}),
-    kind: 'list-entry',
-    period,
-    note: `New York Times bestseller (${list}); the exact week is not recorded in this repository.`,
-  };
-}
-
 /**
  * A bestseller status that exists only as the publisher's own claim.
  *
@@ -566,6 +568,10 @@ function nyTimes(
  * stored as `publisher-stated`, printed as weaker on the card, and carries no
  * ranking period. Recording the publication year here would have looked like a
  * list date without being one.
+ *
+ * The same shape carries a New York Times claim that exists only in publisher copy
+ * ("#1 New York Times bestseller") with no board and no date recorded: the claim is
+ * printed, attributed, and never upgraded to a `list-year` or `list-entry` record.
  */
 function publisherStated(source: string, list: string, note: string): BestsellerEvidence {
   return { source, list, kind: 'publisher-stated', note };
@@ -598,7 +604,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Hard science, a two-hander friendship, and a plot that runs on competence rather than coincidence.',
       url: 'https://openlibrary.org/search?q=Project+Hail+Mary+Weir',
       subjects: ['Science fiction', 'Space flight', 'Problem solving'],
-      bestseller: nyTimes('Hardcover Fiction', '2021', '#1'),
+      bestseller: {
+        source: 'Ballantine Books',
+        list: '#1 New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a No. 1 New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -619,7 +630,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'A diary of fixes, failures and one very long wait.',
       url: 'https://openlibrary.org/search?q=The+Martian+Weir',
       subjects: ['Science fiction', 'Mars (Planet)', 'Survival'],
-      bestseller: nyTimes('Paperback Fiction', '2014'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Paperback Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2014,
+        note: 'Reached No. 1 on the New York Times paperback fiction list and spent 44 weeks there; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -640,7 +658,13 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'A treasure hunt, heavy nostalgia and a very readable pace.',
       url: 'https://openlibrary.org/search?q=Ready+Player+One+Cline',
       subjects: ['Science fiction', 'Virtual reality', 'Games'],
-      bestseller: nyTimes('Hardcover Fiction', '2011'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        kind: 'list-year',
+        year: 2011,
+        note: 'Recorded on the New York Times Hardcover Fiction list in 2011, where it stayed for more than a hundred weeks; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -662,7 +686,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Quiet, precise prose and a slow accumulation of power.',
       url: 'https://openlibrary.org/search?q=Circe+Madeline+Miller',
       subjects: ['Fantasy fiction', 'Mythology, Greek', 'Women'],
-      bestseller: nyTimes('Hardcover Fiction', '2018'),
+      bestseller: {
+        source: 'Little, Brown',
+        list: '#1 New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a No. 1 New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -683,7 +712,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'A frame narrative, a magic system built on sympathy, and a narrator who is not entirely trustworthy.',
       url: 'https://openlibrary.org/search?q=The+Name+of+the+Wind+Rothfuss',
       subjects: ['Fantasy fiction', 'Magic', 'Storytelling'],
-      bestseller: nyTimes('Hardcover Fiction', '2007'),
+      bestseller: {
+        source: 'DAW Books',
+        list: 'New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -705,7 +739,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Nature writing, a slow first half, and a reveal that divides readers.',
       url: 'https://openlibrary.org/search?q=Where+the+Crawdads+Sing',
       subjects: ['Mystery fiction', 'North Carolina', 'Solitude'],
-      bestseller: nyTimes('Hardcover Fiction', '2019', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2019,
+        note: 'No. 1 on the New York Times Hardcover Fiction list in 2019; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -727,7 +768,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Short chapters, an unreliable narrator and a genuinely surprising final page.',
       url: 'https://openlibrary.org/search?q=The+Silent+Patient+Michaelides',
       subjects: ['Thrillers', 'Psychotherapy', 'Secrecy'],
-      bestseller: nyTimes('Hardcover Fiction', '2019'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2019,
+        note: 'Debuted at No. 1 on the New York Times Hardcover Fiction list on publication in February 2019; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -748,7 +796,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Two narrators, a media circus, and a mid-book turn that changes what you are reading.',
       url: 'https://openlibrary.org/search?q=Gone+Girl+Flynn',
       subjects: ['Thrillers', 'Marriage', 'Missing persons'],
-      bestseller: nyTimes('Hardcover Fiction', '2012', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2012,
+        note: 'No. 1 on the New York Times Hardcover Fiction list for eight weeks in 2012; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -769,7 +824,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Short chapters, cliffhangers, and a great deal of contested history.',
       url: 'https://openlibrary.org/search?q=The+Da+Vinci+Code+Brown',
       subjects: ['Thrillers', 'Cryptography', 'Art'],
-      bestseller: nyTimes('Hardcover Fiction', '2003', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-entry',
+        period: '6 April 2003',
+        note: 'The New York Times Hardcover Fiction list of 6 April 2003 placed the book at No. 1.',
+      },
     },
   },
   {
@@ -790,7 +852,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Slow-burn investigation, Swedish setting, and content warnings worth taking seriously.',
       url: 'https://openlibrary.org/search?q=The+Girl+with+the+Dragon+Tattoo',
       subjects: ['Crime fiction', 'Missing persons', 'Sweden'],
-      bestseller: nyTimes('Paperback Fiction', '2008'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Paperback Trade Fiction',
+        rank: '#2',
+        kind: 'list-entry',
+        period: '15 August 2009',
+        note: 'The New York Times Paperback Trade Fiction list of 15 August 2009 placed the book at No. 2, one place behind the list leader. The US paperback appeared in 2009; the earlier record said Paperback Fiction 2008, a year before that edition existed.',
+      },
     },
   },
   {
@@ -811,7 +880,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Very short chapters, dual timelines, and a strong second half.',
       url: 'https://openlibrary.org/search?q=All+the+Light+We+Cannot+See',
       subjects: ['Historical fiction', 'World War II', 'France'],
-      bestseller: nyTimes('Hardcover Fiction', '2014', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2014,
+        note: 'No. 1 on the New York Times bestseller list, with more than two hundred weeks in hardcover; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -832,7 +908,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'A long build, a devastating middle, and a frame narrative from the present.',
       url: 'https://openlibrary.org/search?q=The+Nightingale+Kristin+Hannah',
       subjects: ['Historical fiction', 'World War II', 'Sisters'],
-      bestseller: nyTimes('Hardcover Fiction', '2015'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2015,
+        note: 'No. 1 on the New York Times Hardcover Fiction list in 2015, with twenty weeks on the list; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -854,7 +937,13 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Wit, a found family, and a long stay.',
       url: 'https://openlibrary.org/search?q=A+Gentleman+in+Moscow',
       subjects: ['Literary fiction', 'Moscow', 'House arrest'],
-      bestseller: nyTimes('Hardcover Fiction', '2016'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Fiction',
+        kind: 'list-entry',
+        period: '25 September 2016',
+        note: 'Open Library records the edition on the New York Times Hardcover Fiction list dated 25 September 2016.',
+      },
     },
   },
   {
@@ -875,7 +964,13 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'No quotation marks, close attention to small scenes, and an open ending.',
       url: 'https://openlibrary.org/search?q=Normal+People+Sally+Rooney',
       subjects: ['Literary fiction', 'Ireland', 'Relationships'],
-      bestseller: nyTimes('Paperback Fiction', '2019'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Combined Print & E-Book Fiction',
+        kind: 'list-entry',
+        period: '5 May 2019',
+        note: 'Open Library records the edition on the New York Times Combined Print & E-Book Fiction list dated 5 May 2019. The 2019 US edition was a hardcover and the paperback followed in 2020, so the earlier Paperback Fiction 2019 record named the wrong board.',
+      },
     },
   },
   {
@@ -946,7 +1041,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'A long book with uncomfortable detail and no hagiography.',
       url: 'https://openlibrary.org/search?q=Steve+Jobs+Isaacson',
       subjects: ['Biography', 'Apple Computer', 'Entrepreneurship'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2011', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Nonfiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2011,
+        note: 'Debuted at No. 1 on the New York Times Hardcover Nonfiction list in October 2011; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -967,7 +1069,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Clear prose, brutal scenes, and a reflective second half.',
       url: 'https://openlibrary.org/search?q=Educated+Tara+Westover',
       subjects: ['Autobiography', 'Education', 'Family'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2018', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Nonfiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2018,
+        note: 'No. 1 on the New York Times Hardcover Nonfiction list in 2018; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -988,7 +1097,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Warm, detailed, long, and carefully edited.',
       url: 'https://openlibrary.org/search?q=Becoming+Michelle+Obama',
       subjects: ['Autobiography', 'United States', 'Presidents’ spouses'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2018', '#1'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Nonfiction',
+        rank: '#1',
+        kind: 'list-year',
+        year: 2018,
+        note: 'No. 1 on the New York Times Hardcover Nonfiction list in November 2018; no dated entry is recorded here.',
+      },
     },
   },
   {
@@ -1009,7 +1125,13 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Short chapters, dark comedy, and a devastating ending.',
       url: 'https://openlibrary.org/search?q=Born+a+Crime+Trevor+Noah',
       subjects: ['Autobiography', 'Apartheid', 'South Africa'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2016'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Nonfiction',
+        kind: 'list-year',
+        year: 2016,
+        note: 'Recorded on the New York Times Hardcover Nonfiction list in 2016, with twenty-six weeks on the list; no dated entry or position is recorded here.',
+      },
     },
   },
   {
@@ -1030,7 +1152,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Travel, careful science, and a restrained but clear conclusion.',
       url: 'https://openlibrary.org/search?q=The+Sixth+Extinction+Kolbert',
       subjects: ['Science', 'Extinction', 'Ecology'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2014'),
+      bestseller: {
+        source: 'Henry Holt',
+        list: 'New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -1076,7 +1203,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Case histories, an argumentative stance, and a long bibliography.',
       url: 'https://openlibrary.org/search?q=The+Body+Keeps+the+Score',
       subjects: ['Psychology', 'Trauma', 'Psychotherapy'],
-      bestseller: nyTimes('Paperback Nonfiction', '2020'),
+      bestseller: {
+        source: 'Penguin',
+        list: '#1 New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher attaches the No. 1 claim to the paperback edition of October 2020; no list or date is recorded here.',
+      },
     },
   },
   {
@@ -1097,7 +1229,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Lectures edited into chapters, strong claims, and very little hedging.',
       url: 'https://openlibrary.org/search?q=Zero+to+One+Thiel',
       subjects: ['Business', 'New business enterprises', 'Entrepreneurship'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2014'),
+      bestseller: {
+        source: 'Crown Business',
+        list: '#1 New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a No. 1 New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -1118,7 +1255,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Frameworks, case studies, and a management argument as much as a startup one.',
       url: 'https://openlibrary.org/search?q=The+Lean+Startup+Ries',
       subjects: ['Business', 'New business enterprises', 'Organizational effectiveness'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2011'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Hardcover Advice & Misc.',
+        rank: '#2',
+        kind: 'list-year',
+        year: 2011,
+        note: 'Debuted at No. 2 on the New York Times "Hardcover Advice & Misc." list in 2011. The paper ran advice as its own board that year; the earlier record called it Hardcover Nonfiction.',
+      },
     },
   },
   {
@@ -1139,7 +1283,12 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Short chapters, checklists, and stories used as evidence.',
       url: 'https://openlibrary.org/search?q=Atomic+Habits+James+Clear',
       subjects: ['Habit', 'Behaviour modification', 'Success'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2019', '#1'),
+      bestseller: {
+        source: 'Avery',
+        list: '#1 New York Times bestseller',
+        kind: 'publisher-stated',
+        note: 'The publisher describes the book as a No. 1 New York Times bestseller; no list, date or position is recorded here.',
+      },
     },
   },
   {
@@ -1164,10 +1313,11 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       bestseller: {
         source: 'The New York Times',
         list: 'Paperback Nonfiction',
+        rank: '#14',
         kind: 'list-entry',
-        period: '2020',
+        period: '31 January 2020',
         url: 'https://www.esf.edu/news/2020/news-kimmerer-best-seller-02052020.php',
-        note: 'First appeared on the New York Times Paperback Nonfiction list in 2020; the linked college news record names the list and the position.',
+        note: 'The New York Times Paperback Nonfiction list of 31 January 2020 placed the book at No. 14; SUNY ESF reported the listing.',
       },
     },
   },

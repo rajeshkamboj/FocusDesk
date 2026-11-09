@@ -992,6 +992,9 @@ export class SupabaseRepository implements AppRepository {
         general: { ...base.general, ...data?.general },
         notifications: { ...base.notifications, ...data?.notifications },
         appearance: { ...base.appearance, ...data?.appearance },
+        // Additive: a row written before this key existed has no `weeklyLearning`,
+        // and merging zero records is the correct empty state rather than an error.
+        weeklyLearning: { records: { ...base.weeklyLearning?.records, ...data?.weeklyLearning?.records } },
       };
     },
     save: async (patch: Partial<Settings>): Promise<Settings> => {
@@ -1000,6 +1003,9 @@ export class SupabaseRepository implements AppRepository {
         general: { ...current.general, ...patch.general },
         notifications: { ...current.notifications, ...patch.notifications },
         appearance: { ...current.appearance, ...patch.appearance },
+        weeklyLearning: {
+          records: { ...current.weeklyLearning?.records, ...patch.weeklyLearning?.records },
+        },
       };
       await this.http.upsert('app_settings', { id: 'singleton', data: next });
       return next;

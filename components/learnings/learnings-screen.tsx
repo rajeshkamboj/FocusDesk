@@ -21,13 +21,15 @@ import {
 } from '@/lib/learnings';
 import { parseLearnings } from '@/lib/learnings-import';
 import { LEARNING_SEED } from '@/lib/learnings-seed';
+import { applyWeeklyDecision } from '@/lib/learnings-weekly';
+import { WeeklyLearningCard } from './weekly-learning';
 import type { Learning, LearningCategory } from '@/lib/types';
 
 type CategoryFilter = 'all' | LearningCategory;
 
 /**
- * Learnings — the learning timeline (called "Milestones" before Phase 3;
- * only the wording changed).
+ * Learnings — this week's assignment, then the learning timeline (called
+ * "Milestones" before Phase 3; only the wording changed).
  *
  * Latest first, grouped Year → Month, with deliberately partial dates
  * (a year, a month, or an exact day) so an honest "sometime in 2024" can
@@ -76,7 +78,7 @@ export function LearningsScreen() {
     <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10">
       <PageHeader
         title="Learnings"
-        subtitle="When you first picked something up — tools, frameworks, ideas. Newest first."
+        subtitle="One specific assignment a week, then the timeline of everything you have picked up. Newest first."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => setImportOpen(true)}>
@@ -90,6 +92,18 @@ export function LearningsScreen() {
           </div>
         }
       />
+
+      {/* The weekly assignment sits above the timeline: it is the one thing on this
+          page that is decided for the reader rather than recorded by them. */}
+      <div className="mb-7">
+        <WeeklyLearningCard
+          records={data.settings.weeklyLearning?.records ?? {}}
+          onDecision={(id, patch) => {
+            const records = applyWeeklyDecision(data.settings.weeklyLearning?.records ?? {}, id, patch);
+            void actions.updateSettings({ weeklyLearning: { records } });
+          }}
+        />
+      </div>
 
       {learnings.length > 0 ? (
         <div className="mb-5 flex flex-wrap items-center gap-2">

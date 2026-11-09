@@ -729,6 +729,9 @@ export class LocalRepository implements AppRepository {
         general: { ...data.settings.general, ...patch.general },
         notifications: { ...data.settings.notifications, ...patch.notifications },
         appearance: { ...data.settings.appearance, ...patch.appearance },
+        weeklyLearning: {
+          records: { ...data.settings.weeklyLearning?.records, ...patch.weeklyLearning?.records },
+        },
       };
       this.write();
       return { ...data.settings };

@@ -11,7 +11,10 @@
  *   - Lossless. Records are carried over as the very same objects: ids,
  *     partial dates ('2015', '2026-09', '2025-02-28'), categories and any
  *     field this version does not know about all survive, and so do unknown
- *     top-level keys. Nothing is converted, re-dated or re-identified.
+ *     top-level keys. Settings are the one nested object: their sections are
+ *     rebuilt from the known defaults plus what was stored, and any section
+ *     added since (currently `weeklyLearning`) is preserved by name rather than
+ *     dropped. Nothing is converted, re-dated or re-identified.
  *   - Idempotent. Normalizing already-normalized data returns equal data.
  *   - Side-effect free. It never writes; LocalRepository simply persists the
  *     current shape on its next ordinary write.
@@ -27,7 +30,14 @@
  * `projectMilestones` only ever comes from its own key.
  */
 
-import type { AppData, Learning } from '../types';
+import {
+  WEEKLY_LEARNING_STATUSES,
+  type AppData,
+  type Learning,
+  type WeeklyLearningRecord,
+  type WeeklyLearningState,
+  type WeeklyLearningStatus,
+} from '../types';
 import { emptyData } from './defaults';
 
 type Rec = Record<string, unknown>;
@@ -50,6 +60,44 @@ function mergeLearnings(current: unknown, legacy: unknown): Learning[] {
   return additions.length === 0 ? primary : [...primary, ...additions];
 }
 
+/**
+ * The weekly-learning state, kept only in shapes this build can use.
+ *
+ * This is the section that was missing here entirely: it was written by both
+ * repositories and then silently discarded on the next read, which is
+ * indistinguishable from the reader's progress vanishing after a reload.
+ *
+ * Validation is deliberately forgiving about *keys* and strict about *values*:
+ *   - an unknown assignment id is kept (the corpus may change under a stored
+ *     decision; the decision is still the reader's),
+ *   - a malformed record is dropped rather than repaired into a wrong state,
+ *   - an unknown key on a record is preserved (a newer build may write one),
+ *   - a malformed status falls back to 'not-started' (the only safe default),
+ *   - a missing timestamp becomes an empty string, which sorts last and never
+ *     fabricates a date,
+ *   - anything that is not an object at all yields `{ records: {} }`, which is
+ *     exactly what an older backup without this property should produce.
+ */
+function normalizeWeeklyLearning(value: unknown): WeeklyLearningState {
+  const records: Record<string, WeeklyLearningRecord> = {};
+  if (isRecord(value) && isRecord(value.records)) {
+    for (const [id, raw] of Object.entries(value.records)) {
+      if (!id.trim() || !isRecord(raw)) continue;
+      const status = (WEEKLY_LEARNING_STATUSES as readonly unknown[]).includes(raw.status)
+        ? (raw.status as WeeklyLearningStatus)
+        : 'not-started';
+      const savedForLater = raw.savedForLater === true;
+      const updatedAt = typeof raw.updatedAt === 'string' && !Number.isNaN(Date.parse(raw.updatedAt))
+        ? raw.updatedAt
+        : '';
+      // Unknown keys on the record ride along, as everywhere else in this file: a
+      // field a later build writes must not be erased by a read in this one.
+      records[id] = { ...raw, status, savedForLater, updatedAt } as WeeklyLearningRecord;
+    }
+  }
+  return { records };
+}
+
 export function normalizeAppData(input: unknown): AppData {
   const base = emptyData();
   if (!isRecord(input)) return base;
@@ -69,6 +117,7 @@ export function normalizeAppData(input: unknown): AppData {
     general: { ...base.settings.general, ...section('general') },
     notifications: { ...base.settings.notifications, ...section('notifications') },
     appearance: { ...base.settings.appearance, ...section('appearance') },
+    weeklyLearning: normalizeWeeklyLearning(stored.weeklyLearning),
   };
   return out as unknown as AppData;
 }

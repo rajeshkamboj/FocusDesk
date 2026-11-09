@@ -77,13 +77,25 @@ lesson.
   (`documented | debated | legendary | textual-only`). They are separate because the
   combination is the point: a Sikh Guru is `religious` + `documented`, never
   "mythological".
-- Nine new long-form entries in `content/mythology-historical.ts`: Guru Nanak,
+- Two more optional fields, added when the audit found that one sentence about
+  labelling was being printed under the heading "What is contested":
+  `classificationNote` (why the entry carries the classification it does) and
+  `datingNote` (what is uncertain about the *dates*, as opposed to the existence).
+  "What is contested" now appears only where scholarship or traditions genuinely
+  disagree.
+- Ten new long-form entries in `content/mythology-historical.ts`: Guru Nanak,
   Guru Gobind Singh, Ashoka, Mahavira, Socrates, Hatshepsut, Mirabai, Enheduanna,
-  Marcus Aurelius. Each carries background, turning points, contributions,
-  significance, references, and a contested note where the record is genuinely
-  unsettled.
-- The card prints classification, historicity and period, then the extended layers
-  only when present. Existing entries render exactly as before plus the badge.
+  Marcus Aurelius, and Milarepa — the first Buddhist figure in the section (the
+  tradition was registered in `MYTH_TRADITIONS`, but no figure belonged to it).
+  Each carries background, turning points, contributions, significance, references,
+  and a contested note where the record is genuinely unsettled.
+- `mahavira` and `mirabai` were recorded as `historicity: 'debated'`. Their
+  *existence* is not the debated question — their dates and biographical detail
+  are — so both are now `documented`, with a `datingNote` that says exactly which
+  years are conventional and which are argued.
+- The card prints classification, historicity, period and both notes, then the
+  extended layers only when present. Existing entries render exactly as before plus
+  the badge. `curiosity:content` now counts 34 myth characters.
 
 Content rule enforced by `verify-daily-content`: narrative figures keep the
 reference-panel shape (family ≥ 4, timeline ≥ 4); documented figures must carry a
@@ -119,8 +131,10 @@ thin because the record is thin. Nothing is invented to satisfy a layout.
   only from that field, and the evidence line is printed beside it.
 - Selection: `bestsellerEligibleEntries` → no consecutive author → no consecutive
   genre → existing date rotation. Cadence unchanged (a book every three days).
-- The pool grew from 25 to 55 entries (25 authored + 30 genre shelf). Seven authored
-  and thirty shelf titles carry evidence; see `docs/book-bestseller-evidence.md`.
+- The pool is 53 entries (25 authored + 28 genre shelf) across 18 genre values, and
+  34 carry usable evidence — 7 authored and 27 shelf, of which 30 are dated
+  `list-entry` records and 4 are `publisher-stated`. Selection, validation and the
+  card all read the same definition; see `docs/book-bestseller-evidence.md`.
 - Entries without evidence are retained, not deleted, and simply cannot be chosen
   for a new card.
 
@@ -132,14 +146,25 @@ thin because the record is thin. Nothing is invented to satisfy a layout.
   UI/UX, LatestPunjabiMovies, AI), each ending in a checkable outcome.
 - Selection is a pure function of the week: Monday-based, Asia/Kolkata, hashed by
   corpus rotation. The same week gives the same assignment on every device, and only
-  a new week or a new decision changes it. **Seven-day stability is a property of the
-  function, not of a stored record.**
+  a new week changes it. **Seven-day stability is a property of the function, not of
+  a stored record.**
 - Four states: Not started / In progress / Completed / Not relevant, plus Save for
-  Later. Completed and not-relevant assignments are skipped by the rotation;
-  saved ones stay visible after the week rolls over.
+  Later. **A status never changes which assignment the week is about** — the earlier
+  implementation filtered Completed and Not relevant out of the eligible pool, so the
+  first click on a decision re-picked the week and "Completed this week" could never
+  be reached. `selectWeeklyAssignment()` now takes `records` only for call-site
+  compatibility and does not read it; a new week is the only re-pick. Saved
+  assignments stay visible after the week rolls over.
 - Storage: `settings.weeklyLearning.records`, i.e. inside `app_settings.data` on
   Supabase and `pace.db.v1` locally. **No new table, no new column, no migration.**
   Older builds ignore the key; older snapshots lack it and read as empty.
+- The store's normalizer rebuilds `settings` section by section, and it used to
+  rebuild only `general`, `notifications` and `appearance` — so `weeklyLearning` was
+  written by the UI and then dropped on the next read (and on `importData()`). It is
+  now normalized and validated like the others: unknown statuses fall back to
+  `not-started`, records that are not objects are dropped, an unparseable
+  `updatedAt` becomes empty, and a backup with no such key reads as `{ records: {} }`.
+  `npm run verify:learnings` asserts the round trip, including a legacy backup.
 
 ---
 
@@ -200,7 +225,7 @@ table, any existing migration.
 | `npx tsc --noEmit` | exit 0 |
 | `npm run lint` | exit 0, no warnings |
 | `npm run build` | exit 0, 15 routes |
-| `npm run curiosity:content` | exit 0 — 366 daily selections, 33 myth characters, 18/18/18 science concepts, page renders all sections in order |
+| `npm run curiosity:content` | exit 0 — 366 daily selections, 34 myth characters, 18/18/18 science concepts, page renders all sections in order |
 | `npm run curiosity:reservoir` | exit 0 |
 | `npm run curiosity:verify` | exit 0 — 18 checks incl. credential scan |
 | `npm run curiosity:dedupe` | exit 0 — 14 checks |
@@ -209,7 +234,8 @@ table, any existing migration.
 | `npm run verify:discovery` | exit 0 — 53 checks |
 | `npm run verify:science` | exit 0 — 14 checks |
 | `npm run verify:daily-knowledge` | exit 0 — 8 checks |
-| `npm run verify:learnings` | exit 0 — 20 checks (new) |
+| `npm run verify:learnings` | exit 0 — 43 checks (extended: decision stability + the settings round trip) |
+| `npm run curiosity:books` | exit 0 — 27 checks (new: evidence pass-through, no-claim rendering, validation) |
 | `npx tsx scripts/discover-vocabulary.ts --offline` | exit 0, approves nothing, says why |
 | `npm run curiosity:links` | exit 1 — every URL unreachable from this sandbox; the script says so itself. Not a content failure, but **unverified**. |
 

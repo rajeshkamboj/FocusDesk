@@ -729,6 +729,20 @@ export interface MythCharacter {
    * scholarly or inter-tradition picture is genuinely unsettled.
    */
   contestedNote?: string;
+  /**
+   * Why this entry carries the classification it does — a labelling explanation,
+   * not a dispute. Kept separate from `contestedNote` because the two used to
+   * share one field, which meant a note about how the section talks about a deity
+   * was printed under the heading "What is contested".
+   */
+  classificationNote?: string;
+  /**
+   * What is uncertain about the *dating*, as opposed to the existence. A figure
+   * can be entirely historical and still have dates that scholars argue about;
+   * saying so here keeps `historicity` answering only one question: does this
+   * person have a documentary basis?
+   */
+  datingNote?: string;
 }
 
 /**

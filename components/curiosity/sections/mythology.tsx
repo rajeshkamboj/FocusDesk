@@ -78,6 +78,15 @@ export function MythologySection({ character }: { character: MythCharacter }) {
               ) : null}
               {character.period ? <span>{character.period}</span> : null}
             </div>
+            {character.classificationNote ? (
+              <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{character.classificationNote}</p>
+            ) : null}
+            {character.datingNote ? (
+              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-3">
+                <span className="font-medium text-ink-2">Dating: </span>
+                {character.datingNote}
+              </p>
+            ) : null}
           </div>
         </div>
 

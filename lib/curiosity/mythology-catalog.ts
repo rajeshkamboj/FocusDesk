@@ -150,7 +150,10 @@ export function withClassification(character: MythCharacter): MythCharacter {
     historicity: character.historicity ?? found.historicity,
     traditionKey: character.traditionKey ?? found.traditionKey,
     ...(character.period ? {} : { period: found.period }),
-    ...(character.contestedNote || !found.note ? {} : { contestedNote: found.note }),
+    // A classification explanation belongs in its own field. Putting it in
+    // `contestedNote` made the card print "What is contested" above a sentence
+    // that disputes nothing.
+    ...(character.classificationNote || !found.note ? {} : { classificationNote: found.note }),
   };
 }
 

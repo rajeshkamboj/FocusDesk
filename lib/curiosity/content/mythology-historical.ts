@@ -275,10 +275,12 @@ export const historicalCharacters: MythCharacter[] = [
     name: 'Mahavira',
     aliases: ['Vardhamana', 'Mahavira Vardhamana', 'Nigantha Nataputta (in Buddhist texts)'],
     classification: 'religious',
-    historicity: 'debated',
+    historicity: 'documented',
     traditionKey: 'jain',
     tradition: 'Jain — the twenty-fourth tirthankara',
     period: 'Traditionally 599–527 BCE; many historians place him in the 6th–5th centuries BCE',
+    datingNote:
+      'His existence is not in serious doubt; the years are. Jain tradition gives 599–527 BCE; most historians work with a 6th–5th-century BCE setting and argue between a death date near 527 and one near 468 BCE. The dates above are the tradition’s, and the card says so.',
     sources: [
       'the Acaranga and Sutrakritanga, the oldest strata of the Jain canon (in Ardhamagadhi Prakrit)',
       'the Kalpa Sutra, the most widely read legendary biography',
@@ -332,7 +334,7 @@ export const historicalCharacters: MythCharacter[] = [
       'Anekantavada, the many-sidedness doctrine, is frequently cited as a philosophical basis for tolerance, though historians caution that the two are not the same idea.',
     ],
     contestedNote:
-      'The traditional dates 599–527 BCE are not accepted by all scholars, and the century-level uncertainty is stated above. The details of his biography come from a later tradition; the doctrine is attested in the earliest canonical texts but those texts also have a long transmission history. Buddhist sources, which mention him, are hostile witnesses and cannot be used as a neutral record.',
+      'The details of his biography come from a later tradition; the doctrine is attested in the earliest canonical texts, but those texts also have a long transmission history. Buddhist sources, which mention him as Nigantha Nataputta, are hostile witnesses and cannot be used as a neutral record.',
     lesserKnown: [
       { layer: 'textual', text: 'The Acaranga includes detailed rules about how an ascetic must walk, eat, sit and breathe in order to minimise harm to living things — the doctrine applied to the body.' },
       { layer: 'traditional', text: 'The Kalpa Sutra gives the numbered lists of his fasts and the names of those who joined the order; it is the source most devotional accounts follow.' },
@@ -411,11 +413,11 @@ export const historicalCharacters: MythCharacter[] = [
       'He is one of very few ancient philosophers whose death date and the year of his trial are securely attested.',
     ],
     contestedNote:
-      'The Socrate of Plato, Xenophon, and Aristophanes cannot be fully reconciled; the “problem of Socrates” in scholarship is precisely which of them preserves the historical man. Serious scholars differ between a reconstruction that takes the early Platonic dialogues as closest to the truth and one that treats almost everything as literary invention.',
+      'The Socrates of Plato, Xenophon, and Aristophanes cannot be fully reconciled; the “problem of Socrates” in scholarship is precisely which of them preserves the historical man. Serious scholars differ between a reconstruction that takes the early Platonic dialogues as closest to the truth and one that treats almost everything as literary invention.',
     lesserKnown: [
       { layer: 'textual', text: 'In the Apology he says his own wisdom consists in knowing that he does not know, and disclaims any doctrine of his own — a claim that makes every later attribution of a “Socratic philosophy” awkward.' },
       { layer: 'traditional', text: 'The story that his last words were “we owe a cock to Asclepius” comes from the Phaedo and is one of the most discussed fragments in philosophy; Plato’s dialogue is not a transcript.' },
-      { layer: 'analysis', text: 'Historians of philosophy generally treat the historical Sokrates as recoverable only as a shape: a method and a moral attitude, not a system.' },
+      { layer: 'analysis', text: 'Historians of philosophy generally treat the historical Socrates as recoverable only as a shape: a method and a moral attitude, not a system.' },
       { layer: 'inference', text: 'His refusal to write may have been a deliberate refusal of philosophical authority, which would make the tradition that wrote him down a contested fulfilment of his own intent.' },
     ],
     variants: [
@@ -513,10 +515,12 @@ export const historicalCharacters: MythCharacter[] = [
     name: 'Mirabai',
     aliases: ['Meera', 'Mira Bai', 'Mīrābāī'],
     classification: 'religious',
-    historicity: 'debated',
+    historicity: 'documented',
     traditionKey: 'hindu',
     tradition: 'Hindu — Bhakti movement, Rajasthan',
     period: 'traditionally c. 1498–1547 CE',
+    datingNote:
+      'That a woman saint-poet of this name sang in Rajasthan is not in serious scholarly doubt; almost every particular of her life is. The 1498–1547 CE dates are conventional, drawn from later hagiography, and modern studies place her anywhere between the late 15th and the late 16th century. The identity of her husband varies by source.',
     sources: [
       'the padas (devotional songs) attributed to her, transmitted orally and in manuscripts from the 16th–17th centuries',
       'Nabhadas, Bhaktamal (c. 1600), an early hagiographic catalogue of devotees',
@@ -571,7 +575,7 @@ export const historicalCharacters: MythCharacter[] = [
       'The story of her disappearance into the temple image at Dwarka is a devotional ending, not a historical report, and is told as such here.',
     ],
     contestedNote:
-      'The dates, the identity of her husband, the persecutions, the travels, and even the extent of the corpus attributed to her are all contested. This entry deliberately gives the tradition’s account and marks it as tradition, because presenting the hagiography as biography would be the exact error this section exists to avoid.',
+      'The identity of her husband, the persecutions, the travels, and the extent of the corpus attributed to her are all contested. This entry deliberately gives the tradition’s account and marks it as tradition, because presenting the hagiography as biography would be the exact error this section exists to avoid.',
     lesserKnown: [
       { layer: 'textual', text: 'The earliest datable reference is Nabhadas’s Bhaktamal (c. 1600), which gives her a short entry; nearly all the famous episodes are later.' },
       { layer: 'traditional', text: 'The poison, the bed of nails and the final disappearance are hagiographic motifs, and similar stories attach to other saints.' },
@@ -744,5 +748,92 @@ export const historicalCharacters: MythCharacter[] = [
     ],
     analysis:
       'The Meditations is popular now because it addresses a specific modern problem — how to keep working when the conditions are bad and no one is coming to fix them. Its limitation is equally modern: it offers a discipline for the self and almost nothing about changing the structures that make the discipline necessary. Marcus ruled an empire; his book is about the part of the job he could control. That is honest, and it is also a choice.',
+  },
+  {
+    id: 'milarepa',
+    name: 'Milarepa',
+    aliases: ['Mila Thöpaga', 'Shepa Dorje', 'Jetsun Milarepa', 'Mi la ras pa'],
+    classification: 'religious',
+    historicity: 'documented',
+    traditionKey: 'buddhist',
+    tradition: 'Buddhist — Tibetan, Kagyu lineage',
+    period: '1040–1123 CE (the tradition’s chronology)',
+    datingNote:
+      'The century is secure; the years are not. Tibetan tradition gives 1040–1123, while some reference works give 1052–1135. The Life was written more than three and a half centuries after his death, so its chronology is schematic.',
+    classificationNote:
+      'A Tibetan yogi and teacher venerated as a saint across the Kagyu lineages, not a mythological figure. The dramatic episodes below come from a 15th-century biography, which is why the card marks what is record and what is hagiography.',
+    sources: [
+      'The Life of Milarepa (Tsangnyön Heruka, c. 1488), the best-known biography; translated by Andrew Quintman (Penguin Classics, 2010)',
+      'The Hundred Thousand Songs of Milarepa — the collected mgur, transmitted alongside the Life; translated by Christopher Stagg (Shambhala, 2016)',
+      'Gö Lotsawa Zhönnu Pel, Blue Annals (1476–78), translated by George Roerich (1949), the Kagyu lineage history',
+      'Marpa’s transmission material and later Kagyu histories, which frame the teacher–disciple account',
+    ],
+    relationships: [
+      { with: 'Marpa', note: 'His teacher; Milarepa is the “heart-disciple”, and the trials Marpa imposed are the centre of the biography.' },
+      { with: 'Gampopa', note: 'Chief successor in the monastic line; most of the surviving Kagyu schools descend through him.' },
+      { with: 'Rechungpa', note: 'The closest disciple in the biography and the recipient of its most personal teaching.' },
+      { with: 'Tsangnyön Heruka', note: 'The 15th-century author of the Life and compiler of the Songs; the Milarepa we read is substantially his construction.' },
+    ],
+    family: [
+      { relation: 'Father', name: 'Mila Sherab Gyaltsen', note: 'Dies when Milarepa is a child, in the biography’s account.' },
+      { relation: 'Mother', name: 'Nyangtsa Kargyen', note: 'Her treatment at the hands of the uncle and aunt, and her demand for revenge, set the story in motion.' },
+      { relation: 'Sister', name: 'Peta Paldron', note: 'Also given as Peta Gönkyi; shares the family’s hardship, and later accounts differ on what became of her.' },
+      { relation: 'Paternal uncle and aunt', name: 'Unnamed in the English translations', note: 'They take the family estate and, in the Life, reduce mother and children to servants.' },
+    ],
+    timeline: [
+      { when: '1040 CE', event: 'Born at Kya Ngatsa in Gungthang, western Tibet, by the tradition’s chronology.' },
+      { when: 'c. 1043', event: 'His father dies; the estate is taken by his uncle and aunt, and the family is reduced to poverty — as the Life tells it.' },
+      { when: 'c. 1060s', event: 'At his mother’s urging he learns black magic and, the tradition says, kills thirty-seven people; remorse turns him towards the dharma.' },
+      { when: 'c. 1078', event: 'Aged thirty-eight, he finds Marpa at Lhodrak and enters years of trials, including the building of towers.' },
+      { when: 'c. 1084', event: 'Receives initiation and the secret name Shepa Dorje, then leaves for solitary practice.' },
+      { when: 'c. 1084–1096', event: 'Twelve years in cave retreat, chiefly at Drakar Taso (White Rock Horse Tooth), living on nettles.' },
+      { when: 'c. 1100–1123', event: 'Wanders and teaches in song; his disciples include Rechungpa and Gampopa. Dies in 1123, by the tradition’s reckoning.' },
+    ],
+    story:
+      'Milarepa is the best-known saint in Tibetan Buddhism, and almost everything memorable about him comes from a biography written nearly four centuries after his death. In that account he is born into a comfortable family in Gungthang, in western Tibet; his father dies, the estate is seized by an uncle and aunt, and he grows up with his mother and sister in servitude. His mother sends him to learn sorcery, and he uses it: a spell destroys the house of his relatives during a wedding, killing thirty-seven people. The triumph turns to dread, and he goes looking for a teacher who can undo what he has done.\n\nHe finds Marpa, a married lay master who has travelled to India and brought back the tantric transmissions of Naropa and Maitripa. Marpa does not comfort him. He sets him to building towers and then demolishing them, year after year, in what the tradition reads as a deliberate burning-away of the sorcerer’s self-importance; the nine-storey tower at Lhodrak is still shown as his work. When the trials end, Marpa gives him the initiation and the name Shepa Dorje, and sends him away to practise alone.\n\nThat solitude is the part of the story Tibet kept: years in caves, in a thin cotton robe, living on nettles until, the Life jokes, his body turned green — and, in the songs, a mind that had become transparent to itself. What survives in the Hundred Thousand Songs is a vernacular voice, by turns defiant, funny, tender and bleak, addressed to patrons, to a departing disciple, to a sister he could not save, and to the death he met without fuss. He refused monastic ordination. The model he left behind is not the monk but the yogi whose realisation is tested in retreat, and the Kagyu lineage that descends through Gampopa carries his name as its origin story.',
+    background:
+      'Eleventh-century Tibet was a country of local lordships and monasteries, a century and a half into the “later diffusion” of Buddhism after the collapse of the old empire. The most prized Buddhist knowledge was still arriving from India, carried by translators and pilgrims; Marpa, Milarepa’s teacher, was one of the great travellers of that generation. The Kagyu (“whispered lineage”) tradition that grew from this circle emphasised direct oral transmission from teacher to disciple and intensive retreat practice rather than scholastic curriculum — an emphasis that made a lay yogi with no monastic office a plausible lineage holder, and made his songs, rather than his institutions, the thing that carried him.',
+    keyEvents: [
+      { when: 'c. 1043', event: 'Father’s death and the seizure of the estate — the biography’s turn towards revenge.' },
+      { when: 'c. 1078', event: 'Meets Marpa; the years of trials begin.' },
+      { when: 'c. 1084', event: 'Initiation and the name Shepa Dorje; departure into retreat.' },
+      { when: 'c. 1096', event: 'Emerges from twelve years of practice and begins to teach.' },
+      { when: '1123', event: 'Death, in the tradition’s chronology; the songs and the lineage carry on without him.' },
+    ],
+    contributions: [
+      'The mgur (song-poems) collected as the Hundred Thousand Songs, the most widely read body of Tibetan religious poetry and one of the few major Tibetan works written for lay listeners.',
+      'The transmission from Marpa through Milarepa to Gampopa, from which the major Kagyu schools descend.',
+      'A durable model of the “cotton-clad” yogi: realisation demonstrated in austerity and retreat rather than in monastic rank.',
+      'A biography that became a literary form — Tsangnyön Heruka’s Life shaped how Tibetan saints’ lives were written afterwards.',
+    ],
+    significance:
+      'Milarepa matters to Tibetan Buddhism as a saint, to Tibetan literature as a poet, and to the study of religion as a case where the boundary between the two is unusually visible. The songs are the part most likely to preserve something of his own voice; the Life is a 15th-century religious reformer’s portrait of him, and reading it as a chronicle would mislead. Both are read here with that difference on the surface.',
+    references: [
+      { citation: 'Tsangnyön Heruka. The Life of Milarepa. Trans. Andrew Quintman. New York: Penguin Classics, 2010.', note: 'The standard English translation of the biography; the introduction sets out what is record and what is hagiography.' },
+      { citation: 'Quintman, Andrew. The Yogin and the Madman: Reading the Biographical Corpus of Tibet’s Great Saint Milarepa. New York: Columbia University Press, 2014.', note: 'A study of the several lives of Milarepa and of how they differ from one another.' },
+      { citation: 'Tsangnyön Heruka. The Hundred Thousand Songs of Milarepa. Trans. Christopher Stagg. Boulder: Shambhala, 2016.', note: 'The song collection, the part of the corpus closest to the yogi’s own voice.' },
+      { citation: 'Gö Lotsawa Zhönnu Pel. The Blue Annals. Trans. George N. Roerich. Calcutta: Royal Asiatic Society of Bengal, 1949.', note: 'The 15th-century lineage history; used for the Kagyu succession rather than for biography.' },
+    ],
+    interestingFacts: [
+      '“Milarepa” is a nickname: Mila is the family name, and repa (“cotton-clad”) refers to the thin cotton robe worn in Himalayan cold, taken as evidence of inner heat (tummo).',
+      'The nettle diet is a joke in the Life as well as an austerity: his body is said to have turned green, which is why some of the oldest paintings show a green-skinned yogi.',
+      'He never took monastic ordination, and remained a lay yogi — one reason the Kagyu tradition can present him as proof that realisation does not require a monastery.',
+      'The Life was written in 1488, more than three and a half centuries after his death, by an author with a reformer’s agenda.',
+    ],
+    contestedNote:
+      'How much of the biography is historical is genuinely unsettled. The earliest references to Milarepa are thin; the songs have a long editorial history; and the vivid episodes — the sorcery, the towers, the green skin — come from a 15th-century Life written for a lineage purpose. Scholars treat the existence and the teaching lineage as secure and the biography as literature, while devotional tradition reads the Life as scripture. The card keeps both readings visible rather than choosing for the reader.',
+    lesserKnown: [
+      { layer: 'textual', text: 'The Hundred Thousand Songs is a compilation with a long history of editing and expansion; individual songs cannot be dated to the yogi’s lifetime with confidence, which is why the collection is cited here as a transmitted corpus rather than as a contemporary record.' },
+      { layer: 'traditional', text: 'The sorcery episode, the killing of thirty-seven people and the tower-building under Marpa are all reported by the 15th-century Life, not by any contemporary source.' },
+      { layer: 'analysis', text: 'Scholars read the Life through its author: Tsangnyön Heruka (1452–1507) wrote it while reforming his own lineage, and the Milarepa of perseverance and obedience is shaped by that aim.' },
+      { layer: 'inference', text: 'The songs’ popularity may owe as much to their vernacular directness as to their doctrine — they were composed to be heard and remembered, which is not how most Tibetan philosophical literature works.' },
+    ],
+    variants: [
+      { tradition: 'Kagyu tradition', difference: 'Reads the Life as scripture and as a teaching text on perseverance; the saints’ biography is the doctrine in narrative form.' },
+      { tradition: 'Modern scholarship', difference: 'Treats the Life as a 15th-century literary work and reconstructs the historical yogi from the songs and early lineage references, where he is much thinner.' },
+      { tradition: 'Dating conventions', difference: '1040–1123 is the tradition’s chronology; some reference works give 1052–1135. The century, not the years, is what is secure.' },
+    ],
+    analysis:
+      'Milarepa is popular for a reason that is not quite devotional: his story is about a person who does something unforgivable, is not let off, and spends the rest of his life working it out in the cold. The Life makes the labour visible — the pointless towers, the years of nettles — and the songs give it a voice without piety. That combination is rare in hagiography and it is why the figure travels outside Buddhism. The caution is the one this whole section is built on: the vividness of the story is evidence of its literary power, not of its factual detail, and the two should not be quietly swapped.',
   },
 ];

@@ -184,6 +184,11 @@ export function conceptFromLead(discipline: ScienceDiscipline, page: WikipediaPa
     aliases: [title],
     ...(page.wikidataId ? { wikidataId: page.wikidataId } : {}),
     origin: 'wikipedia',
+    // A Wikipedia lead is an encyclopedic explainer: foundation level by default,
+    // and never promoted to the undergraduate lane, which only a research record
+    // may occupy.
+    educationLevel: 'foundation',
+    levelBasis: 'derived-from-record',
     source: {
       url: page.url,
       name: `Wikipedia · ${title}`,

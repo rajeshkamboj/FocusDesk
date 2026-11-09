@@ -50,6 +50,9 @@ import { selectDailyLesson, bandOf } from './speak-better-daily';
 import { enrichLesson } from '../discovery/enrichment/speak-better';
 import { puzzlePoolForDate, selectDailyPuzzle, scorePuzzle, verifyPuzzle } from './puzzles';
 import { selectDiscoveredLiterature } from './literature-selection';
+import { bestsellerEligibleEntries, hasVerifiedBestseller } from './book-selection';
+import { approvedVocabularyLessons } from '../discovery/vocabulary/pipeline';
+import { liveAlternatives, publishedVocabularyWords, selectLiveLesson } from './speak-better-live';
 import { researchCandidateEligibleToday } from '../discovery/science';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
@@ -181,22 +184,17 @@ function curatedBookFor(entry: CuriosityPoolEntry<BookCandidate>): BookRecommend
 
 export function currentBook(state: CuriosityState, date: string): BookRecommendation {
   if (state.book?.payload) return state.book.payload;
-  return curatedBookFor(pickEntry<BookCandidate>(POOL_CATEGORY_BY_CARD.book, date, emptyState()));
-}
-
-/**
- * Publish-time research ranking.
- *
- * A stored research record outranks a curated explainer, and a higher significance
- * score outranks a lower one; everything else keeps the ledger's date rotation as
- * its tie-break. This is the only place the publisher uses `rank`, so a card whose
- * pool has no research records behaves exactly as it did before.
- */
-function scienceRank(candidate: ContentCandidate): number {
-  const concept = candidate.item as ScienceConcept;
-  if (concept.origin === 'research') return 1_000 + (concept.research?.significanceScore ?? 0);
-  if (concept.origin === 'wikipedia') return 100;
-  return 10;
+  /*
+    The fallback a reader sees before anything is published. It prefers the entries
+    that carry bestseller evidence, so the card never labels an unverified book as a
+    bestseller — and it still shows *something* rather than an empty card if the
+    pool were ever evidence-free.
+  */
+  const evidence = bestsellerEligibleEntries(poolFor('book'));
+  const entry = evidence.length > 0
+    ? (selectFromPool('book', date, { pool: evidence }).entry as CuriosityPoolEntry<BookCandidate>)
+    : pickEntry<BookCandidate>(POOL_CATEGORY_BY_CARD.book, date, emptyState());
+  return curatedBookFor(entry);
 }
 
 /** Publication ids for one card, most recent first, over a bounded window. */
@@ -314,15 +312,34 @@ export async function runCuriosityRefresh(
     } else if (wantBook && !bookDue) {
       book = { published: false, reason: 'interval', contentId: state.book?.contentId, source: state.book?.payload.source, detail: `Next change ${addPublicationDays(state.book?.date ?? date, BOOK_INTERVAL_DAYS)} (every ${BOOK_INTERVAL_DAYS} days).` };
     } else if (wantBook) {
+      /**
+       * Bestseller evidence is a publication gate, not a label.
+       *
+       * Only entries carrying a `bestseller` record naming its source may be
+       * published. An entry without one is left in the pool untouched — its
+       * history, its id and any prior recommendation survive — it simply cannot be
+       * chosen again until the evidence is recorded. The rotation also avoids
+       * repeating the last author, and the last genre while an alternative exists.
+       */
+      const eligibleBooks = bestsellerEligibleEntries(pools.book as CuriosityPoolEntry<BookCandidate>[], {
+        genre: state.book?.payload?.genre,
+        author: state.book?.payload?.author,
+      });
       const bookOutcome = selectCandidate(
-        pools.book.map((entry) => candidateFromPool('book', entry)),
+        eligibleBooks.map((candidateEntry) => candidateFromPool('book', candidateEntry)),
         { card: 'book', date, index: historyIndex, offset: CARD_OFFSETS.book },
       );
       const entry = bookOutcome.ok && bookOutcome.candidate
-        ? (pools.book.find((candidateEntry) => candidateEntry.id === bookOutcome.candidate?.id) as CuriosityPoolEntry<BookCandidate> | undefined)
+        ? (eligibleBooks.find((candidateEntry) => candidateEntry.id === bookOutcome.candidate?.id) as CuriosityPoolEntry<BookCandidate> | undefined)
         : undefined;
       if (!entry) {
-        book = { published: false, reason: 'failed', detail: `No unread book candidate for ${date}; the previous recommendation is kept.` };
+        book = {
+          published: false,
+          reason: 'failed',
+          detail: eligibleBooks.length === 0
+            ? `No book in the pool carries recorded bestseller evidence, so nothing was published for ${date}; the previous recommendation is kept.`
+            : `No unread book candidate with bestseller evidence for ${date}; the previous recommendation is kept.`,
+        };
       } else {
         const { id } = entry;
         const lookup = options.offline
@@ -466,16 +483,54 @@ export async function runCuriosityRefresh(
         ...SPEAK_BETTER_C1_LESSONS,
         ...SPEAK_BETTER_C2_LESSONS,
       ];
+      /**
+       * Speak Better publishes from two sources, in this order:
+       *
+       *   1. **Discovered lessons** approved by the scheduled vocabulary pipeline —
+       *      live lexical evidence plus an authored gloss, never a published word.
+       *   2. **The authored curriculum**, which is the permanent fallback. If the
+       *      reservoir is empty (a fresh deployment, a failed discovery run) the
+       *      card still publishes exactly what it always did.
+       *
+       * The word-level repeat rule is enforced against the ledger: a target word a
+       * reader has already met is not a new lesson, and the publisher also ships
+       * alternatives whose words are still unseen so the per-device known-word
+       * refinement has something to swap in.
+       */
+      const liveLessons = approvedVocabularyLessons(reservoirCandidates);
+      const publishedWords = publishedVocabularyWords(activeSeen);
       const spoken = selectDailyLesson(advancedLessons, {
         date,
         recentLessonIds: recentCardIds(state, 'speak-better', 30),
       });
-      const chosenLesson = spoken?.lesson ?? speakBetterLessons[0];
-      const speakBetterPool: SpeakBetterLesson[] = advancedLessons.length ? advancedLessons : [...speakBetterLessons];
+      const live = reusing
+        ? null
+        : selectLiveLesson(liveLessons, {
+            date,
+            publishedWords,
+            recentLessonIds: recentCardIds(state, 'speak-better', 30),
+            includeC2: bandOf(spoken?.lesson ?? speakBetterLessons[0]) === 'C2',
+          });
+      const chosenLesson: SpeakBetterLesson = live?.lesson ?? spoken?.lesson ?? speakBetterLessons[0];
+      const speakBetterPool: SpeakBetterLesson[] = [
+        ...liveLessons,
+        ...(advancedLessons.length ? advancedLessons : [...speakBetterLessons]),
+      ].filter((lesson, index, all) => all.findIndex((entry) => entry.id === lesson.id) === index);
       let speakBetterItem: SpeakBetterLesson = chosenLesson;
       if (!reusing) {
-        if (spoken && spoken.basis.length) selectionNotes.push(`speak-better: ${spoken.basis.join('; ')}`);
-        if (!options.offline) {
+        if (live) {
+          selectionNotes.push(`speak-better: ${live.basis.join('; ')}`);
+        } else {
+          if (liveLessons.length > 0) {
+            selectionNotes.push('speak-better: every approved discovered word was already published; used the authored curriculum');
+          }
+          if (spoken && spoken.basis.length) selectionNotes.push(`speak-better: ${spoken.basis.join('; ')}`);
+        }
+        if (chosenLesson.origin === 'discovered') {
+          // Discovery already enriched the lesson against live sources; a second
+          // lookup at publish time would spend requests to change nothing.
+          speakBetterItem = chosenLesson;
+        } else if (!options.offline) {
           const enriched = await enrichLesson(chosenLesson, { fetchImpl });
           speakBetterItem = enriched.lesson;
           if (enriched.enrichedWords === 0) {
@@ -485,8 +540,12 @@ export async function runCuriosityRefresh(
           }
         }
       }
-      const speakBetterRank = (candidate: ContentCandidate) =>
-        candidate.id === chosenLesson.id ? 100 : bandOf(candidate.item as SpeakBetterLesson) === 'C1' ? 2 : 1;
+      const speakBetterRank = (candidate: ContentCandidate) => {
+        const item = candidate.item as SpeakBetterLesson;
+        if (candidate.id === chosenLesson.id) return 1_000;
+        if (item.origin === 'discovered') return 3;
+        return bandOf(item) === 'C1' ? 2 : 1;
+      };
       const speakBetterChoice = reusing
         ? reusePick(
             previousIds['speak-better'],
@@ -591,28 +650,76 @@ export async function runCuriosityRefresh(
           .filter((c): c is ScienceConcept => c !== null)
           .map((concept) => candidateFromScience(discipline, concept));
 
-      const scienceLegs = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] => [
-        ...researchScience(discipline),
-        ...reservoirScience(discipline),
+      /**
+       * SCIENCE — TWO LEVELS, ONE DEFAULT
+       *
+       * `foundation` (school level) is the default and is what `chemistry`,
+       * `physics` and `biology` publish: curated explainers, encyclopedic concepts
+       * and discovered explainers only. A research record may never be the default
+       * card.
+       *
+       * `undergraduate` is the scored research lane, attached for the same day as
+       * an alternative behind the level selector. There is no third level: the type
+       * has two members, so "Advanced Research" cannot be selected, filtered or
+       * routed to.
+       */
+      const foundationLegs = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] => [
         ...curatedScience(discipline),
+        ...reservoirScience(discipline).filter((candidate) => (candidate.item as ScienceConcept).origin !== 'research'),
         ...discovery[discipline].candidates,
       ];
+      const foundationRank = (candidate: ContentCandidate) => {
+        const origin = (candidate.item as ScienceConcept).origin;
+        if (origin === 'curated') return 3;
+        if (origin === 'wikipedia') return 2;
+        return 1;
+      };
 
       const chemistryChoice = reusing
         ? reusePick(previousIds.chemistry, previousPayload?.chemistry)
-        : choose('chemistry', scienceLegs('chemistry'), scienceRank);
+        : choose('chemistry', foundationLegs('chemistry'), foundationRank);
       const physicsChoice = reusing
         ? reusePick(previousIds.physics, previousPayload?.physics)
-        : choose('physics', scienceLegs('physics'), scienceRank);
+        : choose('physics', foundationLegs('physics'), foundationRank);
       const biologyChoice = reusing
         ? reusePick(previousIds.biology, previousPayload?.biology)
-        : choose('biology', scienceLegs('biology'), scienceRank);
+        : choose('biology', foundationLegs('biology'), foundationRank);
 
-      /*
-        Provenance is a promise to the reader, so it is checked after selection: if a
-        discipline is showing anything other than a scored research record, the cause
-        is recorded on the day rather than hidden. The card itself prints the label.
-      */
+      /**
+       * The undergraduate pick is chosen deterministically from the scored research
+       * candidates — highest significance first, id as the tie-break — and never
+       * through the ledger a second time, because the ledger's subject reservation
+       * is what stops one day putting the same idea on two cards.
+       */
+      const undergraduatePick = (discipline: ScienceDiscipline): ScienceConcept | undefined => {
+        const pool = researchScience(discipline);
+        if (pool.length === 0) return undefined;
+        const sorted = [...pool].sort((left, right) => {
+          const scoreOf = (candidate: ContentCandidate<ScienceConcept>) =>
+            (candidate.item as ScienceConcept).research?.significanceScore ?? 0;
+          return scoreOf(right) - scoreOf(left) || left.id.localeCompare(right.id);
+        });
+        return sorted[0].item as ScienceConcept;
+      };
+
+      const scienceLevels = (reusing && previousPayload?.scienceLevels)
+        ? previousPayload.scienceLevels
+        : {
+            foundation: {
+              chemistry: chemistryChoice.item as ScienceConcept,
+              physics: physicsChoice.item as ScienceConcept,
+              biology: biologyChoice.item as ScienceConcept,
+            },
+            undergraduate: Object.fromEntries(
+              (['chemistry', 'physics', 'biology'] as const)
+                .map((discipline) => [discipline, undergraduatePick(discipline)] as const)
+                .filter(([, concept]) => concept !== undefined),
+            ),
+            notes: (['chemistry', 'physics', 'biology'] as const)
+              .filter((discipline) => !undergraduatePick(discipline))
+              .map((discipline) => `${discipline}: no qualified undergraduate-level research record today`),
+          };
+
       if (!reusing) {
         for (const [discipline, choice] of [
           ['chemistry', chemistryChoice],
@@ -621,14 +728,20 @@ export async function runCuriosityRefresh(
         ] as const) {
           const concept = choice.item as ScienceConcept;
           if (concept.origin === 'research') {
-            selectionNotes.push(
-              `${discipline}: research record (${concept.provenanceLabel ?? concept.provenance ?? 'unlabelled'}, ${concept.publishedOn ?? 'date not supplied'}, score ${concept.research?.significanceScore ?? 0})`,
-            );
-          } else if (researchScience(discipline).length === 0) {
+            // The gate that keeps a research record out of the default card.
             degraded.push(
-              `${discipline}: no qualified recent research record in the library; showing ${concept.origin === 'wikipedia' ? 'an encyclopedia concept' : 'a curated concept'} instead`,
+              `${discipline}: a research record reached the foundation card; republished as a curated explainer would be required`,
             );
           }
+        }
+        const undergraduateCount = Object.keys(scienceLevels.undergraduate ?? {}).length;
+        selectionNotes.push(
+          `science: foundation level published by default; ${undergraduateCount} of 3 disciplines have an undergraduate-level record today`,
+        );
+        if (undergraduateCount === 0) {
+          degraded.push(
+            'science: no qualified undergraduate-level research record in the library today; the Foundation level is the only level with content',
+          );
         }
       }
 
@@ -775,13 +888,30 @@ export async function runCuriosityRefresh(
           .filter((puzzle) => verifyPuzzle(puzzle).ok)
           .slice(0, 3),
         speakBetter: speakBetterChoice.item as SpeakBetterLesson,
-        speakBetterAlternatives: speakBetterPool
-          .filter((lesson) => lesson.id !== chosenLesson.id)
+        speakBetterAlternatives: [
+          ...liveAlternatives(speakBetterPool, {
+            publishedWords,
+            excludeWord: chosenLesson.word.word,
+            limit: 4,
+            date,
+          }),
+          ...speakBetterPool.filter(
+            (lesson) =>
+              lesson.origin !== 'discovered'
+              && lesson.id !== chosenLesson.id
+              && lesson.word.word.toLowerCase() !== chosenLesson.word.word.toLowerCase(),
+          ),
+        ]
+          .filter((lesson, index, all) => all.findIndex((entry) => entry.id === lesson.id) === index)
           .slice(0, 4),
         mythology: mythologyChoice.item as MythCharacter,
         chemistry: chemistryChoice.item as ScienceConcept,
         physics: physicsChoice.item as ScienceConcept,
         biology: biologyChoice.item as ScienceConcept,
+        scienceLevels,
+        scienceLevelNote: Object.keys(scienceLevels.undergraduate ?? {}).length > 0
+          ? 'Both levels have content today.'
+          : 'Foundation level today; no undergraduate record qualified.',
       };
 
       const idsFor = (choices: ContentCandidate<unknown>[]) => choices.map((candidate) => candidate.id).join('+');
@@ -1048,6 +1178,28 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
     check('quote.author', !blank(payload.quote.author));
   }
 
+  /*
+    Two levels, one default. Foundation is checked as the default card; the
+    undergraduate set, when present, may only contain research records — the reverse
+    of the old behaviour, where a research record could be the card everyone saw.
+  */
+  if (payload.scienceLevels) {
+    const { foundation, undergraduate } = payload.scienceLevels;
+    for (const key of ['chemistry', 'physics', 'biology'] as const) {
+      check(`scienceLevels.foundation.${key}`, !blank(foundation?.[key]?.topic));
+      check(
+        `scienceLevels.foundation.${key} is foundation-level`,
+        (foundation?.[key]?.educationLevel ?? 'foundation') === 'foundation',
+      );
+      const under = undergraduate?.[key];
+      if (under) {
+        check(`scienceLevels.undergraduate.${key} is undergraduate-level`, under.educationLevel === 'undergraduate');
+        check(`scienceLevels.undergraduate.${key} names its provenance`, !blank(under.provenanceLabel));
+        check(`scienceLevels.undergraduate.${key} cites its source`, !invalidUrl(under.source?.url));
+      }
+    }
+  }
+
   for (const key of ['chemistry', 'physics', 'biology'] as const) {
     const concept = payload[key];
     check(`${key}.topic`, !blank(concept?.topic));
@@ -1092,6 +1244,34 @@ export function invalidBookFields(book: BookRecommendation): string[] {
   check('book.why', !blank(book.why));
   check('book.url', !invalidUrl(book.url));
   if (book.coverUrl) check('book.coverUrl', !invalidUrl(book.coverUrl));
+  /*
+    Bestseller evidence is optional, and must be well-formed when present.
+
+    Two different rules are easy to confuse here, and conflating them would be a
+    regression in both directions:
+
+      - *Selection* requires evidence: the publisher only chooses from
+        `bestsellerEligibleEntries`, so a new card cannot be published for a title
+        that has never appeared on a credible list.
+      - *Validation* must not require it: a snapshot published before this rule
+        existed, a reused card, and the curated fallback are all legitimate
+        evidence-free records, and refusing them would blank a page that a reader
+        has already seen. The word "bestseller" simply never appears on those cards,
+        because the card renders the label only from this field.
+
+    So: no field, no label, no complaint. A field that exists is held to the
+    standard below.
+  */
+  if (book.bestseller) {
+    /*
+      Structural, not merely present. A `list-entry` must name the list and the
+      period; anything weaker belongs under `publisher-stated`, where the card says
+      whose claim it is. `hasVerifiedBestseller` is the single definition — the
+      publisher's selection gate and this validator cannot drift apart.
+    */
+    check('book.bestseller is well formed', hasVerifiedBestseller(book));
+    if (book.bestseller.url) check('book.bestseller url', !invalidUrl(book.bestseller.url));
+  }
   return problems;
 }
 

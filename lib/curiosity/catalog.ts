@@ -145,7 +145,7 @@ export const CARD_POLICIES: Record<CuriosityCardKey, CardPolicy> = {
     identity: 'puzzle id + normalized question + answer',
   },
   mythology: {
-    label: 'Mythology · Character of the Day',
+    label: 'Mythology + Historical · Character of the Day',
     exactDays: 180,
     subjectDays: 180,
     nearDuplicateDays: 180,
@@ -254,6 +254,9 @@ export const LOW_STOCK_THRESHOLDS: Record<ReservoirCategory, number> = {
   book: 30,
   'ai-world': 15,
   'developer-radar': 12,
+  // Approved vocabulary lessons. Below this, the scheduled discovery run
+  // replenishes before any repeat is considered.
+  'speak-better': 60,
 };
 
 /**
@@ -275,6 +278,8 @@ export const TARGET_POOL_SIZES: Record<ReservoirCategory, number> = {
   book: 120,
   'ai-world': 60,
   'developer-radar': 45,
+  // The requested rolling reservoir for approved vocabulary.
+  'speak-better': 180,
 };
 
 /** The four pool-backed categories `curiosity_content` stores, as card keys. */

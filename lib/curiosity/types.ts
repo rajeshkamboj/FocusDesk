@@ -168,6 +168,14 @@ export const RESERVOIR_CATEGORIES = [
   'book',
   'ai-world',
   'developer-radar',
+  /**
+   * Approved vocabulary lessons from the scheduled discovery pipeline. Added by
+   * the curated-expansion build; `supabase/migrations/012_vocabulary_candidates.sql`
+   * extends the candidate category constraint to match. Without 012 the write is
+   * refused by the database, the store records a note, and the app keeps
+   * publishing from the authored curriculum — a visible degradation, not a break.
+   */
+  'speak-better',
 ] as const;
 
 export type ReservoirCategory = (typeof RESERVOIR_CATEGORIES)[number];
@@ -477,9 +485,11 @@ export interface SpeakBetterLesson {
   /**
    * Where the CEFR band came from. `curated` — an editor assigned it (the default
    * for every shipped lesson). `estimated` — inferred, and the card says so.
+   * `estimated-frequency` — the discovery pipeline mapped a measured corpus
+   * frequency onto a band (see `FREQUENCY_BANDS`).
    * No dictionary API supplies a CEFR level, so this is never `api`.
    */
-  levelBasis?: 'curated' | 'estimated';
+  levelBasis?: 'curated' | 'estimated' | 'estimated-frequency';
   /** The one-line takeaway the whole lesson exists to deliver. */
   focus: string;
   /** A concrete moment where this language would actually be spoken. */
@@ -506,6 +516,65 @@ export interface SpeakBetterLesson {
     detail?: string;
     fetchedAt?: string;
   };
+  /**
+   * How the lesson came to exist.
+   *
+   * `authored` (or absent) — written in this repository, the original curriculum.
+   * `discovered` — assembled by the scheduled vocabulary pipeline from a live
+   * lexical source plus an editorial gloss, and approved by the quality gate.
+   * The card states it, because a reader is entitled to know which they are
+   * reading and the two are not equally settled.
+   */
+  origin?: 'authored' | 'discovered';
+  /** The audit trail behind a discovered lesson. Absent on authored lessons. */
+  discovery?: VocabularyDiscoveryRecord;
+}
+
+/**
+ * The provenance of one vocabulary lesson produced by the discovery pipeline.
+ *
+ * Every field is supplied by a named source or by the pipeline's own stated
+ * heuristic — nothing here is inferred silently. It is persisted with the lesson
+ * so a later audit can answer "where did this word come from?" without re-running
+ * discovery.
+ */
+export interface VocabularyDiscoveryRecord {
+  /** `YYYY-MM-DD` on which the pipeline approved the lesson. */
+  approvedOn: string;
+  /** Which lexical services answered, in the order they were asked. */
+  sources: VocabularySourceRef[];
+  /**
+   * How the CEFR band was decided. `estimated-frequency` is the only automatic
+   * basis: Datamuse's per-million frequency score, mapped to a band by a stated
+   * table. An editor can override the band, which is recorded as `curated`.
+   */
+  levelBasis: 'curated' | 'estimated-frequency';
+  /** The Datamuse frequency score (occurrences per million words) when supplied. */
+  frequencyPerMillion?: number;
+  /** The band the frequency score maps to, before any editorial override. */
+  frequencyBand?: string;
+  /**
+   * The authored gloss this lesson's teaching fields came from. The pipeline can
+   * only publish a word an editor has written a gloss for; discovery without a
+   * gloss is held as a candidate, never shown as a lesson.
+   */
+  glossRevision: string;
+  /** Quality components the evaluator recorded, so the approval is auditable. */
+  quality: string[];
+}
+
+/** One external service a discovered lesson used, with the licence it carries. */
+export interface VocabularySourceRef {
+  id: string;
+  name: string;
+  url: string;
+  license: string;
+  /**
+   * `ok` — answered and its answer was used. `failed` — did not answer; the
+   * lesson was published from the remaining sources, and the card says which.
+   */
+  status: 'ok' | 'failed';
+  detail?: string;
 }
 
 /** One word's tracking record, as persisted for a reader. */
@@ -554,6 +623,59 @@ export interface MythVariant {
   difference: string;
 }
 
+/**
+ * What kind of figure this is — the distinction the section must never blur.
+ *
+ * A Sikh Guru is not a mythological character, and presenting one as fiction is
+ * the failure this field exists to prevent. `religious` says only that the figure
+ * is an object of living religious devotion; it is not a claim about whether a
+ * historical person stands behind the account, which `historicity` records
+ * separately.
+ */
+export const MYTH_CLASSIFICATIONS = [
+  'mythological',
+  'religious',
+  'historical',
+  'legendary',
+  'literary',
+] as const;
+
+export type MythClassification = (typeof MYTH_CLASSIFICATIONS)[number];
+
+export const MYTH_CLASSIFICATION_LABELS: Record<MythClassification, string> = {
+  mythological: 'Mythological figure',
+  religious: 'Religious figure',
+  historical: 'Historical person',
+  legendary: 'Legendary or semi-historical',
+  literary: 'Literary or epic character',
+};
+
+/**
+ * The historicity question, kept separate from classification because the two
+ * are different: a historical person can also be an object of devotion, and a
+ * legendary figure can be treated by a tradition as entirely real.
+ */
+export const MYTH_HISTORICITIES = ['documented', 'debated', 'legendary', 'textual-only'] as const;
+
+export type MythHistoricity = (typeof MYTH_HISTORICITIES)[number];
+
+export const MYTH_HISTORICITY_LABELS: Record<MythHistoricity, string> = {
+  documented: 'Documented in contemporary or near-contemporary sources',
+  debated: 'Historicity debated among scholars',
+  legendary: 'Legendary account; no contemporary documentation',
+  'textual-only': 'Known only from texts and tradition',
+};
+
+/** A citation a reader can check, as distinct from a list of text names. */
+export interface MythReference {
+  /** Author, title, publisher/journal and year, as one citation line. */
+  citation: string;
+  /** A stable link when one exists (a publisher page, an archive, a DOI). */
+  url?: string;
+  /** What the reference supports, when it is specific. */
+  note?: string;
+}
+
 export interface MythCharacter {
   id: string;
   name: string;
@@ -578,6 +700,49 @@ export interface MythCharacter {
   variants?: MythVariant[];
   /** A modern cultural or psychological reading. Analysis, not scripture. */
   analysis: string;
+
+  /* ---- Added by the Mythology + Historical expansion. All optional, so  ----
+   * ---- every entry authored before it keeps rendering unchanged.        ---- */
+
+  /** Mythological / religious / historical / legendary / literary. */
+  classification?: MythClassification;
+  /** What the historical record actually supports. */
+  historicity?: MythHistoricity;
+  /** Stable key for the tradition, so a new tradition needs no code change. */
+  traditionKey?: string;
+  /** Where the figure belongs on a timeline, in the tradition's own terms. */
+  period?: string;
+  /** Background and origin — the context the story assumes the reader has. */
+  background?: string;
+  /** Important events, in a form a reader can scan after the narrative. */
+  keyEvents?: MythTimelineEntry[];
+  /** Teachings, actions or contributions, one line each. */
+  contributions?: string[];
+  /** Cultural and historical significance, stated as such. */
+  significance?: string;
+  /** Citations a reader can check, beyond the names of the texts. */
+  references?: MythReference[];
+  /** Interesting facts that are checkable, not trivia invented to fill space. */
+  interestingFacts?: string[];
+  /**
+   * How contested the account is, in the entry's own words. Present when the
+   * scholarly or inter-tradition picture is genuinely unsettled.
+   */
+  contestedNote?: string;
+  /**
+   * Why this entry carries the classification it does — a labelling explanation,
+   * not a dispute. Kept separate from `contestedNote` because the two used to
+   * share one field, which meant a note about how the section talks about a deity
+   * was printed under the heading "What is contested".
+   */
+  classificationNote?: string;
+  /**
+   * What is uncertain about the *dating*, as opposed to the existence. A figure
+   * can be entirely historical and still have dates that scholars argue about;
+   * saying so here keeps `historicity` answering only one question: does this
+   * person have a documentary basis?
+   */
+  datingNote?: string;
 }
 
 /**
@@ -596,6 +761,26 @@ export interface ScienceConcept {
   aliases?: string[];
   /** Wikidata QID (or other stable identifier) for cross-title deduplication. */
   wikidataId?: string;
+  /**
+   * The two user-facing educational levels. There is no third level: the
+   * specialist-research framing that used to be mixed into the default cards is
+   * demoted into `undergraduate`, and nothing exposes a level above it.
+   *
+   * Absent means `foundation` — the default — so a snapshot published before
+   * this field existed reads exactly as it did.
+   */
+  educationLevel?: ScienceEducationLevel;
+  /** Why the level was assigned, shown in the level selector's explanation. */
+  levelBasis?: 'curated' | 'derived-from-record';
+  /**
+   * The six questions every Science card should answer. Optional because the
+   * authored corpus predates them and is not padded with empty headings; the
+   * card renders whichever the entry has.
+   */
+  firstUnderstand?: string;
+  whyCare?: string;
+  whereUseful?: string;
+  unknown?: string;
   /**
    * `curated` — written for this app. `wikipedia` — assembled from a Wikipedia
    * article's own sentences, linked and attributed. `research` — a recent
@@ -713,10 +898,146 @@ export type PhysicsConcept = ScienceConcept;
 export type BiologyConcept = ScienceConcept;
 
 /* ------------------------------------------------------------------ */
+/* Science — the two educational levels                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Exactly two user-facing levels. The union has no third member, which is what
+ * makes "Advanced Research" impossible to reintroduce by adding a button: there
+ * is no value for it to select.
+ */
+export const SCIENCE_EDUCATION_LEVELS = ['foundation', 'undergraduate'] as const;
+
+export type ScienceEducationLevel = (typeof SCIENCE_EDUCATION_LEVELS)[number];
+
+export const SCIENCE_EDUCATION_LEVEL_LABELS: Record<ScienceEducationLevel, string> = {
+  foundation: 'School / Foundation Science',
+  undergraduate: 'Undergraduate Science',
+};
+
+export const SCIENCE_EDUCATION_LEVEL_HINTS: Record<ScienceEducationLevel, string> = {
+  foundation: 'School-level science, explained in plain language. The default.',
+  undergraduate: 'Undergraduate-level detail, including research and methodology.',
+};
+
+export const DEFAULT_SCIENCE_EDUCATION_LEVEL: ScienceEducationLevel = 'foundation';
+
+/**
+ * The three science cards' content at both levels.
+ *
+ * Kept as its own optional field on the briefing rather than replacing
+ * `chemistry`/`physics`/`biology`: an old snapshot keeps rendering the three
+ * cards it published, and a new one adds a level selector on top of them.
+ */
+export interface ScienceLevelSet {
+  foundation: { chemistry: ScienceConcept; physics: ScienceConcept; biology: ScienceConcept };
+  undergraduate: { chemistry?: ScienceConcept; physics?: ScienceConcept; biology?: ScienceConcept };
+  /** Which disciplines had no qualified undergraduate record today, and why. */
+  notes?: string[];
+}
+
+/* ------------------------------------------------------------------ */
+/* One Book — genre and bestseller evidence                           */
+/* ------------------------------------------------------------------ */
+
+export const BOOK_GENRES = [
+  'science-fiction',
+  'fantasy',
+  'mystery',
+  'thriller',
+  'crime',
+  'historical-fiction',
+  'literary-fiction',
+  'history',
+  'biography',
+  'autobiography',
+  'science',
+  'technology',
+  'philosophy',
+  'psychology',
+  'business',
+  'personal-development',
+  'popular-non-fiction',
+  'other',
+] as const;
+
+export type BookGenre = (typeof BOOK_GENRES)[number];
+
+export const BOOK_GENRE_LABELS: Record<BookGenre, string> = {
+  'science-fiction': 'Science fiction',
+  fantasy: 'Fantasy',
+  mystery: 'Mystery',
+  thriller: 'Thriller',
+  crime: 'Crime',
+  'historical-fiction': 'Historical fiction',
+  'literary-fiction': 'Literary fiction',
+  history: 'History',
+  biography: 'Biography',
+  autobiography: 'Autobiography',
+  science: 'Science',
+  technology: 'Technology',
+  philosophy: 'Philosophy',
+  psychology: 'Psychology',
+  business: 'Business',
+  'personal-development': 'Personal development',
+  'popular-non-fiction': 'Popular non-fiction',
+  other: 'Other',
+};
+
+/**
+ * Bestseller evidence — a record of *why* a book may be called a bestseller.
+ *
+ * The rule the type encodes: a title may only be labelled a bestseller when one
+ * of these records exists and names its source. Popularity signals (Goodreads
+ * counts, Amazon ratings, catalogue presence) are not evidence and have nowhere
+ * to go in this shape.
+ */
+export interface BestsellerEvidence {
+  /** The recognising body, e.g. "The New York Times". */
+  source: string;
+  /** The list itself, e.g. "Hardcover Fiction". */
+  list?: string;
+  /** Where on the list, when the record states it, e.g. "#1". */
+  rank?: string;
+  /** The ranking period, when the record states it, e.g. "week of 12 May 2019". */
+  period?: string;
+  /** A page a reader can check, when a stable one exists. */
+  url?: string;
+  /**
+   * `list-entry` — the title was recorded on the named list.
+   * `publisher-stated` — the publisher's own page states the bestseller status,
+   * which is weaker than an independent list and is said so on the card.
+   */
+  kind: 'list-entry' | 'publisher-stated';
+  /** Anything a reader should know about the strength of this evidence. */
+  note?: string;
+}
+
+export interface BookGenreMetadata {
+  /**
+   * The shelf this book belongs to. Optional on the type because a snapshot
+   * published before genre rotation existed has none; every entry the planner may
+   * publish carries one, and `genreOf` reads a missing value as `other` rather than
+   * guessing.
+   */
+  genre?: BookGenre;
+  /** A second shelf, for a book that genuinely sits in two. */
+  secondaryGenre?: BookGenre;
+  /** Who the book is for, in one line. */
+  audience?: string;
+  /** What the reader can expect, in one line. */
+  expect?: string;
+  /** Present only when a credible source supports the word "bestseller". */
+  bestseller?: BestsellerEvidence;
+  /** The year of first publication, when the record states one. */
+  firstPublished?: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* One Book — a candidate from the pool, plus the resolved record      */
 /* ------------------------------------------------------------------ */
 
-export interface BookCandidate {
+export interface BookCandidate extends BookGenreMetadata {
   title: string;
   author: string;
   synopsis: string;
@@ -847,6 +1168,15 @@ export type CuriosityBriefing = {
   chemistry: ChemistryConcept;
   physics: PhysicsConcept;
   biology: BiologyConcept;
+  /**
+   * The same three cards at both educational levels: `foundation` (the default,
+   * and what `chemistry`/`physics`/`biology` above hold) and `undergraduate`
+   * when a qualified record exists. Optional, so a snapshot published before
+   * the two-level structure still renders.
+   */
+  scienceLevels?: ScienceLevelSet;
+  /** How the Two Levels selector's content arrived today, for the card's label. */
+  scienceLevelNote?: string;
   /** Present whenever a scheduled snapshot (rather than the fallback) is shown. */
   publication?: CuriosityPublicationMeta;
   /**

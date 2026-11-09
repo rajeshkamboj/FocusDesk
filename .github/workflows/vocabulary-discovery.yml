@@ -1,0 +1,98 @@
+name: Vocabulary Discovery
+
+# Replenishes Speak Better's discovered vocabulary in `curiosity_candidates`
+# before the midnight IST snapshot (`curiosity-daily.yml`).
+#
+# WHAT IT IS, AND IS NOT
+# A *discovery and approval* job, not a publisher. It writes candidates through the
+# existing validation, deduplication and persistence path, and the daily publisher
+# reads whatever the reservoir holds. There is no second publisher, and a reader's
+# page load never calls a lexical API.
+#
+# THE GATE
+#   discovery (Datamuse anchors) → enrichment (Wiktionary + Free Dictionary) →
+#   frequency band estimate → editorial gloss required → approval.
+#   A word without a gloss in `lib/curiosity/content/speak-better-vocabulary.ts` is
+#   stored as `needs-review` and cannot be published. Expanding the curriculum means
+#   writing glosses; it does not mean lowering the gate.
+#
+# SCHEDULE
+#   11:55 UTC: after literature (11:20) and science (11:40), well before the 18:30
+#   publish. The offsets keep the runs from contending for API budgets — Datamuse and
+#   Wiktionary are free but they do rate-limit.
+#
+# BEFORE THE FIRST RUN
+#   Apply `supabase/migrations/012_vocabulary_candidates.sql`. Until it is applied the
+#   category check refuses `speak-better` rows, the job exits 2, and the publisher
+#   keeps serving the authored curriculum. Nothing breaks; nothing new appears either.
+#
+# TURNING IT OFF
+#   Disable this workflow, or run
+#   `npx tsx scripts/discover-vocabulary.ts --offline` to prove the pipeline degrades
+#   without contacting anything. The daily card falls back to the authored lessons.
+
+on:
+  schedule:
+    - cron: '55 11 * * *'
+  workflow_dispatch:
+    inputs:
+      max_words:
+        description: 'Words to enrich this run (default 8)'
+        required: false
+        type: string
+      anchors:
+        description: 'Datamuse anchor words this run (default 4)'
+        required: false
+        type: string
+      published:
+        description: 'Comma-separated words already shown to readers, to skip'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vocabulary-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      INPUT_MAX: ${{ inputs.max_words }}
+      INPUT_ANCHORS: ${{ inputs.anchors }}
+      INPUT_PUBLISHED: ${{ inputs.published }}
+
+    steps:
+      - name: Report missing configuration
+        if: ${{ env.SUPABASE_SECRET_KEY == '' || env.NEXT_PUBLIC_SUPABASE_URL == '' }}
+        run: |
+          echo "::error::Supabase runner secrets are not configured, so vocabulary discovery has nowhere to write."
+          echo "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY as repository secrets (the same ones the other Curiosity jobs use)."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Discover and approve vocabulary candidates
+        run: |
+          set -euo pipefail
+          ARGS=("--trigger=cron")
+          if [ -n "${INPUT_MAX}" ]; then ARGS+=("--max=${INPUT_MAX}"); fi
+          if [ -n "${INPUT_ANCHORS}" ]; then ARGS+=("--anchors=${INPUT_ANCHORS}"); fi
+          if [ -n "${INPUT_PUBLISHED}" ]; then ARGS+=("--published=${INPUT_PUBLISHED}"); fi
+          npx tsx scripts/discover-vocabulary.ts "${ARGS[@]}"

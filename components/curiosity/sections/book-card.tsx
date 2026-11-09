@@ -5,7 +5,8 @@ import { SectionCard } from '../section-card';
 import { IconBook, IconLink } from '@/components/ui/icons';
 import { BOOK_CADENCE_LABEL, BOOK_COVER_PLACEHOLDER, BOOK_COVER_PLACEHOLDER_ALT, OPEN_LIBRARY_ATTRIBUTION } from '@/lib/curiosity/constants';
 import { formatPublicationDate } from '@/lib/curiosity/schedule';
-import type { BookRecommendation } from '@/lib/curiosity/types';
+import { BOOK_GENRE_LABELS, type BookRecommendation } from '@/lib/curiosity/types';
+import { bestsellerEvidenceLine } from '@/lib/curiosity/book-selection';
 
 /**
  * One Book — the recommendation card.
@@ -23,7 +24,11 @@ import type { BookRecommendation } from '@/lib/curiosity/types';
  *  2. **A cover is never assumed.** The Open Library cover is hot-linked from
  *     their host and swapped for the local placeholder if it fails to load, so
  *     the card never shows a broken image and never re-hosts someone else’s art.
- *  3. **No invented reading access.** The “read or preview” link appears only
+ *  3. **“Bestseller” needs a receipt.** The word is printed only when the entry
+ *     carries a named source and period, and the receipt is printed beside it —
+ *     list name, rank, dates, and a link where one exists. No bestseller claim is
+ *     ever derived from sales figures we do not have.
+ *  4. **No invented reading access.** The “read or preview” link appears only
  *     when the catalogue lists a scan, and its wording defers availability to the
  *     holding library. Ratings and reviews are absent because we do not fetch
  *     them, not because they are zero.
@@ -75,6 +80,7 @@ export function BookCard({
   /** The Asia/Kolkata day this record was published for — the proof of the interval. */
   publishedOn?: string | null;
 }) {
+  const evidence = bestsellerEvidenceLine(book);
   return (
     <SectionCard label="One Book">
       <div className="space-y-3.5">
@@ -85,6 +91,16 @@ export function BookCard({
             <p className="mt-1 text-[13px] leading-snug text-ink-2">
               by <span className="font-medium text-ink">{book.author}</span>
             </p>
+            {book.genre || book.audience ? (
+              <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-ink-3">
+                {book.genre ? (
+                  <span className="rounded-full border border-line bg-surface-2 px-1.5 py-px font-medium">
+                    {BOOK_GENRE_LABELS[book.genre]}
+                  </span>
+                ) : null}
+                {book.audience ? <span>{book.audience}</span> : null}
+              </p>
+            ) : null}
             <PublicationLine book={book} />
             <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
               {book.sourceName === 'Open Library' ? OPEN_LIBRARY_ATTRIBUTION : 'From the FocusDesk editorial pool'}
@@ -92,7 +108,31 @@ export function BookCard({
           </div>
         </div>
 
+        {evidence ? (
+          <div className="rounded-xl border border-line bg-surface-2/40 px-3 py-2">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">Bestseller evidence</p>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-2">{evidence}</p>
+            {book.bestseller?.url ? (
+              <a
+                href={book.bestseller.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-[11.5px] font-medium text-accent hover:underline"
+              >
+                See the list →
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+
         <p className="text-[13px] leading-relaxed text-ink-2">{book.synopsis}</p>
+
+        {book.expect ? (
+          <p className="text-[12.5px] leading-relaxed text-ink-2">
+            <strong className="font-medium text-ink">What to expect: </strong>
+            {book.expect}
+          </p>
+        ) : null}
 
         <p className="text-[13px] leading-relaxed text-ink-2">
           <strong className="font-medium text-ink">Why it may help: </strong>

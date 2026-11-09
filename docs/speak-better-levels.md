@@ -139,6 +139,38 @@ and the text wraps (`break-words`) so a long gloss cannot overflow a narrow card
 `scripts/verify-speak-better.tsx` asserts that every gloss contains Devanagari
 (`\u0900–\u097F`) rather than a transliteration.
 
+## Discovery: where new B2 and C1 words can come from
+
+The authored curriculum is finite, so the section also accepts lessons assembled by
+a scheduled pipeline — under a gate strict enough that the pipeline cannot lower the
+bar the library already sets.
+
+```
+discover (Datamuse anchors) → enrich (Wiktionary + Free Dictionary)
+  → band from measured corpus frequency → editorial gloss required → approve
+  → `curiosity_candidates`, category `speak-better` → the daily publisher
+```
+
+Three consequences worth knowing before changing anything here:
+
+1. **A word without a gloss is never published.** `needs-review` is a terminal state
+   for that run, not a warning to click past. Expanding the curriculum means writing
+   glosses in `lib/curiosity/content/speak-better-vocabulary.ts`.
+2. **The band is measured, and said to be measured.** `levelBasis:
+   'estimated-frequency'` and the per-million score are printed in the lesson's
+   provenance block; the card never implies an API assigned a CEFR level, because
+   none does.
+3. **The authored lessons are still the fallback.** Discovery is tried first, the
+   authored B2/C1 set second, the A2–B1 on-ramp last. An empty reservoir is a normal
+   day, not an incident.
+
+The pipeline is scheduled-only (`scripts/discover-vocabulary.ts` via
+`.github/workflows/vocabulary-discovery.yml`) and requires migration
+`012_vocabulary_candidates.sql`. Without that migration the category check refuses
+the rows, the run exits 2, and the card keeps publishing the authored curriculum.
+See [curiosity-learnings-expansion-plan.md](curiosity-learnings-expansion-plan.md)
+for the rollout and rollback.
+
 ## Verifying
 
 ```bash

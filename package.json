@@ -14,6 +14,7 @@
     "curiosity:links": "node scripts/check-curiosity-links.mjs",
     "curiosity:dedupe": "npx tsx scripts/verify-curiosity-dedupe.ts",
     "curiosity:content": "npx tsx scripts/verify-daily-content.tsx",
+    "curiosity:books": "npx tsx scripts/verify-curiosity-books.ts",
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
     "curiosity:history": "npx tsx scripts/verify-curiosity-history-verification.ts",
     "verify:task-context": "npx tsx scripts/verify-task-context.tsx",
@@ -23,8 +24,10 @@
     "verify:discovery": "npx tsx scripts/verify-discovery.tsx",
     "discover:literature": "npx tsx scripts/discover-literature.ts",
     "discover:science": "npx tsx scripts/discover-science.ts",
+    "discover:vocabulary": "npx tsx scripts/discover-vocabulary.ts",
     "verify:science": "npx tsx scripts/verify-science-discovery.ts",
-    "verify:daily-knowledge": "npx tsx scripts/verify-daily-knowledge.ts"
+    "verify:daily-knowledge": "npx tsx scripts/verify-daily-knowledge.ts",
+    "verify:learnings": "npx tsx scripts/verify-weekly-learning.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

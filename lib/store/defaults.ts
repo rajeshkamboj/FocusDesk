@@ -17,6 +17,7 @@ export const defaultSettings: Settings = {
   appearance: {
     theme: 'dark',
   },
+  weeklyLearning: { records: {} },
 };
 
 /**
@@ -39,6 +40,12 @@ export function emptyData(): AppData {
     taskHistory: [],
     wellbeingDays: [],
     timerSessions: [],
-    settings: { ...defaultSettings, general: { ...defaultSettings.general }, notifications: { ...defaultSettings.notifications }, appearance: { ...defaultSettings.appearance } },
+    settings: {
+      ...defaultSettings,
+      general: { ...defaultSettings.general },
+      notifications: { ...defaultSettings.notifications },
+      appearance: { ...defaultSettings.appearance },
+      weeklyLearning: { records: {} },
+    },
   };
 }

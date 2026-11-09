@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { SectionCard, VisualMark } from '../section-card';
-import type { ScienceConcept } from '@/lib/curiosity/types';
+import {
+  SCIENCE_EDUCATION_LEVEL_LABELS,
+  type ScienceConcept,
+  type ScienceEducationLevel,
+} from '@/lib/curiosity/types';
 
 /**
  * The Chemistry, Physics and Biology cards.
@@ -114,23 +118,39 @@ export function ScienceCard({
   connectionLabel,
   icon,
   concept,
+  level,
 }: {
   label: string;
   connectionLabel: string;
   icon: ReactNode;
   concept: ScienceConcept;
+  /** The level the reader selected; defaults to the foundation card. */
+  level?: ScienceEducationLevel;
 }) {
+  const shownLevel = level ?? concept.educationLevel ?? 'foundation';
   return (
     <SectionCard label={label}>
       <div className="space-y-3.5">
         <div className="flex gap-3">
           <VisualMark tone="bg-accent-soft text-accent">{icon}</VisualMark>
-          <h3 className="pt-1 text-[16px] font-medium leading-snug text-ink">{concept.topic}</h3>
+          <div className="min-w-0 pt-0.5">
+            <h3 className="text-[16px] font-medium leading-snug text-ink">{concept.topic}</h3>
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-ink-3">
+              <span className="rounded-full border border-line bg-surface-2 px-1.5 py-px font-medium">
+                {SCIENCE_EDUCATION_LEVEL_LABELS[shownLevel]}
+              </span>
+              {concept.origin === 'research' ? <span>research record</span> : null}
+              {concept.origin === 'wikipedia' ? <span>encyclopedia explainer</span> : null}
+              {concept.origin === 'curated' ? <span>curated explainer</span> : null}
+            </p>
+          </div>
         </div>
 
         <ResearchMeta concept={concept} />
 
         <p className="text-[13px] leading-relaxed text-ink-2">{concept.simple}</p>
+
+        {concept.firstUnderstand ? <Line label="What you need to know first" text={concept.firstUnderstand} /> : null}
 
         {concept.deeper ? <Line label="Deeper" text={concept.deeper} /> : null}
 
@@ -142,7 +162,10 @@ export function ScienceCard({
 
         <div className="space-y-2">
           <Line label={connectionLabel} text={concept.connection} />
+          {concept.whyCare ? <Line label="Why it matters" text={concept.whyCare} /> : null}
+          {concept.whereUseful ? <Line label="Where it is useful" text={concept.whereUseful} /> : null}
           <Line label="Surprising" text={concept.surprising} />
+          {concept.unknown ? <Line label="What is still unknown" text={concept.unknown} /> : null}
         </div>
 
         <div className="rounded-xl border border-accent/30 bg-accent-soft/25 px-3.5 py-3">

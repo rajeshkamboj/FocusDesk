@@ -1483,7 +1483,7 @@ async function main() {
       /^components\/settings\/(curiosity-refresh|settings-screen)\.tsx$/,
       /^scripts\/(verify-)?curiosity[a-z-]*\.(ts|tsx|mjs)$/,
       /^scripts\/verify-daily-content\.tsx$/,
-      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history|11_curiosity_candidates)\.sql)$/,
+      /^supabase\/(functions\/curiosity-refresh\/index\.ts|migrations\/0(09_curiosity_content|10_curiosity_dedupe_history|11_curiosity_candidates|12_vocabulary_candidates)\.sql)$/,
       // The Literature and Science discovery features extend Curiosity rather than
       // sitting beside it: they write into the same reservoir through the same
       // validation, dedupe and store, so their adapters, scheduled jobs and docs are
@@ -1493,8 +1493,17 @@ async function main() {
       /^components\/curiosity\/sections\/[a-z-]*discovery\.tsx$/,
       /^components\/curiosity\/speak-better-[a-z-]+\.tsx$/,
       /^scripts\/(verify-)?(discover|speak-better|science|daily-knowledge)[a-z-]*\.(ts|tsx)$/,
-      /^docs\/(discovery-architecture|speak-better-levels|knowledge-workflow-modernization)\.md$/,
+      /^docs\/(discovery-architecture|speak-better-levels|knowledge-workflow-modernization|curiosity-learnings-expansion-plan|book-bestseller-evidence)\.md$/,
       /^\.github\/workflows\/(discovery|curiosity-science-discovery)[a-z-]*\.yml$/,
+      // The vocabulary job is the scheduled half of Speak Better, exactly as the
+      // science and literature jobs are the scheduled half of their sections.
+      /^\.github\/workflows\/vocabulary-discovery\.yml$/,
+      // This Week's Learning is the Learnings half of the same expansion: one card
+      // on the Learnings screen and its pure selection module. Nothing else in that
+      // area is touched.
+      /^lib\/learnings-weekly\.ts$/,
+      /^components\/learnings\/(learnings-screen|weekly-learning)\.tsx$/,
+      /^scripts\/verify-(weekly-learning|learnings)\.tsx?$/,
       /^components\/(layout\/nav|ui\/icons)\.tsx?$/,
       // The retired standalone route: only its *deletion* should ever appear here,
       // since the path now resolves through the redirect in next.config.ts.

@@ -171,6 +171,22 @@ export function buildRecommendation(entry: CuriosityPoolEntry<BookCandidate>, do
     previewUrl: preview.url,
     previewNote: preview.note,
     subjects: candidate.subjects,
+    /*
+      Genre and the evidence fields travel with the recommendation.
+
+      They used to stop at the pool entry, which meant `bestseller` never reached
+      the card: the block that prints the claim reads the recommendation, not the
+      candidate, so a verified list entry was silently discarded at publish time.
+      The same fault hid the genre badge and the "what to expect" line.
+
+      Copied, not re-derived: this function must not decide that a book is a
+      bestseller. It carries whichever record the candidate already has — absent
+      stays absent, so a book without evidence still cannot print the word.
+    */
+    genre: candidate.genre,
+    audience: candidate.audience,
+    expect: candidate.expect,
+    bestseller: candidate.bestseller,
   };
 }
 

@@ -10,18 +10,15 @@ import { LiteratureDiscoveryCard } from './sections/literature-discovery';
 import { SectionGroup } from './sections/section-group';
 import { SpeakBetterSection } from './sections/speak-better';
 import { MythologySection } from './sections/mythology';
-import { ScienceCard } from './sections/science';
+import { ScienceSection } from './sections/science-section';
 import { BookCard } from './sections/book-card';
 import { getDailyQuote } from '@/lib/quotes';
 import { formatPublicationDate, formatPublicationInstant } from '@/lib/curiosity/schedule';
 import {
-  IconBiology,
   IconBook,
   IconCalendar,
-  IconChemistry,
   IconChevronDown,
   IconIdeas,
-  IconPhysics,
   IconProjects,
   IconReview,
 } from '@/components/ui/icons';
@@ -669,42 +666,27 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
           <SpeakBetterSection lesson={briefing.speakBetter} alternatives={briefing.speakBetterAlternatives} />
         </section>
 
-        {/* ---- Group: Mythology --------------------------------------- */}
-        <SectionGroup label="Mythology" hint="character of the day, with its evidence labelled" />
+        {/* ---- Group: Mythology + Historical -------------------------- */}
+        <SectionGroup
+          label="Mythology + Historical"
+          hint="a character of the day, across traditions and periods, with sources and contested readings labelled"
+        />
 
         <section>
           <MythologySection character={briefing.mythology} />
         </section>
 
         {/* ---- Group: Science ----------------------------------------- */}
-        <SectionGroup label="Science" hint="chemistry, physics and biology, one card each" />
+        <SectionGroup
+          label="Science"
+          hint="one card each for chemistry, physics and biology — at school level by default, or as undergraduate research"
+        />
 
-        <div className="grid gap-7 lg:grid-cols-3">
-          <section className="h-full">
-            <ScienceCard
-              label="Chemistry of the Day"
-              connectionLabel="Everyday connection"
-              icon={<IconChemistry width={18} height={18} />}
-              concept={briefing.chemistry}
-            />
-          </section>
-          <section className="h-full">
-            <ScienceCard
-              label="Physics of the Day"
-              connectionLabel="Real-world connection"
-              icon={<IconPhysics width={18} height={18} />}
-              concept={briefing.physics}
-            />
-          </section>
-          <section className="h-full">
-            <ScienceCard
-              label="Biology of the Day"
-              connectionLabel="Everyday connection"
-              icon={<IconBiology width={18} height={18} />}
-              concept={briefing.biology}
-            />
-          </section>
-        </div>
+        <ScienceSection
+          concepts={{ chemistry: briefing.chemistry, physics: briefing.physics, biology: briefing.biology }}
+          levels={briefing.scienceLevels}
+          note={briefing.scienceLevelNote}
+        />
 
 
         {/* ---- Group: Reading & practice ------------------------------ */}

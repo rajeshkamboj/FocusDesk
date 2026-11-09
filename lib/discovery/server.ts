@@ -89,7 +89,7 @@ export async function getDiscoveryShelves(
 
 /** Exported for the docs and the harness: where a collection's records live. */
 export function collectionTable(collection: KnowledgeCollection): string {
-  return collection === 'literature'
-    ? 'curiosity_candidates (category book, literature)'
-    : 'curiosity_candidates';
+  if (collection === 'literature') return 'curiosity_candidates (category book, literature)';
+  if (collection === 'vocabulary') return 'curiosity_candidates (category speak-better)';
+  return 'curiosity_candidates';
 }

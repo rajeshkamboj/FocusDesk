@@ -427,6 +427,49 @@ export interface TaskHistoryEntry {
 
 export type ThemePreference = 'dark' | 'pixldot' | 'light' | 'midnight' | 'warm-paper' | 'custom';
 
+/* ------------------------------------------------------------------ */
+/* This Week's Learning                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How far a reader has got with a weekly assignment.
+ *
+ * Four states, and there is no fifth. `not-relevant` is deliberately a terminal
+ * state rather than a delete: a reader saying "not for me" is information, and
+ * deleting the record would make the next weekly pick offer the same thing again.
+ */
+export type WeeklyLearningStatus = 'not-started' | 'in-progress' | 'completed' | 'not-relevant';
+
+export const WEEKLY_LEARNING_STATUSES = ['not-started', 'in-progress', 'completed', 'not-relevant'] as const;
+
+export const WEEKLY_LEARNING_STATUS_LABELS: Record<WeeklyLearningStatus, string> = {
+  'not-started': 'Not started',
+  'in-progress': 'In progress',
+  completed: 'Completed',
+  'not-relevant': 'Not relevant',
+};
+
+/** What is stored for one assignment. Keyed by assignment id, never by week. */
+export interface WeeklyLearningRecord {
+  status: WeeklyLearningStatus;
+  /** Kept after the week rolls over, so "save for later" means later. */
+  savedForLater: boolean;
+  updatedAt: ISODateTime;
+}
+
+/**
+ * The reader's weekly-learning state.
+ *
+ * Assignments themselves are authored code, not rows: they are deterministic from
+ * the date, so there is nothing to migrate and nothing to seed. Only the reader's
+ * decisions live here, and they live inside `app_settings.data` / `pace.db.v1`
+ * alongside every other preference — no new table, no new column, and an older
+ * build that does not know this key simply ignores it.
+ */
+export interface WeeklyLearningState {
+  records: Record<string, WeeklyLearningRecord>;
+}
+
 export interface Settings {
   general: {
     /** Custom display name used for the user greeting. */
@@ -448,6 +491,11 @@ export interface Settings {
   appearance: {
     theme: ThemePreference;
   };
+  /**
+   * Optional: snapshots saved before this feature have no key at all, which is a
+   * valid, empty state rather than a missing one.
+   */
+  weeklyLearning?: WeeklyLearningState;
 }
 
 /* ------------------------------------------------------------------ */

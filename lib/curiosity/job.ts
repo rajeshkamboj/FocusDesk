@@ -50,7 +50,7 @@ import { selectDailyLesson, bandOf } from './speak-better-daily';
 import { enrichLesson } from '../discovery/enrichment/speak-better';
 import { puzzlePoolForDate, selectDailyPuzzle, scorePuzzle, verifyPuzzle } from './puzzles';
 import { selectDiscoveredLiterature } from './literature-selection';
-import { bestsellerEligibleEntries } from './book-selection';
+import { bestsellerEligibleEntries, hasVerifiedBestseller } from './book-selection';
 import { approvedVocabularyLessons } from '../discovery/vocabulary/pipeline';
 import { liveAlternatives, publishedVocabularyWords, selectLiveLesson } from './speak-better-live';
 import { researchCandidateEligibleToday } from '../discovery/science';
@@ -1263,8 +1263,13 @@ export function invalidBookFields(book: BookRecommendation): string[] {
     standard below.
   */
   if (book.bestseller) {
-    check('book.bestseller source', !blank(book.bestseller.source));
-    check('book.bestseller kind', book.bestseller.kind === 'list-entry' || book.bestseller.kind === 'publisher-stated');
+    /*
+      Structural, not merely present. A `list-entry` must name the list and the
+      period; anything weaker belongs under `publisher-stated`, where the card says
+      whose claim it is. `hasVerifiedBestseller` is the single definition — the
+      publisher's selection gate and this validator cannot drift apart.
+    */
+    check('book.bestseller is well formed', hasVerifiedBestseller(book));
     if (book.bestseller.url) check('book.bestseller url', !invalidUrl(book.bestseller.url));
   }
   return problems;

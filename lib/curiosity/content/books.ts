@@ -466,10 +466,10 @@ const BOOK_METADATA: Record<string, BookGenreMetadata> = {
     audience: 'Curious adults who never studied science formally.',
     expect: 'The history of the planet and of the people who worked it out, told with jokes and footnotes.',
     bestseller: {
-      source: 'The Sunday Times',
-      kind: 'list-entry',
-      period: '2003',
-      note: 'Sunday Times bestseller; the exact position and week are not recorded in this repository.',
+      source: 'Transworld Publishers',
+      list: 'Sunday Times bestseller',
+      kind: 'publisher-stated',
+      note: 'The publisher describes the book as a Sunday Times bestseller; no dated list entry is recorded in this repository, so no period is claimed.',
     },
   },
   'book-sapiens': {
@@ -556,14 +556,19 @@ function nyTimes(
   };
 }
 
-function sundayTimes(period: string, rank?: string): BestsellerEvidence {
-  return {
-    source: 'The Sunday Times',
-    ...(rank ? { rank } : {}),
-    kind: 'list-entry',
-    period,
-    note: 'Sunday Times bestseller; the exact position and week are not recorded in this repository.',
-  };
+/**
+ * A bestseller status that exists only as the publisher's own claim.
+ *
+ * The UK trade lists are not publicly queryable the way the New York Times lists
+ * are, so what can actually be checked for these titles is the cover or the
+ * publisher's page: "Sunday Times Top 10 Bestseller". That is a real claim by a
+ * named party, and it is *not* an independently recorded list entry — so it is
+ * stored as `publisher-stated`, printed as weaker on the card, and carries no
+ * ranking period. Recording the publication year here would have looked like a
+ * list date without being one.
+ */
+function publisherStated(source: string, list: string, note: string): BestsellerEvidence {
+  return { source, list, kind: 'publisher-stated', note };
 }
 
 /**
@@ -891,7 +896,11 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Close reading of inscriptions, a sceptical tone, and a refusal of easy empire narratives.',
       url: 'https://openlibrary.org/search?q=SPQR+Mary+Beard',
       subjects: ['History', 'Rome', 'Classical antiquity'],
-      bestseller: sundayTimes('2015'),
+      bestseller: publisherStated(
+        'Profile Books',
+        'Sunday Times Top 10 bestseller',
+        'Publisher and retailer listings describe SPQR as a Sunday Times Top 10 bestseller; no dated list entry is recorded in this repository.',
+      ),
     },
   },
   {
@@ -912,7 +921,11 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Broad synthesis, a long timespan, and a strong opening third.',
       url: 'https://openlibrary.org/search?q=The+Silk+Roads+Frankopan',
       subjects: ['History', 'Trade routes', 'Eurasia'],
-      bestseller: sundayTimes('2015'),
+      bestseller: publisherStated(
+        'Bloomsbury Publishing',
+        'Sunday Times bestseller',
+        'The publisher describes The Silk Roads as a Sunday Times bestseller; no dated list entry is recorded in this repository.',
+      ),
     },
   },
   {
@@ -1038,7 +1051,11 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Field work, laboratory work, and a genuinely strange worldview.',
       url: 'https://openlibrary.org/search?q=Entangled+Life+Merlin+Sheldrake',
       subjects: ['Science', 'Fungi', 'Symbiosis'],
-      bestseller: sundayTimes('2020'),
+      bestseller: publisherStated(
+        'The Bodley Head',
+        'Sunday Times bestseller',
+        'The publisher describes Entangled Life as a Sunday Times bestseller; no dated list entry is recorded in this repository.',
+      ),
     },
   },
   {
@@ -1144,7 +1161,14 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'Essays that move between fieldwork, memory and argument.',
       url: 'https://openlibrary.org/search?q=Braiding+Sweetgrass+Kimmerer',
       subjects: ['Nature', 'Ethnobotany', 'Indigenous knowledge'],
-      bestseller: nyTimes('Paperback Nonfiction', '2020'),
+      bestseller: {
+        source: 'The New York Times',
+        list: 'Paperback Nonfiction',
+        kind: 'list-entry',
+        period: '2020',
+        url: 'https://www.esf.edu/news/2020/news-kimmerer-best-seller-02052020.php',
+        note: 'First appeared on the New York Times Paperback Nonfiction list in 2020; the linked college news record names the list and the position.',
+      },
     },
   },
   {
@@ -1165,7 +1189,17 @@ const genreShelf: CuriosityPoolEntry<BookCandidate>[] = [
       expect: 'One page a day, modern commentary, and a strong reading list behind it.',
       url: 'https://openlibrary.org/search?q=The+Daily+Stoic+Holiday',
       subjects: ['Philosophy', 'Stoics', 'Conduct of life'],
-      bestseller: nyTimes('Hardcover Nonfiction', '2017'),
+      /*
+        No bestseller record.
+
+        The previous entry claimed a 2017 New York Times Hardcover Nonfiction
+        listing. Two things are wrong with that: the book was published in October
+        2016, and nothing checkable substantiates a listing — the available
+        evidence is publisher and bookseller copy of the "bestselling" kind, and
+        the companion *Daily Stoic Journal* is explicitly described as an instant
+        **WSJ** bestseller. The book stays in the pool with its history; it simply
+        cannot be chosen for a new card until a dated list entry can be recorded.
+      */
     },
   },
 ];

@@ -45,6 +45,17 @@ export function hasVerifiedBestseller(book: BookCandidate): boolean {
   if (!evidence) return false;
   if (!evidence.source || evidence.source.trim().length < 2) return false;
   if (evidence.kind !== 'list-entry' && evidence.kind !== 'publisher-stated') return false;
+  /*
+    A list entry is only a list entry if it can name the list and the period it
+    belongs to. Without both, the record is an unverified assertion wearing the
+    stronger label — exactly the failure this field exists to prevent — so it is
+    treated as no evidence at all. `publisher-stated` deliberately needs neither:
+    it claims only that a named publisher says so, and the card prints it that way.
+  */
+  if (evidence.kind === 'list-entry') {
+    if (!evidence.list || evidence.list.trim().length < 2) return false;
+    if (!evidence.period || evidence.period.trim().length < 2) return false;
+  }
   return true;
 }
 

@@ -14,6 +14,7 @@
     "curiosity:links": "node scripts/check-curiosity-links.mjs",
     "curiosity:dedupe": "npx tsx scripts/verify-curiosity-dedupe.ts",
     "curiosity:content": "npx tsx scripts/verify-daily-content.tsx",
+    "curiosity:books": "npx tsx scripts/verify-curiosity-books.ts",
     "curiosity:reservoir": "npx tsx scripts/verify-curiosity-reservoir.ts",
     "curiosity:history": "npx tsx scripts/verify-curiosity-history-verification.ts",
     "verify:task-context": "npx tsx scripts/verify-task-context.tsx",

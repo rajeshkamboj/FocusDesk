@@ -23,9 +23,20 @@ import { clearBriefingMemo } from '@/lib/curiosity/server';
  * `force` is administrative: a scheduled run never needs it, and the idempotence
  * check is exactly what makes a double-fired cron harmless.
  *
- * The response is the run summary. A failed run returns 502 with the reason and
- * leaves the published content exactly as it was; an unneeded run returns 200
- * with `already-published`, because "the schedule fired twice" is a success case.
+ * The response is the run summary, and a failed run leaves the published content
+ * exactly as it was. The status is not always 502 any more: the publisher classifies
+ * why it refused, so a caller can tell the four cases apart —
+ *
+ *   422 invalid-content      the content this run produced failed validation
+ *   409 no-eligible-content  nothing was eligible to publish (a quiet library, not a bug)
+ *   503 storage              the state store refused a read or a write (retry)
+ *   502 upstream             a source or the science discovery job failed
+ *   500 internal             an unexpected error
+ *
+ * `failure` in the body carries the same kind, a stable `code` and the structured
+ * problems (section, expected value, actual value, candidate id, reason) that the human
+ * `detail` sentence names. An unneeded run still returns 200 with `already-published`,
+ * because "the schedule fired twice" is a success case.
  */
 
 const NO_STORE = { 'cache-control': 'no-store, max-age=0' } as const;
@@ -80,7 +91,9 @@ async function handle(request: Request) {
   });
   clearBriefingMemo();
 
-  const status = summary.status === 'failed' ? 502 : 200;
+  // The publisher decides the status; 502 stays the fallback for a failure reported
+  // without a classification (an older store, or a `busy` result that has no body).
+  const status = summary.status === 'failed' ? (summary.failure?.status ?? 502) : 200;
   return Response.json({ ...summary, triggeredBy: authorization.via }, { status, headers: { ...NO_STORE } });
 }
 

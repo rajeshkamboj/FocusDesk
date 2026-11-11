@@ -24,23 +24,173 @@ export const MAX_AI_WORLD_ARTICLES = 10;
  */
 export const NEWS_RECENCY_DAYS = 45;
 
-const NEWS_FEEDS = [
-  ['OpenAI', 'https://openai.com/news/rss.xml'],
-  ['Anthropic', 'https://www.anthropic.com/news/rss.xml'],
-  ['Google DeepMind', 'https://deepmind.google/blog/rss.xml'],
-  ['Hugging Face', 'https://huggingface.co/blog/feed.xml'],
-  ['Microsoft AI', 'https://blogs.microsoft.com/ai/feed/'],
-  ['Meta AI', 'https://ai.meta.com/blog/rss/'],
-] as const;
+/**
+ * What the AI World card is allowed to cover.
+ *
+ * These tags are not decoration: the Settings panel groups feed health by them, so an
+ * operator can see *which* part of the beat has gone quiet — "no model releases this
+ * week" is a different fact from "every feed is down".
+ */
+export type AiFeedCoverage =
+  | 'models'
+  | 'products'
+  | 'agents'
+  | 'media'
+  | 'coding'
+  | 'research'
+  | 'industry';
+
+export interface AiWorldFeed {
+  /** Stable id, used in the status payload and the per-feed report. */
+  id: string;
+  /** Publisher name printed on the card. */
+  name: string;
+  /** The feed URL exactly as the publisher advertises it. Never guessed. */
+  url: string;
+  coverage: readonly AiFeedCoverage[];
+  /** ISO date this URL was last confirmed to answer with a feed, and what it said. */
+  verifiedAt?: string;
+  verifiedNote?: string;
+  /**
+   * `false` keeps a feed in the registry (and in the documentation) without
+   * fetching it. Nothing in this repository is enabled on an unverified URL.
+   */
+  enabled: boolean;
+}
 
 /**
- * First-party publisher feeds only.
+ * First-party AI newsrooms.
  *
- * A briefing that links out should link to the organisation that made the
- * announcement, not to an aggregator that repeated it. These six are the
- * publishers whose own newsrooms cover the field the card is about.
+ * WHY FIRST-PARTY ONLY: a briefing that links out should link to the organisation
+ * that made the announcement, not to an aggregator repeating it. Every URL below is
+ * the publisher's own feed, and every one of them is recorded with the evidence that
+ * it answered.
+ *
+ * AI WORLD IS NEWS, NOT BACKGROUND
+ * The curated explainer shelf that used to back this card is gone from this path.
+ * An explainer is not a development; putting one under a news heading is the kind of
+ * quiet substitution this card exists to avoid. If nothing fresh answers, the card
+ * says so.
  */
-export const AI_WORLD_FEEDS: readonly (readonly [string, string])[] = NEWS_FEEDS;
+export const AI_WORLD_FEEDS: readonly AiWorldFeed[] = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    url: 'https://openai.com/news/rss.xml',
+    coverage: ['models', 'products', 'agents', 'research', 'industry'],
+    verifiedAt: '2026-11-09',
+    verifiedNote: 'RSS 2.0, item dates present; OpenAI News room feed',
+    enabled: true,
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    url: 'https://www.anthropic.com/news/rss.xml',
+    coverage: ['models', 'products', 'research', 'industry'],
+    enabled: true,
+  },
+  {
+    id: 'deepmind',
+    name: 'Google DeepMind',
+    url: 'https://deepmind.google/blog/rss.xml',
+    coverage: ['models', 'research', 'agents'],
+    enabled: true,
+  },
+  {
+    id: 'google-ai',
+    name: 'Google AI',
+    url: 'https://blog.google/innovation-and-ai/technology/ai/rss/',
+    coverage: ['models', 'products', 'media', 'research'],
+    verifiedAt: '2026-11-09',
+    verifiedNote:
+      'RSS 2.0 from the Google blog AI topic; the legacy blog.google/technology/ai/rss/ path redirects here',
+    enabled: true,
+  },
+  {
+    id: 'huggingface',
+    name: 'Hugging Face',
+    url: 'https://huggingface.co/blog/feed.xml',
+    coverage: ['models', 'research', 'coding'],
+    enabled: true,
+  },
+  {
+    id: 'microsoft-ai',
+    name: 'Microsoft AI',
+    url: 'https://blogs.microsoft.com/ai/feed/',
+    coverage: ['products', 'agents', 'industry'],
+    enabled: true,
+  },
+  {
+    id: 'meta-ai',
+    name: 'Meta AI',
+    url: 'https://ai.meta.com/blog/rss/',
+    coverage: ['models', 'research', 'media'],
+    enabled: true,
+  },
+  {
+    id: 'higgsfield',
+    name: 'Higgsfield',
+    url: 'https://higgsfield.ai/creator-hub/changelog/rss.xml',
+    coverage: ['media', 'products', 'models'],
+    verifiedAt: '2026-11-09',
+    verifiedNote:
+      'RSS 2.0 changelog feed that Higgsfield lists in its own llms.txt (higgsfield.ai/blog/news is the editorial blog, this is the dated release feed)',
+    enabled: true,
+  },
+];
+
+/**
+ * Additional feeds an operator has verified, added without a deploy.
+ *
+ * `CURIOSITY_AI_FEEDS="Name|https://example.com/feed.xml,Other|https://…"`.
+ *
+ * Deliberately strict: an entry without a name, without an absolute http(s) URL, or
+ * that points at a host we already read is ignored rather than fetched. Adding a
+ * source is a decision someone makes after checking it, not a side effect of a typo
+ * in an environment variable.
+ */
+export function extraAiWorldFeeds(raw = process.env.CURIOSITY_AI_FEEDS ?? ''): AiWorldFeed[] {
+  const feeds: AiWorldFeed[] = [];
+  for (const chunk of raw.split(',')) {
+    const [name, url] = chunk.split('|').map((part) => part.trim());
+    if (!name || !url || !isHttpUrl(url)) continue;
+    if (AI_WORLD_FEEDS.some((feed) => feed.url === url) || feeds.some((feed) => feed.url === url)) continue;
+    feeds.push({
+      id: `extra-${slug(name)}`,
+      name,
+      url,
+      coverage: ['industry'],
+      enabled: true,
+      verifiedNote: 'configured through CURIOSITY_AI_FEEDS',
+    });
+  }
+  return feeds;
+}
+
+/** The feeds actually fetched: the verified registry, plus the operator's own. */
+export function aiWorldFeeds(raw?: string): AiWorldFeed[] {
+  return [...AI_WORLD_FEEDS.filter((feed) => feed.enabled), ...extraAiWorldFeeds(raw)];
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/** How many items one publisher may contribute to a single day. */
+export const MAX_ITEMS_PER_SOURCE = 3;
+/** A headline shorter than this is a label, not a development. */
+export const MIN_TITLE_CHARS = 16;
+
+/** One feed's outcome, kept so Settings can say which source is quiet and why. */
+export interface AiFeedReport {
+  id: string;
+  name: string;
+  url: string;
+  coverage: readonly AiFeedCoverage[];
+  status: 'ok' | 'unreachable' | 'not-a-feed' | 'empty' | 'stale' | 'disabled';
+  items: number;
+  note?: string;
+}
 
 /**
  * Feed text to card text.
@@ -99,107 +249,240 @@ export function historyApiUrl(date: string): string {
  * readers the latest developments without hiding an important update from last
  * week.
  */
-export function selectAiWorldArticles(items: CuriosityNewsItem[], now = Date.now()): CuriosityNewsItem[] {
-  const seen = new Set<string>();
-  return items
-    .filter((item) => {
-      // Last gate before the item becomes a link in someone's browser: the card
-      // renders `href={item.url}`, so only an absolute http(s) URL may pass. The
-      // feed parser checks this too — a published snapshot is read back from the
-      // store without re-running that parser, so the check has to live here as well.
-      if (!isHttpUrl(item.url)) return false;
-      const published = Date.parse(item.publishedAt);
-      if (!Number.isFinite(published) || published > now) return false;
-      // Outside the recency window: a real article, and not news.
-      if (now - published > NEWS_RECENCY_DAYS * 86_400_000) return false;
-      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-    .slice(0, MAX_AI_WORLD_ARTICLES);
+/** Canonical form of a URL for cross-source duplicate detection. */
+export function canonicalNewsUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.hostname.replace(/^www\./, '')}${url.pathname.replace(/\/+$/, '')}${url.search}`.toLowerCase();
+  } catch {
+    return value.trim().toLowerCase();
+  }
 }
 
 /**
- * Why a live section ended up empty, phrased by the code that knows. A card has to
- * stay quiet either way, but the *record* should distinguish "the feeds could not be
- * reached from this server" from "the feeds answered and had nothing recent" — the
- * first is a deployment problem, the second is a Tuesday. The publisher copies the
- * text into the snapshot's `degraded` list, where the status endpoint and Settings
- * show it.
+ * Keep the newest stories that the selected first-party AI publishers provide.
+ *
+ * Four gates, in this order, because each one answers a different question:
+ *
+ *   1. **Is this a card?** An absolute http(s) link, a named publisher, and a title
+ *      long enough to be a development rather than a product name.
+ *   2. **Is it news?** A parseable, not-in-the-future date inside the recency window.
+ *   3. **Is it the same story again?** Canonical URL and normalised title are both
+ *      checked across *all* publishers, so one announcement syndicated by two
+ *      newsrooms appears once.
+ *   4. **Is one publisher crowding the card?** `MAX_ITEMS_PER_SOURCE` caps each
+ *      source, which is what keeps a chatty changelog from burying a model release
+ *      from a quieter lab. Fewer, better items beat ten weak ones.
  */
-export type SourceNote = { text?: string };
+export function selectAiWorldArticles(items: CuriosityNewsItem[], now = Date.now()): CuriosityNewsItem[] {
+  const seenUrls = new Set<string>();
+  const seenTitles = new Set<string>();
+  const perSource = new Map<string, number>();
+  const kept: CuriosityNewsItem[] = [];
+  const sorted = [...items].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+  for (const item of sorted) {
+    // Last gate before the item becomes a link in someone's browser: the card
+    // renders `href={item.url}`, so only an absolute http(s) URL may pass. The
+    // feed parser checks this too — a published snapshot is read back from the
+    // store without re-running that parser, so the check has to live here as well.
+    if (!isHttpUrl(item.url)) continue;
+    if (!item.source || item.source.trim().length < 2) continue;
+    if (!item.title || item.title.trim().length < MIN_TITLE_CHARS) continue;
+    const published = Date.parse(item.publishedAt);
+    if (!Number.isFinite(published) || published > now) continue;
+    // Outside the recency window: a real article, and not news.
+    if (now - published > NEWS_RECENCY_DAYS * 86_400_000) continue;
 
-export async function fetchNews(fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<CuriosityNewsItem[]> {
-  let reached = 0;
-  let stale = 0;
-  const reasons: string[] = [];
-  const remember = (reason: string) => {
-    if (!reasons.includes(reason)) reasons.push(reason);
-  };
-  try {
-    const batches = await Promise.all(NEWS_FEEDS.map(async ([source, url]) => {
+    const urlKey = canonicalNewsUrl(item.url);
+    const titleKey = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (seenUrls.has(urlKey) || seenTitles.has(titleKey)) continue;
+    const used = perSource.get(item.source) ?? 0;
+    if (used >= MAX_ITEMS_PER_SOURCE) continue;
+
+    perSource.set(item.source, used + 1);
+    seenUrls.add(urlKey);
+    seenTitles.add(titleKey);
+    kept.push(item);
+    if (kept.length === MAX_AI_WORLD_ARTICLES) break;
+  }
+  return kept;
+}
+
+/**
+ * Parse one feed document into items.
+ *
+ * Pure and exported so the parser can be tested against recorded RSS and Atom
+ * documents — including the awkward ones: CDATA-wrapped text, escaped markup,
+ * self-closing `<link href>` in Atom, and items with no date at all.
+ *
+ * An item without a title or a link is skipped. An item without a date is skipped
+ * too: the card must never show a story whose age nobody knows, and an undated item
+ * cannot be placed inside the recency window.
+ */
+export function parseFeedXml(xml: string, feed: Pick<AiWorldFeed, 'id' | 'name'>): { items: CuriosityNewsItem[]; undated: number } {
+  let undated = 0;
+  const items: CuriosityNewsItem[] = [];
+  for (const match of xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)) {
+    const block = match[0];
+    const link = tag(block, 'link') || (block.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
+    const title = tag(block, 'title');
+    // RSS says `pubDate`, Atom says `published`, or `updated` when that is all the
+    // feed offers.
+    const publishedAt = tag(block, 'pubDate') || tag(block, 'published') || tag(block, 'updated');
+    const summary = tag(block, 'description') || tag(block, 'summary') || tag(block, 'content');
+    if (!title || !isHttpUrl(link)) continue;
+    if (!publishedAt) {
+      undated += 1;
+      continue;
+    }
+    items.push({
+      title,
+      source: feed.name,
+      publishedAt,
+      summary: summary.slice(0, 280),
+      url: link,
+      origin: 'live' as const,
+    });
+  }
+  return { items, undated };
+}
+
+/** A feed answers with XML, or it is not a feed we can read. */
+export function looksLikeFeedDocument(contentType: string | null): boolean {
+  if (!contentType) return true; // no header: judge the body instead
+  return /xml|rss|atom/i.test(contentType);
+}
+
+/**
+ * Why a live section ended up empty, phrased by the code that knows.
+ *
+ * `note.text` is the sentence the snapshot records; `note.feeds` is the per-feed
+ * report the status endpoint and Settings read, so "nothing new" and "the feeds are
+ * unreachable" stop being the same line.
+ */
+export type SourceNote = { text?: string; feeds?: AiFeedReport[] };
+
+export type NewsFetchResult = {
+  items: CuriosityNewsItem[];
+  reports: AiFeedReport[];
+  noteText?: string;
+};
+
+/**
+ * Read every enabled AI newsroom feed, once, and report on each one.
+ *
+ * The report is the operator-facing half of this function: a day with three items
+ * from two feeds is a very different situation from a day with three items because
+ * five feeds are down, and the status endpoint should be able to say which.
+ */
+export async function fetchAiWorldFeeds(
+  fetchImpl: typeof fetch = fetch,
+  options: { now?: number; feeds?: readonly AiWorldFeed[] } = {},
+): Promise<NewsFetchResult> {
+  const now = options.now ?? Date.now();
+  const feeds = options.feeds ?? aiWorldFeeds();
+  const reports: AiFeedReport[] = [];
+  const collected: CuriosityNewsItem[] = [];
+
+  await Promise.all(
+    feeds.map(async (feed) => {
+      const report: AiFeedReport = {
+        id: feed.id,
+        name: feed.name,
+        url: feed.url,
+        coverage: feed.coverage,
+        status: 'unreachable',
+        items: 0,
+      };
       try {
         // Redirects are followed by `fetch` itself; the pair is asked for the feed URL
         // the publisher advertises, and whatever answers is judged on its content type.
-        const response = await fetchImpl(url, {
+        const response = await fetchImpl(feed.url, {
           headers: { accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' },
           signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS),
           redirect: 'follow',
+          cache: 'no-store',
         });
         if (!response.ok) {
-          remember(`${source} answered ${response.status}`);
-          return [];
+          report.status = 'unreachable';
+          report.note = `HTTP ${response.status}`;
+          return;
         }
         const type = response.headers.get('content-type') ?? '';
-        if (type && !/xml|rss|atom/i.test(type)) {
+        if (!looksLikeFeedDocument(type)) {
           // An HTML page here means the feed moved or the URL was a web page all along.
           // Parsing it as XML would either fail quietly or invent a headline.
-          remember(`${source} answered with ${type.split(';')[0]}, not a feed`);
-          return [];
+          report.status = 'not-a-feed';
+          report.note = `answered with ${type.split(';')[0]}, not a feed`;
+          return;
         }
-        reached += 1;
         const xml = await response.text();
-        // A single publisher can account for all ten newest stories, so retain
-        // enough entries from each authoritative feed before the global limit.
-        return [...xml.matchAll(/<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi)].slice(0, MAX_AI_WORLD_ARTICLES).map((match): CuriosityNewsItem | null => {
-          const item = match[0];
-          const link = tag(item, 'link') || (item.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ?? '');
-          const title = tag(item, 'title');
-          // RSS says `pubDate`, Atom says `published`, or `updated` when that is all
-          // the feed offers. An entry with none of the three cannot be placed inside the
-          // recency window at all, so it is skipped here rather than printed undated:
-          // the card never shows a date it does not have, and never shows "news" whose
-          // age nobody knows.
-          const publishedAt = tag(item, 'pubDate') || tag(item, 'published') || tag(item, 'updated');
-          const summary = tag(item, 'description') || tag(item, 'summary') || tag(item, 'content');
-          if (!title || !isHttpUrl(link)) return null;
-          if (!publishedAt) {
-            stale += 1;
-            return null;
-          }
-          return { title, source, publishedAt, summary: summary.slice(0, 280), url: link, origin: 'live' as const };
-        }).filter((item): item is CuriosityNewsItem => Boolean(item));
+        const parsed = parseFeedXml(xml, feed);
+        if (parsed.items.length === 0) {
+          report.status = parsed.undated > 0 ? 'stale' : 'empty';
+          report.note = parsed.undated > 0
+            ? `${parsed.undated} item(s) carried no date, so none could be placed inside the ${NEWS_RECENCY_DAYS}-day window`
+            : 'the feed answered but listed no items';
+          return;
+        }
+        report.status = 'ok';
+        report.items = parsed.items.length;
+        collected.push(...parsed.items);
+        if (parsed.undated > 0) report.note = `${parsed.undated} undated item(s) skipped`;
       } catch (error) {
         // A timeout, a refused connection and a DNS failure all arrive here. They are
         // not the same as an empty feed, and one dead publisher must not end the loop:
         // every feed is fetched independently and its failure is only recorded.
-        remember(`${source} could not be reached (${error instanceof Error ? error.message.replace(/^AbortSignal timed out\.$/, 'timed out') : String(error)})`);
-        return [];
+        report.status = 'unreachable';
+        report.note = error instanceof Error ? error.message.replace(/^AbortSignal timed out\.$/, 'timed out') : String(error);
+      } finally {
+        reports.push(report);
       }
-    }));
-    const items = selectAiWorldArticles(batches.flat());
-    if (!items.length && note) {
-      const why = reasons.length ? ` (${reasons.slice(0, 3).join('; ')}${reasons.length > 3 ? `; +${reasons.length - 3} more` : ''})` : '';
-      note.text =
-        reached === 0
-          ? `none of the ${NEWS_FEEDS.length} feeds could be reached from this server${why}`
-          : stale
-            ? `the ${reached} feed(s) that answered had no item published within ${NEWS_RECENCY_DAYS} days${why}`
-            : `the ${reached} feed(s) that answered had nothing new to show${why}`;
+    }),
+  );
+
+  // Stable order for the Settings panel, whatever order the network finished in.
+  reports.sort((a, b) => aiWorldFeeds().findIndex((feed) => feed.id === a.id) - aiWorldFeeds().findIndex((feed) => feed.id === b.id) || a.name.localeCompare(b.name));
+
+  const items = selectAiWorldArticles(collected, now);
+  const reached = reports.filter((report) => report.status === 'ok' || report.status === 'empty' || report.status === 'stale').length;
+  const stale = reports.filter((report) => report.status === 'stale').length;
+  const problems = reports.filter((report) => report.status !== 'ok');
+  const named = problems
+    .slice(0, 3)
+    .map((report) => `${report.name}: ${report.note ?? report.status}`)
+    .join('; ');
+  // Never drop a cause silently: the reader of the note has to know how many were
+  // left out, otherwise "three feeds failed" reads like "only three feeds failed".
+  const why = problems.length > 3 ? `${named}; +${problems.length - 3} more` : named;
+
+  let noteText: string | undefined;
+  if (items.length === 0) {
+    noteText =
+      reached === 0
+        ? `none of the ${reports.length} first-party AI feeds could be reached from this server${why ? ` (${why})` : ''}`
+        : stale > 0
+          ? `the ${reached} feed(s) that answered had no item published within ${NEWS_RECENCY_DAYS} days${why ? ` (${why})` : ''}`
+          : `the ${reached} feed(s) that answered had nothing new to show${why ? ` (${why})` : ''}`;
+  }
+
+  return { items, reports, ...(noteText ? { noteText } : {}) };
+}
+
+/**
+ * The long-standing contract: headlines, plus a note explaining an empty result.
+ *
+ * `note.feeds` is new and additive — the per-feed report that Settings and the
+ * status endpoint read. Callers that only want the items are unaffected.
+ */
+export async function fetchNews(fetchImpl: typeof fetch = fetch, note?: SourceNote): Promise<CuriosityNewsItem[]> {
+  try {
+    const result = await fetchAiWorldFeeds(fetchImpl);
+    if (note) {
+      note.feeds = result.reports;
+      if (result.noteText) note.text = result.noteText;
     }
-    return items;
+    return result.items;
   } catch (error) {
     if (note) note.text = `the feeds could not be read (${error instanceof Error ? error.message : String(error)})`;
     return [];
@@ -425,7 +708,7 @@ export async function probeSources(fetchImpl: typeof fetch = fetch, date?: strin
   };
 
   return Promise.all([
-    ...NEWS_FEEDS.map(([source, url]) => probe(source, url, /xml|rss|atom/i)),
+    ...aiWorldFeeds().map((feed) => probe(feed.name, feed.url, /xml|rss|atom/i)),
     probe('GitHub repository search', RADAR_SEARCH_URL, /json/i),
     probe('Wikipedia selected anniversaries', historyApiUrl(date ?? '2026-01-01'), /json/i),
     probe(

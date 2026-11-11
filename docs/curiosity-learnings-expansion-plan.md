@@ -120,6 +120,20 @@ thin because the record is thin. Nothing is invented to satisfy a layout.
   a source URL.
 - Historical snapshots that stored only `chemistry/physics/biology` keep working:
   they are foundation by definition.
+- **Why a discipline is empty is now answered, not implied.** `lib/curiosity/science-levels.ts`
+  holds the gates (`UNDERGRADUATE_GATES`: 60 days, significance ≥ 35, peer-reviewed or
+  preprint), the selection (`undergraduateCandidates`) and the diagnosis
+  (`diagnoseScienceLevels`). Each discipline reports `stored → usable → qualified` counts and
+  one reader-facing sentence, and that sentence is the same one the empty card shows, the
+  status endpoint returns and the Settings panel prints. The five states it distinguishes are:
+  the library could not be read, the table is missing (migration 011), the library is empty,
+  no record for this discipline, and records that exist but fail a gate — with the gate named.
+- **Discovery coverage was widened to keep the underground lane fed**, not just to add
+  volume: chemistry now includes environmental, food and polymer chemistry; physics includes
+  astronomy, atmospheric sciences, geophysics and applied/interdisciplinary physics; biology
+  includes human anatomy, neuroscience, nutrition and environmental science.
+- Snapshot members: `payload.scienceLevels.diagnostics` is persisted with the day, so the
+  reason a card was empty survives the publish and can be read back later.
 
 ---
 

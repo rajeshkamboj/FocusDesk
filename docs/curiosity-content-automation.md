@@ -19,7 +19,7 @@ Its conclusion that the tab needed no CMS and no schema change is superseded her
 | A Few Minutes of Literature | daily, same moment | pool of 24 (`literature.ts`) |
 | Learn Something | daily, same moment | pool of 24 (`learn-something.ts`) |
 | One Book | **every 3 days** | pool of 25 (`books.ts`) + Open Library lookup at publish time |
-| What's New in AI | daily, same moment | six vendor/newsroom RSS feeds |
+| What's New in AI | daily, same moment | eight first-party AI newsrooms (RSS/Atom); previously published real news when live is empty |
 | Developer Radar | daily, same moment | GitHub Search API (`api.github.com`) |
 | Today in History | daily, same moment | curated dated corpus, else Wikipedia's `onthisday` feed |
 | Brain Sharpener, Speak Better, Mythology, Chemistry, Physics, Biology | daily, same moment | fixed corpora, offset rotation (no pool, no ledger) |
@@ -66,9 +66,11 @@ The invariants that make this safe to run repeatedly:
 * **A failure keeps the last good content.** If Open Library does not answer, the
   previous recommendation stays published and the interval clock does not move (it is
   measured from the last *successful* publish), so the next scheduled run retries. If a
-  news feed returns nothing, the section keeps the items from the last successful day
-  and the snapshot records `aiWorld: source returned nothing; kept the N item(s) from
-  <date>`. The page header prints the count — "*N* section(s) showing fallback text
+  AI news comes back empty, the section keeps the items already published for an earlier
+  day — real items, original dates, labelled *Cached* — and the snapshot records
+  `aiWorld: nothing usable from the live source (…); kept the N item(s) published for
+  <date>, with their original dates`. The page header prints the count — "*N* section(s)
+  showing fallback text
   because a source did not answer" — while the verbatim note stays in the status payload,
   so a reader sees that something degraded without the card claiming the list is fresh.
 * **One section is exempt from that rule, on purpose.** "Today in History" is not
@@ -278,16 +280,19 @@ Nothing is required to run Curiosity. The full set:
 | `OPENLIBRARY_CONTACT_EMAIL` | a polite User-Agent for Open Library | optional, recommended |
 
 There is **no paid AI API in this design and no fake integration**: the AI news card is
-six feeds (`sources.ts` constants: OpenAI, Anthropic, Google DeepMind, Hugging Face,
-Microsoft AI, Meta AI), and no LLM generates published text. If someone later wants
-generated content, it must be a separate documented dependency with its own key and its
-own `provenance` marker — the pool and the fallback exist so that the tab never needs
-any generator to have something to show.
+eight first-party feeds (`AI_WORLD_FEEDS` in `sources.ts`: OpenAI, Anthropic, Google
+DeepMind, Google AI, Hugging Face, Microsoft AI, Meta AI, Higgsfield), and no LLM
+generates published text. `CURIOSITY_AI_FEEDS="Name|https://…/feed.xml"` adds an operator
+verified feed without a deploy; an entry without a name, without an absolute `http(s)`
+URL, or pointing at a host already read is ignored rather than fetched. If someone later
+wants generated content, it must be a separate documented dependency with its own key and
+its own `provenance` marker — the pool exists so that the tab never needs any generator to
+have something to show, and the AI card is allowed to be honestly empty instead (see §11).
 
 ## 9. Verifying it
 
 ```bash
-npm run curiosity:verify                                  # 19 lifecycle + reliability checks
+npm run curiosity:verify                                  # 21 lifecycle + reliability checks
 npx tsx scripts/verify-daily-content.tsx                   # the pre-existing page checks
 npx tsx scripts/verify-mobile-layout.tsx                  # needs `npm run build` first
 npm run curiosity:links                                    # every pool URL, from a machine with egress
@@ -324,31 +329,52 @@ coverless record rendering the local placeholder; validation before the write, w
 failure inside the lease leaving the previous snapshot byte-identical; a read-only
 filesystem; durability never overstated; one publisher and no credential in a committed
 file; and an audit of the whole curated corpus — ids, links, provenance, prose, rotation.
-**(19)** confirms nothing outside Curiosity changed, against `git merge-base HEAD
-origin/main`.
+**(20)** publishes the two science levels: Foundation is the default card in all three
+disciplines, a qualified research record reaches Undergraduate with its DOI, peer-review
+status and link intact, the three disciplines are counted and explained independently,
+stale (61+ days), low-significance (below 35) and invalid records are refused with a
+specific reason, an empty or unreadable library says so instead of showing a blank card, a
+record survives the candidate store round trip and publication, and the rendered page
+offers exactly two levels with Foundation first. **(21)** takes the AI card offline the day
+after a good publish: the day still publishes, the card keeps exactly the previous day's
+stories with their original publication dates under *cached — original dates kept*, the
+snapshot records `sections.aiWorld = 'cached'` and the reason, the day is not reported
+complete, and no curated explainer is substituted in. **(19)** confirms nothing outside
+Curiosity changed, against `git merge-base HEAD origin/main`.
 
-Results of the run performed for this change (sandbox, no outbound network): `tsc
---noEmit` clean, `eslint lib components app` clean, `next build` clean with no warnings,
-`verify-curiosity-automation.tsx` **PASS, 19 checks + 2 wiring reports**, `verify-daily-content.tsx`
-PASS (366 daily selections), `verify-mobile-layout.tsx` PASS (all mobile-layout checks),
-`npm run curiosity:links` executed and reported honestly that this machine has no egress —
-96 URLs unreachable — all 73 pool citations plus the 23 links on the curated shelves,
-which the check now collects as well — 0 dead, 0 ok, and that is the correct output for a sandbox. It is
-the reason the check exists: it must be re-run from a machine with egress before the pool
-links can be called verified. The dev server was also driven for real: `GET /api/curiosity`
-answered with a published day whose three live cards were labelled `curated` with their
-causes recorded, `action=status` reported `store.durability: "single-host"`, and
-`action=probe` reported all nine sources unreachable in ~15 ms each without hanging.
+Results of the run performed for the no-curated-AI-World change (sandbox, no outbound
+network): `npx tsc --noEmit` clean, `eslint lib components app` clean, `next build` clean,
+`verify-curiosity-automation.tsx` **PASS — 21 checks plus the Supabase and "unrelated
+files" wiring reports**, `verify-daily-content.tsx` PASS (366 daily selections),
+`curiosity:dedupe`, `curiosity:books` (65 checks), `curiosity:reservoir` (10 checks),
+`curiosity:history` (11 checks), `verify:discovery`, `verify:science`,
+`verify:daily-knowledge` and `verify:learnings` (43 checks) all exit 0.
+`npm run curiosity:links` was executed and reported honestly that this machine has no
+egress: **125 URLs, 0 ok, 125 unreachable, 0 dead** — every request failed at the network
+layer, which is the expected output for a sandbox and the reason the check exists. The dev
+server and the browser were **not** driven for this change; the rendered pages were checked
+through `renderToStaticMarkup` inside the harness instead (check 9 renders the outage page,
+check 13 the coverless book card), so no claim is made here about a live deployment.
+`action=probe` now covers eleven sources — the eight registry feeds plus GitHub, Wikipedia
+and Open Library — and is asserted structurally (check 11), not against the live network.
 `verify-mobile-layout.tsx` needs `jsdom`, which the repository does not list as a
 dependency; it was installed with `npm install --no-save jsdom` for this run and is the
 one thing about that check worth fixing separately.
 
 **Not verified here, and you must verify it once in your environment**: a live Open
 Library response (the scripted payload is a real captured shape, but this sandbox has no
-egress to `openlibrary.org`), a live RSS/GitHub/Wikipedia fetch, migration 009 applied to
-a project, the Edge Function deployed, the Actions workflow running on a schedule, and
-`npm run curiosity:links` — which needs a machine that can reach the 96 cited URLs, pool
-entries and curated shelves alike.
+egress to `openlibrary.org`), a live RSS/GitHub/Wikipedia fetch, migration 009 (and, for
+the repetition windows, 010) applied to a project, the Edge Function deployed, the Actions
+workflow running on a schedule, and `npm run curiosity:links` — which needs a machine that
+can reach the cited URLs, pool entries and curated shelves alike.
+
+Three of the eight AI feeds were fetched and confirmed as dated RSS/Atom during this change
+(OpenAI, Google AI, Higgsfield) through a page-reading tool rather than the app's `fetch`;
+the other five (Anthropic, DeepMind, Hugging Face, Microsoft AI, Meta AI) keep their
+long-standing URLs with no fresh verification note. Re-run
+`curl -s <deployment>/api/curiosity/refresh?action=probe | jq` from the deployment before
+trusting any of them, and treat a feed that answers `text/html` as moved rather than fixed
+by guesswork.
 
 ## 10. Runbook
 
@@ -369,9 +395,11 @@ entries and curated shelves alike.
   pool and the curated shelves are the fallback dataset, and the next publish
   repopulates the store.
 * **Which content is on screen right now?** → the label on each card (*curated*,
-  *curated reading*, *From the archive*). Settings → Data shows the same thing per
-  section (`Cards`), the last attempt and its result, the store's durability, and the
-  date the book turns over next. `action=status` returns all of it as JSON.
+  *Cached*, *temporarily unavailable*, *From the archive*). Settings → Data shows the same
+  thing per section (`Cards`), the last attempt and its result, the store's durability, the
+  scheduler's last success and last failure, the AI World feed registry with each feed's
+  reported state, and the science counts by discipline and level. `action=status` returns
+  all of it as JSON.
 * **Turn the production scheduler on** (nothing in this repository can do this for
   you; it needs the deployment's UI): ① set `CURIOSITY_CRON_SECRET` in the Vercel
   project environment to a long random value (`openssl rand -hex 32`) and redeploy;
@@ -397,7 +425,6 @@ publisher walks a fixed chain per section and stops at the first link that has c
 
    | Card | Shelf | Size | How it is labelled |
    | --- | --- | --- | --- |
-   | What's New in AI | `content/ai-background.ts` — evergreen explainers of how these systems work | 12, three a day | `origin: 'background'`, no date printed, card header reads *curated reading* |
    | Developer Radar | `content/radar-fallback.ts` — established open-source tools, described by what they do | 12, three a day | `origin: 'curated'`, no "recently updated" claim, card header reads *curated* |
    | Today in History | the dated `historyEvents` corpus, rotated when nothing is verified for the day | 9 | `forThisDate: false` and the card states *From the archive — not an event of this date* |
    | One Book | the curated recommendation, without catalogue fields | 25 | `source: 'curated'`; no cover, no year, no edition count unless Open Library returned them |
@@ -405,23 +432,85 @@ publisher walks a fixed chain per section and stops at the first link that has c
    Rotations are keyed to the publication day, so consecutive days never show the same
    three items and each shelf cycles in four days.
 
+**What's New in AI is not on that shelf.** The card publishes news or it says it cannot:
+
+| Step | What it is | How it is labelled |
+| --- | --- | --- |
+| 1 | an item fetched from a first-party AI newsroom today, dated, deduplicated, inside the 45-day window | `origin: 'live'`, its own publication date and publisher |
+| 2 | the items already published for an earlier day — real news, real dates, unchanged | `origin: 'cached'`, card header reads *Cached*, `sections.aiWorld = 'cached'`, and the snapshot records `kept the N item(s) published for <date>, with their original dates` |
+| 3 | articles stored by the last discovery run in `curiosity_candidates` | `origin: 'cached'`, same labelling, said to come from the reservoir |
+| 4 | nothing usable | `sections.aiWorld = 'unavailable'`, empty card, header reads *temporarily unavailable*, empty-state sentence: *Fresh AI news is temporarily unavailable* |
+
+Two details make step 2 real rather than aspirational:
+
+* The cache is read from the **last day that was published** (`state.daily.payload`), not
+  from today's snapshot. Reading the same-day payload meant the branch could only fire
+  during a forced re-run of the same day — which is exactly when the day's picks are
+  reused anyway — so on any new day the card fell straight through to *unavailable*. That
+  was the bug, and this is the fix.
+* The origin is **recorded at publish time** in `payload.sectionOrigins`, then read by the
+  status endpoint, the Settings panel and the card. It used to be re-derived from the items
+  at render time, and a carried-over story still carries `origin: 'live'` from the day it
+  was fetched — so a cached day printed the same “up to 10” label as a fresh one. Recorded
+  origin, honest label; snapshots published before this field existed keep the derived
+  behaviour.
+
+`content/ai-background.ts` still exists — the 12 evergreen explainers are used as reference
+material elsewhere and are asserted by `curiosity:verify` (check 18) — but nothing in the
+publish path can reach it, `selectAiWorldArticles` cannot emit it, and `invalidDailyFields`
+refuses any AI World item whose `origin` is `background`. Three explainers standing in for
+the news is what made the card read as news when it was not; an honest empty card is the
+replacement.
+
+### What counts as AI news
+
+* **Publisher** — the post must come from the publisher's own newsroom or changelog, never
+  an aggregator and never an encyclopedia. `curiosity:verify` check 10 asserts the registry
+  covers OpenAI, Anthropic, Google DeepMind, Google AI, Hugging Face, Microsoft AI, Meta AI
+  and Higgsfield, that every URL is `https`, that none is a `wikipedia.org` page, and that
+  every topic tag (`models`, `products`, `agents`, `media`, `coding`, `research`,
+  `industry`) is carried by at least one feed.
+* **Verified URLs only.** An entry carries `verifiedAt`/`verifiedNote` when the URL was
+  fetched and confirmed to return a dated RSS/Atom document. Currently verified that way:
+  OpenAI `news/rss.xml`, Google AI (the `blog.google/technology/ai/rss/` path redirects to
+  `blog.google/innovation-and-ai/technology/ai/rss/`), and Higgsfield's
+  `creator-hub/changelog/rss.xml` — the feed Higgsfield's own `llms.txt` publishes. The
+  Anthropic, DeepMind, Hugging Face, Microsoft AI and Meta AI URLs are the long-standing
+  registry entries and are **not** covered by a fresh verification note; when one of them
+  moves, the probe reports *answered with text/html, not a feed* or *HTTP 4xx* and the card
+  loses that publisher rather than inventing a replacement.
+* **Freshness and quality** — `NEWS_RECENCY_DAYS = 45`, `MIN_TITLE_CHARS = 16`,
+  `MAX_AI_WORLD_ARTICLES = 10`, deduplicated by canonical URL then by title, ordered by
+  publication date. Ten is a ceiling, not a target: a quiet week publishes four items and
+  says nothing about it, because four real stories is the honest answer.
+
 The history card is the one section that is never *carried over*: yesterday's anniversary
 under "Today in History" would be a false statement rather than a stale one, so an
 unverified day gets an archive entry that says what it is.
 
 Every substitution is recorded on the snapshot — `aiWorld: nothing usable from the live
-source (none of the 6 feeds could be reached from this server (…)); published 3 curated
-item(s) in its place` — which is what makes the day auditable afterwards. A reader sees a
+source (none of the 8 first-party AI feeds could be reached from this server (…)); fresh AI
+news is temporarily unavailable — no live item, no previously published article and
+nothing in the reservoir` — which is what makes the day auditable afterwards. A reader sees a
 label; nobody has to open a console to learn that a card is fallback content, and nobody
 has to read this file to learn why.
 
 ### Why a fallback publication still counts as a successful publish
 
-`status: "published"` means a valid day was written: all four cards have content, each
-item passed validation, and the snapshot says which parts are curated. It does not claim
-the live sources were reached — that is what `degraded` is for, and what the Settings
-panel's per-card line shows. A run that could not produce a valid payload reports `failed`
-and leaves the previous day in place, so "published" never has to be discounted.
+`status: "published"` means a valid day was written: every card that has an honest
+answer carries one, each item passed validation, and the snapshot says per card where the
+content came from. It does not claim the live sources were reached — that is what `degraded`
+is for, and what the Settings panel's per-card line shows. A run that could not produce a
+valid payload reports `failed` and leaves the previous day in place, so "published" never
+has to be discounted.
+
+The one card that may be legitimately empty is AI World: when nothing live, nothing
+previously published and nothing in the reservoir is usable, the card renders its
+unavailable state and the snapshot carries the reason. `daily.complete` therefore does not
+require `aiWorld.length > 0` — it requires no degradation, a Radar card and a history card.
+Requiring an AI item would reward padding the card, which is exactly what the curated
+fallback used to do. The Settings panel distinguishes the two cases in words: *every card
+has content except AI World* versus *some cards used fallback*.
 
 ### Reading the causes
 

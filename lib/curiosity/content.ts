@@ -295,9 +295,15 @@ function rotate<T>(list: readonly T[], date: string, take = CURATED_PER_DAY): T[
 }
 
 /**
- * Curated AI background for a day. These are explainers, not news: every item arrives
- * with `origin: 'background'` and no publication date, because nothing here claims to
- * have happened recently, and the card is expected to say which of the two it is.
+ * Curated AI background for a day — REFERENCE ONLY, NEVER PUBLISHED.
+ *
+ * These are explainers, not news: every item arrives with `origin: 'background'` and
+ * no publication date, because nothing here claims to have happened recently. AI
+ * World used to fall back to this shelf, which is exactly how a card headed "AI
+ * World" came to show generic Wikipedia material. The publication path no longer
+ * reads it (`dailyEditorial` returns no AI items at all when the feeds are empty),
+ * and this function is kept because the regression suite asserts that a background
+ * item can never reach a published payload.
  */
 export function curatedAiWorld(date: string): { items: CuriosityNewsItem[]; ids: string[] } {
   const picked = rotate(aiBackgroundLibrary, date);
@@ -510,7 +516,20 @@ function poolEntry<T>(category: CuriosityCategory, date: string): CuriosityPoolE
   return selectFromPool(category, date).entry as CuriosityPoolEntry<T>;
 }
 
-export function dailyEditorial(date: string): Pick<
+/**
+ * The briefing a reader sees for a day that has no snapshot.
+ *
+ * `options.recentOneThingIds` is the important parameter: this path runs when the
+ * publisher did not produce today's snapshot, and without the ledger it can show an
+ * item that the *published* day already showed — which is precisely how a card comes
+ * to look frozen across two days. Passing the ids the ledger already recorded keeps
+ * the fallback inside the same repeat rules as the publisher, without inventing a
+ * random choice.
+ */
+export function dailyEditorial(
+  date: string,
+  options: { recentOneThingIds?: readonly string[] } = {},
+): Pick<
   CuriosityBriefing,
   | 'book'
   | 'aiWorld'
@@ -536,15 +555,22 @@ export function dailyEditorial(date: string): Pick<
   const parsedDay = Date.parse(`${date}T00:00:00Z`);
   const safeDay = Number.isFinite(parsedDay) ? Math.abs(Math.floor(parsedDay / 86_400_000)) : 0;
 
-  const oneThing = poolEntry<OneThingItem>('one-thing', date);
+  const oneThing = selectFromPool('one-thing', date, {
+    ...(options.recentOneThingIds?.length ? { seenIds: [...options.recentOneThingIds] } : {}),
+  }).entry as CuriosityPoolEntry<OneThingItem>;
   const learning = poolEntry<LearningItem>('learn-something', date);
   const literature = poolEntry<LiteratureItem>('literature', date);
   const book = poolEntry<BookCandidate>('book', date);
 
   return {
-    // The two live-only cards are never empty, even offline: they take today's slice of
-    // the curated shelves, labelled as background and shelf picks rather than news.
-    aiWorld: curatedAiWorld(date).items,
+    /*
+      AI World is empty here on purpose. This path exists for a day that was never
+      published, and the honest thing to render for that day is "fresh news is
+      temporarily unavailable" — not a curated explainer wearing a news heading. The
+      Developer Radar shelf below is a different case: a tool recommendation is not a
+      claim about something that happened, so it stays.
+    */
+    aiWorld: [],
     developerRadar: curatedRadar(date).items,
     // A fallback briefing is built offline, so the book card is the curated
     // record on purpose: no cover, no publication year, no catalogue claims.
@@ -587,7 +613,8 @@ export function dailyEditorialIds(date: string): Record<'oneThing' | 'learning' 
 /** Which curated background/shelf items a day shows, for the published record. */
 export function curatedFallbackIds(date: string): { aiWorld: string; developerRadar: string } {
   return {
-    aiWorld: curatedAiWorld(date).ids.join('+'),
+    // AI World has no curated fallback any more; an empty id is the honest record.
+    aiWorld: '',
     developerRadar: curatedRadar(date).ids.join('+'),
   };
 }

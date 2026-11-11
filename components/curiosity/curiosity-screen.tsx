@@ -63,6 +63,17 @@ function LinkOut({ href, children }: { href: string; children: React.ReactNode }
  * so in two words. The text never blames a source or names an error: causes live in
  * Settings → Data, where someone can act on them.
  */
+/**
+ * The AI World heading must never say "curated reading". Its three honest states are
+ * "up to 10" (live), "kept from the last run that answered" (cached, with the items
+ * still carrying their own dates) and "temporarily unavailable".
+ */
+function aiWorldLabel(origin: CuriositySectionOrigin | undefined): string {
+  if (origin === 'cached') return 'cached — original dates kept';
+  if (origin === 'unavailable' || origin === undefined) return 'temporarily unavailable';
+  return 'up to 10';
+}
+
 function originLabel(origin: CuriositySectionOrigin | undefined, fallback: string): string {
   switch (origin) {
     case 'curated':
@@ -586,7 +597,7 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
               <>
                 AI World{' '}
                 <span className="ml-2 font-normal tracking-normal text-ink-3">
-                  {originLabel(briefing.publication?.sectionOrigins?.aiWorld, 'up to 10')}
+                  {aiWorldLabel(briefing.publication?.sectionOrigins?.aiWorld)}
                 </span>
                 <OriginTag origin={briefing.publication?.sectionOrigins?.aiWorld} />
               </>
@@ -598,8 +609,12 @@ export function CuriosityScreen({ briefing: initialBriefing }: { briefing: Curio
               ))
             ) : (
               <EmptyState
-                title="Nothing to show yet"
-                hint="This card fills with the next daily publish."
+                title="Fresh AI news is temporarily unavailable"
+                hint={
+                  briefing.publication?.sectionOrigins?.aiWorld === 'cached'
+                    ? 'The items above are kept from an earlier run and keep their original dates.'
+                    : 'None of the first-party AI newsrooms answered for this publish. The next daily publish retries; this card never substitutes a curated explainer for a news item.'
+                }
               />
             )}
           </SectionCard>

@@ -72,6 +72,23 @@ type Status = {
   };
   runs: { at: string; trigger: string; ok: boolean; detail: string }[];
   triggeredBy?: string;
+  schedulerHealth?: {
+    lastSuccessAt: string | null;
+    lastFailure: { at: string; trigger?: string; detail: string } | null;
+    failedInLast24h: number;
+  };
+  aiWorld?: {
+    feeds: Array<{ id: string; name: string; url: string; coverage: readonly string[]; verifiedAt?: string; verifiedNote?: string }>;
+    origin: string;
+    lastPublishedDate?: string;
+    notes: string[];
+  };
+  science?: {
+    date: string;
+    disciplines: Record<string, { stored: number; usable: number; qualified: number; reason: string }>;
+    published: { foundation: number; undergraduate: number };
+  };
+  cards?: { fresh: number; cached: number; curated: number; unavailable: number };
 };
 
 type Summary = {
@@ -269,7 +286,11 @@ export function CuriosityRefreshSettings() {
                 value={
                   status.daily
                     ? `${formatPublicationDate(status.daily.date ?? '')}, published ${formatPublicationInstant(status.daily.publishedAt ?? '')}${
-                        status.daily.complete === false ? ' · some cards used fallback' : ' · every card has content'
+                        status.daily.complete === false
+                          ? ' · some cards used fallback'
+                          : status.daily.sections?.aiWorld === 'unavailable'
+                            ? ' · every card has content except AI World'
+                            : ' · every card has content'
                       }`
                     : 'not published yet — showing the built-in rotation'
                 }
@@ -308,6 +329,54 @@ export function CuriosityRefreshSettings() {
                 />
               ) : null}
               <Row label="Last attempt" value={lastAttempt ? `${formatPublicationInstant(lastAttempt.at)} · ${lastAttempt.ok ? 'ok' : 'failed'} — ${lastAttempt.detail}` : 'nothing has run in this record'} />
+              <Row
+                label="Last success"
+                value={status.schedulerHealth?.lastSuccessAt ? formatPublicationInstant(status.schedulerHealth.lastSuccessAt) : 'never in this record'}
+              />
+              <Row
+                label="Last failure"
+                value={
+                  status.schedulerHealth?.lastFailure
+                    ? `${formatPublicationInstant(status.schedulerHealth.lastFailure.at)} — ${status.schedulerHealth.lastFailure.detail}`
+                    : 'none recorded'
+                }
+              />
+              {status.cards ? (
+                <Row
+                  label="Cards today"
+                  value={`${status.cards.fresh} fresh · ${status.cards.cached} cached · ${status.cards.curated} curated · ${status.cards.unavailable} unavailable`}
+                />
+              ) : null}
+              {status.aiWorld ? (
+                <>
+                  <Row
+                    label="AI World"
+                    value={`${status.aiWorld.feeds.length} first-party feed(s) · last published card ${status.aiWorld.origin}${
+                      status.aiWorld.lastPublishedDate ? ` (${formatPublicationDate(status.aiWorld.lastPublishedDate)})` : ''
+                    }`}
+                  />
+                  <p className="text-ink-3">
+                    Feeds: {status.aiWorld.feeds.map((feed) => `${feed.name}${feed.verifiedAt ? ` (verified ${feed.verifiedAt})` : ''}`).join(' · ')}
+                  </p>
+                </>
+              ) : null}
+              {status.science ? (
+                <Row
+                  label="Science discovery"
+                  value={Object.entries(status.science.disciplines)
+                    .map(([discipline, counts]) => `${discipline} ${counts.qualified}/${counts.stored} qualified`)
+                    .join(' · ')}
+                />
+              ) : null}
+              {status.science ? (
+                <p className="text-ink-3">
+                  Levels today: foundation {status.science.published.foundation}/3 · undergraduate {status.science.published.undergraduate}/3.
+                  {Object.entries(status.science.disciplines)
+                    .filter(([, counts]) => counts.qualified === 0)
+                    .map(([, counts]) => ` ${counts.reason}`)
+                    .join('')}
+                </p>
+              ) : null}
               <Row label="Schedule" value={schedulerLine ?? ''} />
               <Row
                 label="Scheduler observed"

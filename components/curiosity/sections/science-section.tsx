@@ -51,6 +51,15 @@ export function ScienceSection({
     return undergraduate?.[discipline];
   };
 
+  /**
+   * Why this discipline is empty at the undergraduate level, in the words of the
+   * diagnostician that counted the records. The old behaviour was a blank card and no
+   * explanation, which read the same whether the library was empty, the table was
+   * missing or every record had aged out.
+   */
+  const emptyReason = (discipline: 'chemistry' | 'physics' | 'biology'): string | undefined =>
+    level === 'undergraduate' ? levels?.diagnostics?.[discipline]?.reason : undefined;
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-line bg-surface px-4 py-3 sm:px-5">
@@ -106,7 +115,7 @@ export function ScienceSection({
               level={level}
             />
           ) : (
-            <EmptyLevelCard label="Chemistry of the Day" level={level} />
+            <EmptyLevelCard label="Chemistry of the Day" level={level} reason={emptyReason('chemistry')} />
           )}
         </section>
         <section className="h-full">
@@ -119,7 +128,7 @@ export function ScienceSection({
               level={level}
             />
           ) : (
-            <EmptyLevelCard label="Physics of the Day" level={level} />
+            <EmptyLevelCard label="Physics of the Day" level={level} reason={emptyReason('physics')} />
           )}
         </section>
         <section className="h-full">
@@ -132,7 +141,7 @@ export function ScienceSection({
               level={level}
             />
           ) : (
-            <EmptyLevelCard label="Biology of the Day" level={level} />
+            <EmptyLevelCard label="Biology of the Day" level={level} reason={emptyReason('biology')} />
           )}
         </section>
       </div>
@@ -140,15 +149,34 @@ export function ScienceSection({
   );
 }
 
-function EmptyLevelCard({ label, level }: { label: string; level: ScienceEducationLevel }) {
+function EmptyLevelCard({
+  label,
+  level,
+  reason,
+}: {
+  label: string;
+  level: ScienceEducationLevel;
+  /** The diagnostician's sentence for this discipline, when one exists. */
+  reason?: string;
+}) {
   return (
     <div className="flex h-full flex-col rounded-2xl border border-dashed border-line bg-surface p-4 sm:p-6">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">{label}</p>
       <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-        Nothing at the {SCIENCE_EDUCATION_LEVEL_LABELS[level].toLowerCase()} level qualified today. Rather than pad the
-        card with content from another level, it stays empty — switch to School / Foundation Science for today’s
-        explainer.
+        {reason ?? (
+          <>
+            Nothing at the {SCIENCE_EDUCATION_LEVEL_LABELS[level].toLowerCase()} level qualified today. Rather than pad
+            the card with content from another level, it stays empty — switch to School / Foundation Science for
+            today’s explainer.
+          </>
+        )}
       </p>
+      {reason ? (
+        <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
+          Foundation content is never relabelled as undergraduate. Switch to School / Foundation Science for today’s
+          explainer.
+        </p>
+      ) : null}
     </div>
   );
 }

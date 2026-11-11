@@ -292,7 +292,7 @@ have something to show, and the AI card is allowed to be honestly empty instead 
 ## 9. Verifying it
 
 ```bash
-npm run curiosity:verify                                  # 21 lifecycle + reliability checks
+npm run curiosity:verify                                  # 22 lifecycle + reliability checks
 npx tsx scripts/verify-daily-content.tsx                   # the pre-existing page checks
 npx tsx scripts/verify-mobile-layout.tsx                  # needs `npm run build` first
 npm run curiosity:links                                    # every pool URL, from a machine with egress
@@ -339,12 +339,18 @@ offers exactly two levels with Foundation first. **(21)** takes the AI card offl
 after a good publish: the day still publishes, the card keeps exactly the previous day's
 stories with their original publication dates under *cached — original dates kept*, the
 snapshot records `sections.aiWorld = 'cached'` and the reason, the day is not reported
-complete, and no curated explainer is substituted in. **(19)** confirms nothing outside
-Curiosity changed, against `git merge-base HEAD origin/main`.
+complete, and no curated explainer is substituted in. **(22)** reproduces the 2026-11-11 refusal from the stored shape that caused it, proves a
+valid legacy Physics or Biology record is completed from its own provenance and publishes
+with its DOI, date, peer-review status and link intact, proves an already-stamped record is
+left alone, refuses curated, foundation-marked, unknown-level, link-less, DOI-less,
+press-release and concept-less rows by name, keeps expired and rejected rows out of the
+lane, and verifies that a real validation failure answers 422 (and a storage fault 503)
+while the published snapshot is untouched. **(19)** confirms nothing outside Curiosity
+changed, against `git merge-base HEAD origin/main`.
 
 Results of the run performed for the no-curated-AI-World change (sandbox, no outbound
 network): `npx tsc --noEmit` clean, `eslint lib components app` clean, `next build` clean,
-`verify-curiosity-automation.tsx` **PASS — 21 checks plus the Supabase and "unrelated
+`verify-curiosity-automation.tsx` **PASS — 22 checks plus the Supabase and "unrelated
 files" wiring reports**, `verify-daily-content.tsx` PASS (366 daily selections),
 `curiosity:dedupe`, `curiosity:books` (65 checks), `curiosity:reservoir` (10 checks),
 `curiosity:history` (11 checks), `verify:discovery`, `verify:science`,
@@ -388,6 +394,17 @@ by guesswork.
 * **Nothing published?** → `--status`. `store.location` says which backend is answering;
   `scheduler.cronSecretConfigured: false` in production means the endpoint is closed to a
   scheduler; `degraded` names the sections that fell back.
+* **A publish was refused?** → read `failure.kind` in the response body, not just the
+  status: `invalid-content` (422) means the content failed validation and the `problems`
+  array names the section, the expected value, the actual value and the candidate id;
+  `no-eligible-content` (409) means nothing was eligible; `storage` (503) means retry;
+  `upstream` (502) means a source or the discovery job failed. The previous day's
+  snapshot is untouched in every case. See §12.
+* **Undergraduate card missing for a discipline?** → `action=status` reports
+  `science.disciplines.<discipline>` with `stored / usable / qualified`, how many records
+  were completed from legacy metadata (`normalized`) and any `rejected` codes with their
+  reasons. Nothing needs re-seeding: the next science discovery run rewrites the row with
+  a full concept.
 * **Stuck "busy" forever?** Should not happen — leases expire (5–15 minutes, clamped in
   SQL). `select * from curiosity_jobs` shows the lease and the last result; clearing
   `lease_token` is safe while no run is in flight.
@@ -526,6 +543,125 @@ minute; the note carries `Retry-After`), *answered with text/html, not a feed* (
 moved), and *answered but listed nothing* (a quiet day, waiting is the fix). The probe is
 admin-only because it is the one read path allowed to touch the network, and it measures
 reachability from the server that publishes, not from a browser.
+
+## 12. When a publish is refused: the 2026-11-11 outage
+
+On 2026-11-09 (run 24) the daily publish succeeded. On 2026-11-10 (run 25) and
+2026-11-11 (run 26) it failed, the second time with HTTP 502 and this message:
+
+```
+refusing to publish 2026-11-11: scienceLevels.undergraduate.physics is undergraduate-level;
+scienceLevels.undergraduate.biology is undergraduate-level. The last published content is unchanged.
+```
+
+The published snapshot was preserved both times — that part of the design worked. What
+failed was the **content selection feeding it**, and the diagnosis is worth writing down
+because the shape of the bug is repeatable.
+
+### Root cause
+
+Two different things had to be true at once:
+
+1. **Records stored before the two-level field existed.** `scienceDraftFromRecord()` now
+   writes `payload.concept.educationLevel = 'undergraduate'`, but rows written before that
+   field was added carry `payload.science` (peer-reviewed, fresh, scored) and a concept
+   with a provenance label and a link — and no `educationLevel`. Those rows are still in
+   `curiosity_candidates`, and they are still inside the 60-day freshness window.
+2. **A publisher that trusted the payload and not the card.** The undergraduate pick
+   filtered on `category`, `eligible`, `validationStatus` and `payload.science`, then took
+   `candidateToScienceConcept()` — which returns a stored concept **verbatim**. Nothing
+   checked that the concept it published was stamped for the lane it was going into.
+
+So the day's payload contained an undergraduate card whose `educationLevel` was absent;
+`invalidDailyFields()` correctly refused it; and because validation is all-or-nothing for
+the day, nothing was written.
+
+Why the runs differ: run 24 executed the code before the two-level structure existed
+(`33064b5`, no undergraduate lane at all, so no level rule to violate), while runs 25 and
+26 executed the two-level code (`0ea3272`) against the same reservoir. The failure is not
+a random one — with those two rows present, every publish fails until the selection or the
+data changes.
+
+### The fix: hydration, not tolerance
+
+`lib/curiosity/science-levels.ts` now has `hydrateResearchCandidate()`, which every
+undergraduate pick passes through, and `selectUndergraduate()`, which reports what
+happened. The level is **derived from the record's own provenance**, never assumed:
+
+| Stored row | Result |
+| --- | --- |
+| `payload.science` says peer-reviewed/preprint, concept has topic + summary + link, no `educationLevel` | accepted; `educationLevel: 'undergraduate'`, `levelBasis: 'derived-from-record'`, missing `provenanceLabel`/`publishedOn`/`research` completed from the same record |
+| already `educationLevel: 'undergraduate'` | accepted unchanged (`normalized: false`) |
+| concept marked `foundation` | refused: `marked-foundation` |
+| concept `origin: 'curated'` or `'wikipedia'` | refused: `explainer-not-research` |
+| unknown level value | refused: `unknown-education-level` |
+| `payload.science` missing, or provenance is a press release / announcement | refused: `no-research-metadata` / `unsupported-provenance` |
+| no `payload.concept` at all | refused: `no-concept-payload` (re-run discovery; a card is not assembled from a title) |
+| no topic/summary, or no usable link, or no publication date | refused: `incomplete-concept` |
+
+Every accepted record keeps its own DOI, venue, authors, publication date, peer-review
+status, source link and score: hydration **completes** metadata, it does not rewrite it.
+Nothing is deleted or reset — the stored rows are untouched; only the in-memory card is
+normalised.
+
+Strict separation is unchanged, and is now stated where it is enforced: the foundation
+lane refuses anything marked `undergraduate` as well as anything with
+`origin: 'research'`, and the validator still refuses a foundation card under the
+undergraduate label or a research record in the foundation lane.
+
+### The publisher's last line
+
+A card that cannot satisfy the undergraduate rules is now **withheld from the day with a
+recorded reason**, instead of taking the whole day down with it:
+
+```
+science physics: withheld the undergraduate card for doi-… — is undergraduate-level
+(expected undergraduate, was missing); cites its source (expected an http(s) link, was missing)
+```
+
+That is not a bypass. `invalidDailyFields()` still runs and still refuses the payload;
+both it and the guard call the same `undergraduateConceptProblems()` rules, so the two
+cannot disagree. If the guard misses something, validation fails the day exactly as before.
+
+### Failure classification
+
+A refused publish used to be 502 for every cause, which is why the run log could not say
+whether to retry, fix data, or wait for a source. The response now carries a `failure`
+object and a matching status:
+
+| Kind | Status | Meaning | Operator action |
+| --- | --- | --- | --- |
+| `invalid-content` | 422 | the content this run produced failed validation | fix the data or the code; nothing was written |
+| `no-eligible-content` | 409 | nothing was eligible (pools excluded everything) | investigate the library, not the transport |
+| `storage` | 503 | the state store refused a read or write | retry; check the database or the volume |
+| `upstream` | 502 | a source or the science discovery job failed | wait, or fix the source |
+| `internal` | 500 | an unexpected error | a bug |
+
+```json
+{
+  "status": "failed",
+  "detail": "Refresh failed [invalid-content]: refusing to publish 2026-11-11: …",
+  "failure": {
+    "kind": "invalid-content",
+    "status": 422,
+    "code": "invalid_content",
+    "problems": [
+      {
+        "section": "scienceLevels.undergraduate.physics",
+        "field": "scienceLevels.undergraduate.physics is undergraduate-level",
+        "expected": "undergraduate",
+        "actual": "missing",
+        "candidateId": "doi-10.1000/physics-legacy",
+        "reason": "only a research record may be published in the undergraduate lane"
+      }
+    ]
+  }
+}
+```
+
+The human `detail` sentence keeps its old format — tests and operators match it — and now
+carries the kind in brackets. The run log records the same classification, so Settings
+answers "why did the schedule stop advancing?" without a log search.
 
 ## Repetition
 

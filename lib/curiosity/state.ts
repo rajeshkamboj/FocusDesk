@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { access, constants, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
+import { describePublishError, type PublishFailureKind, type PublishProblem } from './publish-failure';
 import type { BookRecommendation, CuriosityBriefing, CuriosityCategory, CuriosityDurability, PublishedContentIds } from './types';
 import { LEGACY_SEEN_CATEGORIES } from './catalog';
 
@@ -133,8 +134,19 @@ export type LeaseResult =
   | { ok: true; wrote: boolean; state: CuriosityState }
   /** The lease was already held by another run. */
   | { ok: false; reason: 'busy'; state: CuriosityState }
-  /** The store itself refused the write; the previous snapshot is untouched. */
-  | { ok: false; reason: 'error'; error: string; state: CuriosityState };
+  /**
+   * The store itself refused the write, or the content was refused before it: either
+   * way the previous snapshot is untouched. `errorKind` says which, so the endpoint
+   * can answer 422/409/502/503 instead of a single 502 for every failure.
+   */
+  | {
+      ok: false;
+      reason: 'error';
+      error: string;
+      state: CuriosityState;
+      errorKind?: PublishFailureKind;
+      problems?: PublishProblem[];
+    };
 
 export interface CuriosityStateStore {
   readonly kind: 'supabase' | 'file';
@@ -156,6 +168,12 @@ export interface CuriosityStateStore {
   lastRun?(): Promise<{ at: string; ok: boolean; detail: string } | null>;
   /** Applies `mutate` to the current state and persists the result under a lease. */
   withLease(ttlMs: number, mutate: (state: CuriosityState) => StatePatch | Promise<StatePatch>): Promise<LeaseResult>;
+}
+
+/** One shape for every failed lease, with the failure classified. */
+function leaseFailure(error: unknown, state: CuriosityState): LeaseResult {
+  const { kind, message, problems } = describePublishError(error);
+  return { ok: false, reason: 'error', error: message, state, errorKind: kind, problems };
 }
 
 /* ------------------------------------------------------------------ */
@@ -382,7 +400,7 @@ export class FileStateStore implements CuriosityStateStore {
     try {
       token = await this.tryAcquire(ttlMs);
     } catch (error) {
-      return { ok: false, reason: 'error', error: error instanceof Error ? error.message : String(error), state: current };
+      return leaseFailure(error, current);
     }
     if (!token) return { ok: false, reason: 'busy', state: current };
     try {
@@ -395,7 +413,7 @@ export class FileStateStore implements CuriosityStateStore {
       await this.write(next);
       return { ok: true, wrote: true, state: next };
     } catch (error) {
-      return { ok: false, reason: 'error', error: error instanceof Error ? error.message : String(error), state: current };
+      return leaseFailure(error, current);
     } finally {
       await this.release(token).catch(() => {});
     }
@@ -669,7 +687,7 @@ export class SupabaseStateStore implements CuriosityStateStore {
     try {
       acquired = await this.rpc('curiosity_acquire_lease', { lease_seconds: Math.ceil(ttlMs / 1000) });
     } catch (error) {
-      return { ok: false, reason: 'error', error: error instanceof Error ? error.message : String(error), state: current };
+      return leaseFailure(error, current);
     }
     const token = leaseToken(acquired);
     if (!token) return { ok: false, reason: 'busy', state: current };
@@ -685,8 +703,11 @@ export class SupabaseStateStore implements CuriosityStateStore {
       outcome = { result: `published ${next.daily?.date ?? '—'}`.slice(0, 60), error: null };
       return { ok: true, wrote: true, state: next };
     } catch (error) {
-      outcome = { result: 'failed', error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
-      return { ok: false, reason: 'error', error: error instanceof Error ? error.message : String(error), state: current };
+      // The kind is prefixed so the 200-character job-row column keeps the
+      // classification even when the message itself is truncated.
+      const classified = describePublishError(error);
+      outcome = { result: 'failed', error: `[${classified.kind}] ${classified.message}`.slice(0, 200) };
+      return leaseFailure(error, current);
     } finally {
       await this.rpc('curiosity_release_lease', { lease_token: token, result: outcome.result, error: outcome.error }).catch(() => null);
     }
@@ -839,6 +860,9 @@ export function supabaseStoreConfigured(): boolean {
 }
 
 let cachedStore: CuriosityStateStore | null = null;
+/** Marks a store that came from the test seam rather than from the environment. */
+const INJECTED_STORE = '\u0000injected-store';
+
 let cachedStoreFor = '';
 
 /**
@@ -850,6 +874,12 @@ let cachedStoreFor = '';
  * has both and wants the file (used by the test harness).
  */
 export function getStateStore(): CuriosityStateStore {
+  /*
+    An injected store wins. The seam used to set `cachedStore` and then be ignored,
+    because the cache key is derived from the environment and could never equal the
+    marker the seam wrote — so a test that injected a store silently got the real one.
+  */
+  if (cachedStore && cachedStoreFor === INJECTED_STORE) return cachedStore;
   const key = [process.env.CURIOSITY_STORE, process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY ? 'secret' : '', process.env.CURIOSITY_STATE_FILE].join('|');
   if (cachedStore && cachedStoreFor === key) return cachedStore;
   cachedStoreFor = key;
@@ -868,5 +898,5 @@ export function getStateStore(): CuriosityStateStore {
 /** Test seam: the harness points the file store at a temp directory. */
 export function setStateStoreForTesting(store: CuriosityStateStore | null): void {
   cachedStore = store;
-  cachedStoreFor = store ? 'explicit' : '';
+  cachedStoreFor = store ? INJECTED_STORE : '';
 }

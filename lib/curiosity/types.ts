@@ -942,6 +942,18 @@ export interface ScienceLevelDiagnostic {
   stored: number;
   usable: number;
   qualified: number;
+  /**
+   * Qualified records whose stored concept was completed from the record's own
+   * research metadata before it could be published. A number here is normal for rows
+   * written before the two-level field existed; it is not an error.
+   */
+  normalized?: number;
+  /**
+   * Records that qualified on their payload but could not become a card. Each one
+   * carries its id, a machine code and the reason, so a blank lane is explained
+   * rather than merely observed.
+   */
+  rejected?: { candidateId: string; code: string; reason: string }[];
   published: boolean;
   reason: string;
 }

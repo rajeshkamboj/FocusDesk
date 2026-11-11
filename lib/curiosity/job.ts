@@ -9,6 +9,7 @@ import { MAX_AI_WORLD_ARTICLES, aiWorldFeeds, fetchDeveloperRadar, fetchNews, ty
 import { addPublicationDays, dayNumber, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import {
   emptyState,
+  type LeaseResult,
   getLastStateReadFailure,
   getStateStore,
   recentSeenIds,
@@ -72,7 +73,8 @@ import {
   getReservoirStatus,
   selectHistoryTriad,
 } from './reservoir';
-import { diagnoseScienceLevels, undergraduateCandidates } from './science-levels';
+import { diagnoseScienceLevels, selectUndergraduate, undergraduateConceptProblems } from './science-levels';
+import { FAILURE_CODE, FAILURE_HTTP_STATUS, PublishRefusal, describePublishError, type PublishFailureKind, type PublishProblem } from './publish-failure';
 import { DAILY_QUOTES } from '../quotes';
 import { historyOriginFor, sectionOrigins, type SectionOrigins } from './origins';
 import {
@@ -126,6 +128,16 @@ export type RefreshSummary = {
   daily: DailyOutcome;
   book: BookOutcome;
   detail: string;
+  /**
+   * Present only when the run failed, and only for reasons a caller can act on.
+   * `status` is the HTTP status the endpoint should answer with; `code` is stable.
+   */
+  failure?: {
+    kind: PublishFailureKind;
+    status: number;
+    code: string;
+    problems: PublishProblem[];
+  };
 };
 
 export const LEASE_MS = 4 * 60_000;
@@ -294,7 +306,13 @@ export async function runCuriosityRefresh(
     candidateStore.readAll(),
   ]);
 
-  const result = await store.withLease(LEASE_MS, async (state: CuriosityState) => {
+  /*
+    A store is allowed to throw — the Supabase store does exactly that when a write is
+    refused. Left uncaught it reaches the endpoint as an unhandled rejection and the
+    scheduler sees a bare 500 with no classification. Catching it here turns the same
+    event into a `storage` failure (503), which is what it is and what a retry wants.
+  */
+  const result: LeaseResult = await store.withLease(LEASE_MS, async (state: CuriosityState) => {
     const patch: Partial<CuriosityState> = {};
     const seenRecords: CuriosityState['seen'] = [];
     const publishedAt = now.toISOString();
@@ -351,7 +369,11 @@ export async function runCuriosityRefresh(
           const recommendation: BookRecommendation = { ...lookup.book, id, fetchedAt: publishedAt };
           const bookProblems = invalidBookFields(recommendation);
           if (bookProblems.length) {
-            throw new RangeError(`refusing to publish the One Book record: ${bookProblems.join('; ')}`);
+            throw new PublishRefusal(
+              'invalid-content',
+              `refusing to publish the One Book record: ${bookProblems.join('; ')}. The last published content is unchanged.`,
+              bookProblems.map((field) => ({ section: 'book', field, reason: 'the book record failed validation' })),
+            );
           }
           patch.book = {
             date,
@@ -423,7 +445,11 @@ export async function runCuriosityRefresh(
       ): Chosen => {
         const [candidate] = pick(card, candidates, 1, true, rank);
         if (!candidate) {
-          throw new RangeError(`refusing to publish ${date}: no usable ${card} candidate — every item is inside its exclusion window or the pool is empty`);
+          throw new PublishRefusal(
+            'no-eligible-content',
+            `refusing to publish ${date}: no usable ${card} candidate — every item is inside its exclusion window or the pool is empty. The last published content is unchanged.`,
+            [{ section: card, field: card, reason: 'no candidate was eligible for this card' }],
+          );
         }
         return { id: candidate.id, item: candidate.item, candidate };
       };
@@ -612,13 +638,22 @@ export async function runCuriosityRefresh(
       }
 
       /* ---- Science: authored + reservoir + live discovery -------- */
+      /*
+        A discovery failure is an upstream fault, not invalid content: the sources
+        could not be asked, so nothing was produced. It is classified here so the
+        scheduler sees 502 ("an upstream answer was bad") rather than a generic 500,
+        and so the message names the job rather than a field.
+      */
       const discovery = options.offline
         ? ({
             chemistry: { discipline: 'chemistry' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
             physics: { discipline: 'physics' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
             biology: { discipline: 'biology' as const, candidates: [], scanned: 0, rejected: 0, note: 'offline run' },
           } as Record<ScienceDiscipline, Awaited<ReturnType<typeof discoverSciences>>[ScienceDiscipline]>)
-        : await discoverSciences(date, { fetchImpl });
+        : await discoverSciences(date, { fetchImpl }).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new PublishRefusal('upstream', `refusing to publish ${date}: the science discovery job failed (${message}). The last published content is unchanged.`);
+          });
       for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
         if (discovery[discipline].note) discoveryNotes.push(describeDiscovery(discovery[discipline]));
       }
@@ -658,7 +693,13 @@ export async function runCuriosityRefresh(
 
       const foundationLegs = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] => [
         ...curatedScience(discipline),
-        ...reservoirScience(discipline).filter((candidate) => (candidate.item as ScienceConcept).origin !== 'research'),
+        // Strict separation, stated as a predicate: a research record is never a
+        // foundation card, and neither is anything a stored row marks undergraduate —
+        // including a row whose `origin` was never filled in.
+        ...reservoirScience(discipline).filter((candidate) => {
+          const concept = candidate.item as ScienceConcept;
+          return concept.origin !== 'research' && concept.educationLevel !== 'undergraduate';
+        }),
         ...discovery[discipline].candidates,
       ];
       const foundationRank = (candidate: ContentCandidate) => {
@@ -686,8 +727,53 @@ export async function runCuriosityRefresh(
        */
       const undergraduate: Partial<Record<ScienceDiscipline, ScienceConcept>> = {};
       for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
-        const [concept] = undergraduateCandidates(reservoirCandidates, date, discipline);
-        if (concept) undergraduate[discipline] = concept;
+        /*
+          Hydration, not a cast. A stored row written before `educationLevel` existed
+          is completed from its own recorded provenance; a row that cannot be
+          completed is refused by name rather than published and refused later by the
+          validator, which is what failed the whole day on 2026-11-11.
+        */
+        const selection = selectUndergraduate(reservoirCandidates, date, discipline);
+        if (selection.concept) undergraduate[discipline] = selection.concept;
+        /*
+          Two different kinds of note. Completing a legacy record is normal housekeeping
+          and must not read as a degradation, so it goes with the selection notes. A
+          refused record is a card this app deliberately did not publish, so it goes
+          where every other withheld section goes.
+        */
+        const completed = selection.normalized.find((record) => record.candidateId === selection.candidateId);
+        if (completed) {
+          selectionNotes.push(
+            `science ${discipline}: completed ${completed.candidateId} from its own research metadata (${completed.normalization})`,
+          );
+        }
+        for (const rejection of selection.rejected) {
+          degraded.push(
+            `science ${discipline}: refused stored record ${rejection.candidateId} (${rejection.code}) — ${rejection.reason}`,
+          );
+        }
+      }
+
+      /*
+        The last line before validation.
+        A card that cannot satisfy the undergraduate rules is removed from today's
+        snapshot with a recorded reason, rather than taking the whole day down with
+        it. This is not a bypass: `invalidDailyFields` still runs below and still
+        refuses the payload if anything is wrong. It is the same rule applied one step
+        earlier, from `undergraduateConceptProblems` — the function the validator
+        itself uses.
+      */
+      for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+        const concept = undergraduate[discipline];
+        if (!concept) continue;
+        const problems = undergraduateConceptProblems(concept);
+        if (!problems.length) continue;
+        delete undergraduate[discipline];
+        degraded.push(
+          `science ${discipline}: withheld the undergraduate card for ${concept.id} — ${problems
+            .map((problem) => `${problem.field} (expected ${problem.expected}, was ${problem.actual})`)
+            .join('; ')}`,
+        );
       }
 
       const scienceDiagnostics = diagnoseScienceLevels(reservoirCandidates, date, scienceReservoir, undergraduate);
@@ -862,7 +948,11 @@ export async function runCuriosityRefresh(
       }
 
       if (!radarItems.length && !previousPayload?.developerRadar.length) {
-        throw new RangeError(`refusing to publish ${date}: no Developer Radar content from any source`);
+        throw new PublishRefusal(
+          'no-eligible-content',
+          `refusing to publish ${date}: no Developer Radar content from any source. The last published content is unchanged.`,
+          [{ section: 'developerRadar', field: 'developerRadar has items', reason: 'no live, cached, reservoir or curated radar item was available' }],
+        );
       }
 
       const payload: DailyPayload = {
@@ -941,7 +1031,17 @@ export async function runCuriosityRefresh(
 
       const invalid = invalidDailyFields(payload);
       if (invalid.length) {
-        throw new RangeError(`refusing to publish ${date}: ${invalid.join('; ')}`);
+        /*
+          The message format is deliberately unchanged: operators and tests match it.
+          What is new is that the refusal also carries structured problems — section,
+          expected value, actual value and candidate id — so a caller does not have to
+          parse the sentence to learn which discipline failed and why.
+        */
+        throw new PublishRefusal(
+          'invalid-content',
+          `refusing to publish ${date}: ${invalid.join('; ')}. The last published content is unchanged.`,
+          dailyProblemDetails(payload, invalid),
+        );
       }
 
       if (!reusing) {
@@ -998,10 +1098,35 @@ export async function runCuriosityRefresh(
       ...(patch.book ? { book: patch.book } : {}),
       seen: [...state.seen, ...seenRecords],
     };
+  }).catch((error: unknown): LeaseResult => {
+    const info = describePublishError(error);
+    return {
+      ok: false,
+      reason: 'error',
+      error: info.message,
+      errorKind: info.kind === 'internal' ? 'storage' : info.kind,
+      problems: info.problems,
+      state: emptyState(),
+    };
   });
 
   if (!result.ok) {
-    const detail = result.reason === 'busy' ? 'Another refresh holds the lease; nothing was written.' : `Refresh failed: ${result.error}. The last published content is unchanged.`;
+    /*
+      A failed run is classified, not merely reported. The endpoint uses `failure.status`
+      so a scheduler can tell invalid content (fix the data) from a storage fault (retry)
+      from an upstream outage (wait, or fix the source); the human detail names the kind
+      too, because a run log is often all an operator reads.
+    */
+    const failureKind: PublishFailureKind = result.reason === 'busy' ? 'internal' : (result.errorKind ?? 'internal');
+    const problems = result.reason === 'busy' ? [] : (result.problems ?? []);
+    const unmet = (message: string) =>
+      /last published content is unchanged\.?\s*$/i.test(message.trim()) ? message.trim() : `${message}. The last published content is unchanged.`;
+    const detail = result.reason === 'busy'
+      ? 'Another refresh holds the lease; nothing was written.'
+      : `Refresh failed [${failureKind}]: ${unmet(result.error)}`;
+    const failure = result.reason === 'busy'
+      ? undefined
+      : { kind: failureKind, status: FAILURE_HTTP_STATUS[failureKind], code: FAILURE_CODE[failureKind], problems };
     /*
       A failed attempt is a fact about the schedule, and until now only successes were
       written down: `state.runs` recorded every good run and no bad one, so the
@@ -1028,6 +1153,7 @@ export async function runCuriosityRefresh(
       daily: result.reason === 'busy' ? daily : { published: false, reason: 'failed', detail },
       book: result.reason === 'busy' ? book : { published: false, reason: 'failed', detail },
       detail,
+      ...(failure ? { failure } : {}),
     };
   }
 
@@ -1139,6 +1265,49 @@ function invalidUrl(value: unknown): boolean {
   }
 }
 
+/**
+ * Turn the validator's field strings into structured, publishable diagnostics.
+ *
+ * The validator is deliberately a list of string checks — it is readable, and every
+ * historical test matches those strings. A scheduler, though, needs more than a name:
+ * which section, what was expected, what it actually was, and which stored record it
+ * came from. This function adds that without changing what the validator says.
+ */
+export function dailyProblemDetails(payload: DailyPayload, fields: readonly string[]): PublishProblem[] {
+  return fields.map((field) => {
+    const undergraduate = /^scienceLevels\.undergraduate\.(chemistry|physics|biology)\s+(.*)$/.exec(field);
+    if (undergraduate) {
+      const discipline = undergraduate[1] as ScienceDiscipline;
+      const rule = undergraduate[2];
+      const concept = payload.scienceLevels?.undergraduate?.[discipline];
+      const detail = concept ? undergraduateConceptProblems(concept).find((problem) => problem.field === rule) : undefined;
+      return {
+        section: `scienceLevels.undergraduate.${discipline}`,
+        field,
+        expected: detail?.expected ?? 'a publishable undergraduate research card',
+        actual: detail?.actual ?? 'the validator refused this field',
+        ...(detail?.candidateId ? { candidateId: detail.candidateId } : {}),
+        reason: detail?.reason ?? 'the undergraduate card did not satisfy its publication rules',
+      };
+    }
+    const foundation = /^scienceLevels\.foundation\.(chemistry|physics|biology)\s+(.*)$/.exec(field);
+    if (foundation) {
+      const discipline = foundation[1] as ScienceDiscipline;
+      const concept = payload.scienceLevels?.foundation?.[discipline];
+      return {
+        section: `scienceLevels.foundation.${discipline}`,
+        field,
+        expected: 'foundation',
+        actual: concept?.educationLevel ?? 'missing',
+        ...(concept?.id ? { candidateId: concept.id } : {}),
+        reason: 'a research record or unknown level may never be the default foundation card',
+      };
+    }
+    const section = field.split(/[.\s]/)[0] || 'payload';
+    return { section, field, reason: 'the field did not satisfy its publication rule' };
+  });
+}
+
 export function invalidDailyFields(payload: DailyPayload): string[] {
   const problems: string[] = [];
   const check = (name: string, ok: boolean) => {
@@ -1248,9 +1417,15 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
       );
       const under = undergraduate?.[key];
       if (under) {
-        check(`scienceLevels.undergraduate.${key} is undergraduate-level`, under.educationLevel === 'undergraduate');
-        check(`scienceLevels.undergraduate.${key} names its provenance`, !blank(under.provenanceLabel));
-        check(`scienceLevels.undergraduate.${key} cites its source`, !invalidUrl(under.source?.url));
+        /*
+          The rules live in `science-levels.ts` because the publisher also applies them
+          when it decides whether a card may enter today's snapshot. Two copies of this
+          check is how a publisher and a validator come to disagree — and a disagreement
+          here costs a whole day of content.
+        */
+        for (const problem of undergraduateConceptProblems(under)) {
+          check(`scienceLevels.undergraduate.${key} ${problem.field}`, false);
+        }
       }
     }
   }

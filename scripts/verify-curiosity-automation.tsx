@@ -41,17 +41,27 @@ import {
 } from '../lib/curiosity/schedule';
 import { CURATED_PER_DAY, curatedAiWorld, curatedHistoryArchive, curatedRadar, dailyEditorial, dailyEditorialIds } from '../lib/curiosity/content';
 import { buildBriefing, clearBriefingMemo } from '../lib/curiosity/server';
-import { getCuriosityStatus, invalidBookFields, invalidDailyFields, runCuriosityRefresh } from '../lib/curiosity/job';
+import { dailyProblemDetails, getCuriosityStatus, invalidBookFields, invalidDailyFields, runCuriosityRefresh } from '../lib/curiosity/job';
 import {
+  emptyState,
   getLastStateReadFailure,
   getStateStore,
   resetStateReadFailureForTesting,
   setStateStoreForTesting,
   type CuriosityState,
+  type CuriosityStateStore,
 } from '../lib/curiosity/state';
 import { rowToPoolEntry } from '../lib/curiosity/content-db';
 import { FileCandidateStore, setCandidateStoreForTesting, type CandidateStore } from '../lib/curiosity/reservoir';
-import { UNDERGRADUATE_GATES, diagnoseScienceLevels, undergraduateCandidates } from '../lib/curiosity/science-levels';
+import {
+  UNDERGRADUATE_GATES,
+  diagnoseScienceLevels,
+  hydrateResearchCandidate,
+  selectUndergraduate,
+  undergraduateCandidates,
+} from '../lib/curiosity/science-levels';
+import { FAILURE_CODE, FAILURE_HTTP_STATUS, PublishRefusal, describePublishError } from '../lib/curiosity/publish-failure';
+import { POST as postRefresh } from '../app/api/curiosity/refresh/route';
 import type { ScienceDiscipline } from '../lib/discovery/science';
 import { authorizeRefresh } from '../lib/curiosity/refresh-auth';
 import { COVER_PLACEHOLDER, buildRecommendation, lookupBook, openLibraryUserAgent, pickWorkRecord, searchUrl, titlesMatch } from '../lib/curiosity/openlibrary';
@@ -1926,6 +1936,408 @@ async function main() {
       pass(21, 'when every feed fails the day still publishes, the AI card keeps exactly yesterday\'s live stories with their original publication dates under a “cached — original dates kept” label, the snapshot records sections.aiWorld = cached and the reason with the source date, the day is not reported complete, and no curated explainer is substituted in');
     } finally {
       store.cleanup();
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 22. Legacy research records: the 2026-11-11 refusal, and its fix
+   * ---------------------------------------------------------------- */
+  {
+    /*
+      On 2026-11-11 the scheduled publish answered 502 with
+      "scienceLevels.undergraduate.physics is undergraduate-level;
+       scienceLevels.undergraduate.biology is undergraduate-level"
+      and the published day did not advance. The two records had been written before
+      the two-level structure existed: `payload.science` said peer-reviewed and fresh,
+      and `payload.concept` had a link and a provenance label but no `educationLevel`,
+      because that field did not exist yet. The publisher took the stored concept
+      verbatim into the undergraduate lane, so the validator refused the whole day.
+    */
+    const NOV_11 = new Date('2026-11-10T18:30:00.000Z'); // 2026-11-11 00:00 Asia/Kolkata
+    const PUBLISHED_ON = '2026-10-20';                   // 22 days old: inside the 60-day gate
+
+    /** A concept exactly as the pre-two-level discovery job stored it. */
+    const legacyConcept = (
+      discipline: ScienceDiscipline,
+      overrides: Partial<ScienceConcept> = {},
+    ): ScienceConcept => ({
+      id: `doi-10.1000/${discipline}-legacy`,
+      topic: `A recent ${discipline} paper that measured something specific`,
+      aliases: [],
+      origin: 'research',
+      provenance: 'peer-reviewed',
+      provenanceLabel: 'Peer-reviewed research',
+      publishedOn: PUBLISHED_ON,
+      venue: 'Journal of Verification',
+      doi: '10.1000/verify.001',
+      simple: 'The authors measured a thing and reported what they found.',
+      connection: 'Selected because it is recent and cited; read the article before repeating the number.',
+      surprising: 'One recent, peer-reviewed paper out of many published this week.',
+      question: 'What would you check before repeating this result?',
+      unknown: 'Whether the result replicates.',
+      source: {
+        url: `https://example.org/${discipline}/paper`,
+        name: 'Journal of Verification · DOI 10.1000/verify.001',
+        attribution: 'Peer-reviewed research. Metadata via Crossref; no full text reproduced.',
+      },
+      research: {
+        doi: '10.1000/verify.001',
+        venue: 'Journal of Verification',
+        authors: ['A. Author'],
+        institutions: ['Example University'],
+        publishedOn: PUBLISHED_ON,
+        peerReviewed: true,
+        significanceScore: 71,
+        significanceBasis: ['published in the last week', 'indexed by Crossref'],
+        rights: 'metadata-only',
+        verifiedAgainst: ['Crossref'],
+        foundVia: 'crossref:query.bibliographic',
+      },
+      ...overrides,
+    });
+
+    const row = (
+      discipline: ScienceDiscipline,
+      concept: ScienceConcept | undefined,
+      rowOverrides: Partial<KnowledgeCandidate> = {},
+      scienceOverrides: Record<string, unknown> = {},
+    ): KnowledgeCandidate => ({
+      id: concept?.id ?? `${discipline}-row`,
+      entityId: `doi:10.1000/verify.001`,
+      canonicalUrl: concept?.source?.url ?? `https://example.org/${discipline}/paper`.replace(/^/, ''),
+      category: discipline,
+      subcategory: 'peer-reviewed',
+      title: concept?.topic ?? `${discipline} record`,
+      description: concept?.simple ?? 'A stored record.',
+      sourceName: 'Journal of Verification',
+      aliases: [],
+      normalizedIdentity: concept?.id ?? discipline,
+      fingerprint: concept?.id ?? discipline,
+      subjects: ['research:peer-reviewed'],
+      eventDatePrecision: 'none',
+      payload: {
+        ...(concept ? { concept } : {}),
+        science: {
+          discipline,
+          doi: '10.1000/verify.001',
+          venue: 'Journal of Verification',
+          publishedOn: PUBLISHED_ON,
+          provenance: 'peer-reviewed',
+          significanceScore: 71,
+          significanceBasis: ['published in the last week'],
+          verifiedAgainst: ['Crossref'],
+          foundVia: 'crossref:query.bibliographic',
+          ...scienceOverrides,
+        },
+      },
+      validationStatus: 'valid',
+      eligible: true,
+      discoveredAt: '2026-10-21T00:00:00.000Z',
+      updatedAt: '2026-10-21T00:00:00.000Z',
+      ...rowOverrides,
+    });
+
+    /* --- (a) the exact failure, reproduced from the payload the old selection
+             produced, so the cause is pinned rather than remembered ------------- */
+    const { book: _unusedBook, ...editorialBase } = dailyEditorial('2026-11-11');
+    const legacyPayload = {
+      ...editorialBase,
+      // An archive entry, so the only faults in this payload are the two science ones
+      // the production message named.
+      history: curatedHistoryArchive('2026-11-11'),
+      historyEntries: undefined,
+      scienceLevels: {
+        foundation: {
+          chemistry: editorialBase.chemistry,
+          physics: editorialBase.physics,
+          biology: editorialBase.biology,
+        },
+        undergraduate: {
+          physics: legacyConcept('physics'),
+          biology: legacyConcept('biology'),
+        },
+      },
+    };
+    const failureFields = invalidDailyFields(legacyPayload);
+    assert.deepEqual(
+      failureFields,
+      [
+        'scienceLevels.undergraduate.physics is undergraduate-level',
+        'scienceLevels.undergraduate.biology is undergraduate-level',
+      ],
+      'the 2026-11-11 failure is no longer reproducible from the stored shape it came from',
+    );
+    const failureDetails = dailyProblemDetails(legacyPayload, failureFields);
+    assert.equal(failureDetails[0].section, 'scienceLevels.undergraduate.physics');
+    assert.equal(failureDetails[0].expected, 'undergraduate');
+    assert.equal(failureDetails[0].actual, 'missing');
+    assert.equal(failureDetails[0].candidateId, 'doi-10.1000/physics-legacy');
+    assert.match(failureDetails[0].reason, /research record/i, 'the diagnostic does not explain what an undergraduate card is');
+    const classified = describePublishError(
+      new PublishRefusal('invalid-content', 'refusing to publish 2026-11-11', failureDetails),
+    );
+    assert.equal(classified.kind, 'invalid-content');
+    assert.equal(FAILURE_HTTP_STATUS['invalid-content'], 422, 'invalid content must not be reported as 502');
+
+    /* --- (b) hydration itself: every accept and every refusal, by code ------ */
+    const hydrated = hydrateResearchCandidate(row('physics', legacyConcept('physics')));
+    assert.equal(hydrated.ok, true, 'a valid legacy research record was refused');
+    if (hydrated.ok) {
+      assert.equal(hydrated.record.concept.educationLevel, 'undergraduate', 'the legacy concept was not levelled');
+      assert.equal(hydrated.record.concept.levelBasis, 'derived-from-record');
+      assert.equal(hydrated.record.concept.origin, 'research');
+      assert.equal(hydrated.record.normalized, true);
+      assert.match(hydrated.record.normalization ?? '', /educationLevel/, 'the run record does not say what was completed');
+      // Everything the record already said is preserved, not rewritten.
+      assert.equal(hydrated.record.concept.doi, '10.1000/verify.001');
+      assert.equal(hydrated.record.concept.publishedOn, PUBLISHED_ON);
+      assert.equal(hydrated.record.concept.provenance, 'peer-reviewed');
+      assert.equal(hydrated.record.concept.provenanceLabel, 'Peer-reviewed research');
+      assert.equal(hydrated.record.concept.research?.peerReviewed, true);
+      assert.equal(hydrated.record.candidateId, 'doi-10.1000/physics-legacy');
+    }
+
+    // Already stamped: valid, and nothing is "completed" for it.
+    const stamped = hydrateResearchCandidate(
+      row('physics', legacyConcept('physics', { educationLevel: 'undergraduate', levelBasis: 'derived-from-record' })),
+    );
+    assert.equal(stamped.ok, true);
+    if (stamped.ok) assert.equal(stamped.record.normalized, false, 'an already-undergraduate record was rewritten');
+
+    // Provenance present, optional concept fields absent: completed from the record.
+    const bare = hydrateResearchCandidate(
+      row(
+        'biology',
+        legacyConcept('biology', {
+          research: undefined,
+          provenanceLabel: undefined,
+          levelBasis: undefined,
+          origin: undefined,
+          provenance: undefined,
+          publishedOn: undefined,
+        }),
+      ),
+    );
+    assert.equal(bare.ok, true, 'a research record with only its provenance was refused');
+    if (bare.ok) {
+      assert.equal(bare.record.concept.provenanceLabel, 'Peer-reviewed research', 'the label was not rendered from provenance');
+      assert.equal(bare.record.concept.publishedOn, PUBLISHED_ON, 'the publication date was not taken from the record');
+      assert.equal(bare.record.concept.research?.peerReviewed, true, 'the research metadata was not rebuilt from the record');
+      assert.equal(bare.record.concept.research?.significanceScore, 71);
+      assert.equal(bare.record.normalized, true);
+    }
+
+    // No DOI at all: still publishable, and no DOI is invented.
+    const noDoiRow = row('chemistry', legacyConcept('chemistry', { doi: undefined, research: undefined }), {}, { doi: undefined });
+    const noDoi = hydrateResearchCandidate(noDoiRow);
+    assert.equal(noDoi.ok, true, 'a record without a DOI was refused; a DOI is not required to render a card');
+    if (noDoi.ok) assert.equal(noDoi.record.concept.research?.doi, undefined, 'a DOI appeared from nowhere');
+
+    const refusalOf = (candidate: KnowledgeCandidate) => {
+      const result = hydrateResearchCandidate(candidate);
+      assert.equal(result.ok, false, `expected ${candidate.id} to be refused`);
+      return result.ok ? { code: '', reason: '' } : result.rejection;
+    };
+    const curatedReason = refusalOf(row('chemistry', legacyConcept('chemistry', { origin: 'curated' })));
+    assert.equal(curatedReason.code, 'explainer-not-research', 'a curated concept was promoted into the research lane');
+    const foundationReason = refusalOf(row('physics', legacyConcept('physics', { educationLevel: 'foundation' })));
+    assert.equal(foundationReason.code, 'marked-foundation', 'a foundation card was promoted into the undergraduate lane');
+    const unknownReason = refusalOf(row('biology', legacyConcept('biology', { educationLevel: 'advanced' as never })));
+    assert.equal(unknownReason.code, 'unknown-education-level');
+    const malformedReason = refusalOf(row('biology', legacyConcept('biology', { simple: '   ' })));
+    assert.equal(malformedReason.code, 'incomplete-concept', 'a concept with no summary was accepted');
+    const noLinkRow = row('physics', legacyConcept('physics', { source: undefined }), { canonicalUrl: 'not-a-url' });
+    const noLinkReason = refusalOf(noLinkRow);
+    assert.equal(noLinkReason.code, 'incomplete-concept', 'a record with no checkable link was accepted');
+    assert.match(noLinkReason.reason, /http\(s\) link/);
+    const pressRelease = refusalOf(row('chemistry', legacyConcept('chemistry'), {}, { provenance: 'press-release' }));
+    assert.equal(pressRelease.code, 'unsupported-provenance', 'a press release was published as undergraduate research');
+    const noConcept = refusalOf(row('physics', undefined));
+    assert.equal(noConcept.code, 'no-concept-payload', 'a row with no card was invented into one');
+    const invalidRow = refusalOf(row('biology', legacyConcept('biology'), { validationStatus: 'invalid' }));
+    assert.equal(invalidRow.code, 'no-research-metadata', 'an invalid stored row was accepted');
+    assert.equal(undergraduateCandidates([row('biology', legacyConcept('biology'), { validationStatus: 'invalid' })], '2026-11-11', 'biology').length, 0);
+    const ineligible = undergraduateCandidates([row('biology', legacyConcept('biology'), { eligible: false })], '2026-11-11', 'biology');
+    assert.equal(ineligible.length, 0, 'an ineligible record reached the undergraduate lane');
+
+    /* --- (c) publication end to end: the legacy physics and biology rows now
+             publish, with their metadata intact ---------------------------------- */
+    const dir = mkdtempSync(join(tmpdir(), 'focusdesk-legacy-science-'));
+    process.env.CURIOSITY_STORE = 'file';
+    process.env.CURIOSITY_STATE_FILE = join(dir, 'state.json');
+    setStateStoreForTesting(null);
+
+    let records: KnowledgeCandidate[] = [];
+    setCandidateStoreForTesting({
+      kind: 'file',
+      location: dir,
+      readAll: async () => records,
+      writeUpsert: async () => ({ persisted: true }),
+      readCursors: async () => ({}),
+      writeCursor: async () => {},
+      appendRunLog: async () => {},
+      lastRunLog: async () => null,
+    } satisfies CandidateStore);
+
+    const publish = async (seeded: KnowledgeCandidate[], options: { force?: boolean; dayOffset?: number } = {}) => {
+      records = seeded;
+      const now = new Date(NOV_11.getTime() + (options.dayOffset ?? 0) * 86_400_000);
+      const summary = await runCuriosityRefresh({ now, fetchImpl: scriptedFetch().fetchImpl, ...(options.force ? { force: true } : {}) });
+      setStateStoreForTesting(null);
+      const state = await getStateStore().read();
+      return { summary, state };
+    };
+
+    try {
+      const legacyRows = [row('physics', legacyConcept('physics')), row('biology', legacyConcept('biology'))];
+      const published = await publish(legacyRows);
+      assert.equal(published.summary.status, 'published', `the 2026-11-11 dataset did not publish: ${published.summary.detail}`);
+      assert.equal(published.summary.daily.published, true);
+      if (published.summary.failure) assert.fail(`a refusal survived: ${published.summary.failure.kind}`);
+      const levels = published.state.daily?.payload.scienceLevels;
+      assert.deepEqual(
+        Object.keys(levels?.undergraduate ?? {}).sort(),
+        ['biology', 'physics'],
+        'the two legacy records did not reach the undergraduate lane',
+      );
+      for (const discipline of ['physics', 'biology'] as const) {
+        const concept = levels!.undergraduate?.[discipline];
+        assert.equal(concept?.educationLevel, 'undergraduate', `${discipline} was published without its level`);
+        assert.equal(concept?.doi, '10.1000/verify.001', `${discipline} lost its DOI`);
+        assert.equal(concept?.research?.peerReviewed, true, `${discipline} lost its peer-review status`);
+        assert.equal(concept?.publishedOn, PUBLISHED_ON, `${discipline} lost its publication date`);
+        assert.equal(concept?.source?.url, `https://example.org/${discipline}/paper`, `${discipline} lost its source link`);
+        assert.equal(levels?.diagnostics?.[discipline].normalized, 1, `${discipline} was not reported as completed`);
+        assert.equal(levels?.diagnostics?.[discipline].published, true);
+      }
+      assert.ok(
+        (published.state.daily?.degraded ?? []).some((note) => /science physics: completed doi-10\.1000\/physics-legacy/.test(note)),
+        'the run did not record that a stored record was completed',
+      );
+      // Foundation stayed foundation, and no research record leaked into it.
+      for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+        const foundation = levels!.foundation?.[discipline];
+        assert.ok(foundation?.topic, `${discipline} lost its foundation card`);
+        assert.notEqual(foundation?.educationLevel, 'undergraduate', `${discipline} foundation card is stamped undergraduate`);
+        assert.notEqual(foundation?.origin, 'research', `${discipline} foundation card is a research record`);
+      }
+
+      /* --- (d) expired, invalid and unsupported rows are still refused ------ */
+      const staleRows = [
+        row('physics', legacyConcept('physics'), {}, { publishedOn: '2025-01-01' }),
+        row('biology', legacyConcept('biology'), { validationStatus: 'rejected' }),
+        row('chemistry', legacyConcept('chemistry'), {}, { provenance: 'press-release' }),
+      ];
+      const stale = await publish(staleRows, { dayOffset: 1 });
+      assert.equal(stale.summary.status, 'published', 'a day whose research all aged out stopped publishing');
+      const staleLevels = stale.state.daily?.payload.scienceLevels;
+      assert.deepEqual(staleLevels?.undergraduate, {}, 'an expired, rejected or unsupported record was published');
+      assert.equal(staleLevels?.diagnostics?.physics.stored, 1);
+      assert.equal(staleLevels?.diagnostics?.physics.qualified, 0, 'an expired record was counted as qualified');
+      assert.equal(staleLevels?.diagnostics?.biology.usable, 0, 'a rejected record was counted as usable');
+      assert.equal(staleLevels?.diagnostics?.chemistry.qualified, 0, 'a press release was counted as qualified research');
+      assert.deepEqual(invalidDailyFields(stale.state.daily!.payload), [], 'an honestly empty undergraduate lane failed validation');
+
+      /* --- (d2) a record that passes the gates but is not research: named, not published */
+      // It is fresh, scored and marked peer-reviewed in `payload.science`, and the stored
+      // card itself says it was written rather than discovered. Hydration refuses it, and
+      // the refusal is what the run log shows — instead of a silently shorter lane.
+      const curated = await publish(
+        [row('chemistry', legacyConcept('chemistry', { id: 'doi-10.1000/chemistry-curated', origin: 'curated' }))],
+        { dayOffset: 2 },
+      );
+      assert.equal(curated.summary.status, 'published', 'a curated record in the research lane stopped the day');
+      assert.deepEqual(curated.state.daily?.payload.scienceLevels?.undergraduate, {}, 'a curated concept was published as undergraduate research');
+      assert.equal(curated.state.daily?.payload.scienceLevels?.diagnostics?.chemistry.qualified, 1, 'the record should still count as gate-eligible');
+      assert.equal(curated.state.daily?.payload.scienceLevels?.diagnostics?.chemistry.published, false);
+      const curatedNotes = curated.state.daily!.degraded.join(' | ');
+      assert.match(
+        curatedNotes,
+        /science chemistry: refused stored record doi-10\.1000\/chemistry-curated \(explainer-not-research\)/,
+        `the run did not say why the curated record was left out: ${curatedNotes}`,
+      );
+
+      /* --- (e) a real validation failure is classified and preserves the day  */
+      const statePath = process.env.CURIOSITY_STATE_FILE as string;
+      const raw = JSON.parse(readFileSync(statePath, 'utf8')) as CuriosityState;
+      // A snapshot restored from an older schema: one history entry has no category
+      // label. A forced re-run reuses the day's entries, so this is refused.
+      delete (raw.daily!.payload.historyEntries![1] as { categoryLabel?: string }).categoryLabel;
+      writeFileSync(statePath, JSON.stringify(raw, null, 2));
+
+      // The baseline is the *corrupted* snapshot: what must survive the failed run is
+      // exactly what was there before it, byte-for-byte in content.
+      setStateStoreForTesting(null);
+      const before = await getStateStore().read();
+      const beforePublishedAt = before.daily?.publishedAt;
+      setStateStoreForTesting(null);
+      records = [row('physics', legacyConcept('physics'))];
+      // The same day as the snapshot that was just corrupted, so the publisher reuses
+      // its entries — which is exactly the path a restored, older-schema snapshot takes.
+      const refusedRun = await runCuriosityRefresh({ now: new Date(NOV_11.getTime() + 2 * 86_400_000), fetchImpl: scriptedFetch().fetchImpl, force: true });
+      assert.equal(refusedRun.status, 'failed', 'an invalid reused snapshot published anyway');
+      assert.equal(refusedRun.failure?.kind, 'invalid-content');
+      assert.equal(refusedRun.failure?.status, 422, 'a validation refusal must answer 422, not 502');
+      assert.equal(refusedRun.failure?.code, FAILURE_CODE['invalid-content']);
+      assert.ok(
+        refusedRun.failure?.problems.some((problem) => problem.field.startsWith('historyEntries[1]')),
+        `the refusal did not name the field: ${JSON.stringify(refusedRun.failure?.problems)}`,
+      );
+      assert.match(refusedRun.detail, /invalid-content/, 'the human detail does not carry the classification');
+      assert.equal((refusedRun.detail.match(/last published content is unchanged/gi) ?? []).length, 1, 'the message repeats itself');
+
+      setStateStoreForTesting(null);
+      const after = await getStateStore().read();
+      assert.equal(after.daily?.date, before.daily?.date, 'the failed run moved the published date');
+      assert.equal(after.daily?.publishedAt, beforePublishedAt, 'the failed run replaced the published snapshot');
+      assert.deepEqual(after.daily?.payload, before.daily?.payload, 'the failed run altered the published content');
+
+      /* --- (f) the endpoint answers the classification, not a blanket 502 --- */
+      //
+      // The route has no clock to inject, so this part publishes for the day the
+      // route itself will consider today, corrupts that snapshot, and posts.
+      const routeDir = mkdtempSync(join(tmpdir(), 'focusdesk-route-failure-'));
+      process.env.CURIOSITY_STATE_FILE = join(routeDir, 'state.json');
+      setStateStoreForTesting(null);
+      records = [row('physics', legacyConcept('physics'))];
+      const todayRun = await runCuriosityRefresh({ now: new Date(), fetchImpl: scriptedFetch().fetchImpl });
+      assert.equal(todayRun.status, 'published', 'the route fixture could not publish today');
+      const todayRaw = JSON.parse(readFileSync(process.env.CURIOSITY_STATE_FILE as string, 'utf8')) as CuriosityState;
+      delete (todayRaw.daily!.payload.historyEntries![1] as { categoryLabel?: string }).categoryLabel;
+      writeFileSync(process.env.CURIOSITY_STATE_FILE as string, JSON.stringify(todayRaw, null, 2));
+      setStateStoreForTesting(null);
+      const invalidResponse = await postRefresh(new Request('http://localhost/api/curiosity/refresh?scope=daily&force=1', { method: 'POST' }));
+      assert.equal(invalidResponse.status, 422, `invalid content answered ${invalidResponse.status}`);
+      const invalidBody = (await invalidResponse.json()) as { failure?: { kind?: string; status?: number; problems?: unknown[] } };
+      assert.equal(invalidBody.failure?.kind, 'invalid-content');
+      assert.ok((invalidBody.failure?.problems?.length ?? 0) > 0, 'the response carried no structured problems');
+
+      // A storage fault is a different answer, and still writes nothing.
+      const throwingStore: CuriosityStateStore = {
+        kind: 'file',
+        location: 'scripted',
+        durability: 'single-host',
+        read: async () => emptyState(),
+        withLease: async () => {
+          throw new Error('Supabase briefing write failed (503)');
+        },
+      };
+      setStateStoreForTesting(throwingStore);
+      const storageResponse = await postRefresh(new Request('http://localhost/api/curiosity/refresh?scope=daily', { method: 'POST' }));
+      const storageBody = (await storageResponse.json()) as { failure?: { kind?: string; status?: number } };
+      assert.equal(storageResponse.status, 503, `a storage fault answered ${storageResponse.status}`);
+      assert.equal(storageBody.failure?.kind, 'storage');
+      assert.equal(storageBody.failure?.status, 503);
+      setStateStoreForTesting(null);
+      rmSync(routeDir, { recursive: true, force: true });
+
+      pass(22, 'the 2026-11-11 refusal is reproduced from the stored shape that caused it (a research concept with no educationLevel), a valid legacy Physics or Biology record is completed from its own provenance with DOI, date, peer-review status and link preserved, an already-stamped record is left alone, curated, foundation-marked, unknown-level, link-less, DOI-less, press-release and concept-less rows are refused by name, expired and rejected rows stay out of the lane, and a real validation failure answers 422 (storage 503) while the published snapshot is untouched');
+    } finally {
+      setCandidateStoreForTesting(null);
+      setStateStoreForTesting(null);
+      delete process.env.CURIOSITY_STATE_FILE;
+      delete process.env.CURIOSITY_STORE;
+      rmSync(dir, { recursive: true, force: true });
     }
   }
 

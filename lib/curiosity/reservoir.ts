@@ -49,7 +49,6 @@ import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
 import { biologyConcepts } from './content/biology';
-import { aiBackgroundLibrary } from './content/ai-background';
 import { radarFallbackShelf } from './content/radar-fallback';
 import { poolFor } from './pool';
 
@@ -649,23 +648,6 @@ export function curatedReservoirDrafts(): CandidateDraft[] {
       sourceName: name,
       attribution: entry.source?.attribution ?? `Catalogue reference via ${name}.`,
       subjects: [...(entry.tags ?? []), ...(entry.item.subjects ?? [])],
-      validationStatus: 'valid',
-      eligible: true,
-      discoveredAt: '2026-10-23T00:00:00.000Z',
-    });
-  }
-
-  for (const bg of aiBackgroundLibrary) {
-    drafts.push({
-      id: bg.id,
-      entityId: bg.id,
-      canonicalUrl: bg.item.url,
-      category: 'ai-world',
-      subcategory: 'background',
-      title: bg.item.title,
-      description: bg.item.summary,
-      sourceName: bg.item.source,
-      attribution: `Reference: ${bg.item.source}.`,
       validationStatus: 'valid',
       eligible: true,
       discoveredAt: '2026-10-23T00:00:00.000Z',

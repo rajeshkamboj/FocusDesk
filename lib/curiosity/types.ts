@@ -929,11 +929,30 @@ export const DEFAULT_SCIENCE_EDUCATION_LEVEL: ScienceEducationLevel = 'foundatio
  * `chemistry`/`physics`/`biology`: an old snapshot keeps rendering the three
  * cards it published, and a new one adds a level selector on top of them.
  */
+/**
+ * Why one discipline has, or has not, got an undergraduate card today.
+ *
+ * `stored` → `usable` → `qualified` is the funnel: a record can be stored and not
+ * usable (invalid or ineligible), or usable and not qualified (too old, or below the
+ * significance floor). A blank undergraduate tab is one of those two, or an empty
+ * library, and the panel says which.
+ */
+export interface ScienceLevelDiagnostic {
+  discipline: 'chemistry' | 'physics' | 'biology';
+  stored: number;
+  usable: number;
+  qualified: number;
+  published: boolean;
+  reason: string;
+}
+
 export interface ScienceLevelSet {
   foundation: { chemistry: ScienceConcept; physics: ScienceConcept; biology: ScienceConcept };
   undergraduate: { chemistry?: ScienceConcept; physics?: ScienceConcept; biology?: ScienceConcept };
   /** Which disciplines had no qualified undergraduate record today, and why. */
   notes?: string[];
+  /** The same question, per discipline, with the counts behind the answer. */
+  diagnostics?: Record<'chemistry' | 'physics' | 'biology', ScienceLevelDiagnostic>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1111,6 +1130,13 @@ export type CuriosityDurability = 'shared' | 'single-host' | 'instance-only' | '
 /** How the content a card is showing arrived. */
 export type CuriositySectionOrigin = 'new' | 'cached' | 'curated' | 'unavailable';
 
+/** The origin of each card that can be live, cached, curated or unavailable. */
+export type CuriositySectionOrigins = {
+  aiWorld: CuriositySectionOrigin;
+  developerRadar: CuriositySectionOrigin;
+  history: CuriositySectionOrigin;
+};
+
 /** Snapshot metadata surfaced on the page so "is this today's?" is answerable. */
 export interface CuriosityPublicationMeta {
   /** The Asia/Kolkata date this snapshot was published for. */
@@ -1129,6 +1155,24 @@ export interface CuriosityPublicationMeta {
   /** The publication day of the One Book record, and the day it next turns over. */
   bookPublishedOn?: string;
   bookNextChangeOn?: string;
+  /**
+   * The last day that actually has a published snapshot, and how many publication
+   * days ago it was. Both are absent until something has been published.
+   *
+   * They exist because "the card has not changed for four days" and "the publisher
+   * is rotating correctly but nobody is publishing" look identical on the page and
+   * are completely different bugs.
+   */
+  lastPublishedDate?: string;
+  staleDays?: number;
+  /** Per-feed AI World health, so the reader-facing note has a source of truth. */
+  aiWorldFeeds?: Array<{
+    name: string;
+    status: string;
+    items: number;
+    note?: string;
+    coverage?: readonly string[];
+  }>;
 }
 
 /**
@@ -1196,6 +1240,16 @@ export type CuriosityBriefing = {
   scienceLevels?: ScienceLevelSet;
   /** How the Two Levels selector's content arrived today, for the card's label. */
   scienceLevelNote?: string;
+  /**
+   * How each live card's content was obtained, **recorded at publish time**.
+   *
+   * Without this, the origin had to be guessed at render time from the items
+   * themselves, and a cached AI story carried `origin: 'live'` because that is what it
+   * was when it was fetched — so a day that fell back to yesterday's news printed the
+   * same label as a day that fetched its own. The publish path knows the answer; this is
+   * where it says so. Absent on older snapshots, which keep the derived behaviour.
+   */
+  sectionOrigins?: CuriositySectionOrigins;
   /** Present whenever a scheduled snapshot (rather than the fallback) is shown. */
   publication?: CuriosityPublicationMeta;
   /**

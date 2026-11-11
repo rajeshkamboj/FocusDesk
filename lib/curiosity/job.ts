@@ -5,7 +5,7 @@ import {
 import { loadDatabasePool } from './content-db';
 import { eligibleEntries, mergePool, poolFor, selectFromPool } from './pool';
 import { buildRecommendation, lookupBook } from './openlibrary';
-import { fetchDeveloperRadar, fetchNews, type SourceNote } from './sources';
+import { MAX_AI_WORLD_ARTICLES, aiWorldFeeds, fetchDeveloperRadar, fetchNews, type SourceNote } from './sources';
 import { addPublicationDays, dayNumber, isBookDue, isDailyDue, publicationDate, BOOK_INTERVAL_DAYS } from './schedule';
 import {
   emptyState,
@@ -53,12 +53,10 @@ import { selectDiscoveredLiterature } from './literature-selection';
 import { bestsellerEligibleEntries, hasVerifiedBestseller } from './book-selection';
 import { approvedVocabularyLessons } from '../discovery/vocabulary/pipeline';
 import { liveAlternatives, publishedVocabularyWords, selectLiveLesson } from './speak-better-live';
-import { researchCandidateEligibleToday } from '../discovery/science';
 import { mythCharacters } from './content/mythology';
 import { chemistryConcepts } from './content/chemistry';
 import { physicsConcepts } from './content/physics';
 import { biologyConcepts } from './content/biology';
-import { aiBackgroundLibrary } from './content/ai-background';
 import { radarFallbackShelf } from './content/radar-fallback';
 import {
   describeDiscovery,
@@ -74,8 +72,9 @@ import {
   getReservoirStatus,
   selectHistoryTriad,
 } from './reservoir';
+import { diagnoseScienceLevels, undergraduateCandidates } from './science-levels';
 import { DAILY_QUOTES } from '../quotes';
-import { sectionOrigins, type SectionOrigins } from './origins';
+import { historyOriginFor, sectionOrigins, type SectionOrigins } from './origins';
 import {
   HISTORY_CATEGORY_ORDER,
   type BookCandidate,
@@ -89,6 +88,7 @@ import {
   type ScienceConcept,
   type SpeakBetterLesson,
   type CuriositySectionOrigin,
+  type KnowledgeCandidate,
   type BookRecommendation,
   type CuriosityCategory,
   type CuriosityPoolEntry,
@@ -377,6 +377,16 @@ export async function runCuriosityRefresh(
       const degraded: string[] = [];
       const reusing = Boolean(republishingToday);
       const previousPayload = republishingToday?.payload ?? null;
+      /**
+       * The last day that was actually published, whichever day it was.
+       *
+       * `previousPayload` is deliberately same-day only: a forced re-run reuses today's
+       * picks rather than re-rolling them. That is the wrong thing to read when the
+       * question is "what did we last publish?", which is the question the AI World
+       * cache asks — and answering it with the same-day payload meant the documented
+       * cached step could not fire on any new day at all.
+       */
+      const lastPublishedPayload = state.daily?.payload ?? null;
       const previousIds = republishingToday?.contentIds ?? {};
       const reserved = new Set<string>();
       const selectionNotes: string[] = [];
@@ -633,36 +643,19 @@ export async function runCuriosityRefresh(
        *
        * These are written by the scheduled science discovery job, not fetched here:
        * a publish reads the store exactly as it does for every other card. Freshness
-       * is re-checked at publish time because a stored record can age, and only
-       * peer-reviewed or preprint records may appear.
+       * and the significance floor are re-checked at publish time because a stored
+       * record can age, and only peer-reviewed or preprint records may appear.
+       *
+       * The filtering lives in `science-levels.ts` so the card, the status endpoint
+       * and the Settings panel all answer "why is there no undergraduate card?"
+       * from the same predicates.
        */
-      const researchScience = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] =>
-        reservoirCandidates
-          .filter((c) => c.category === discipline && c.eligible && c.validationStatus === 'valid')
-          .filter((c) => researchCandidateEligibleToday(c.payload as { science?: { publishedOn?: string; provenance?: string; significanceScore?: number } }, date))
-          .sort((a, b) => {
-            const left = (a.payload?.science as { significanceScore?: number } | undefined)?.significanceScore ?? 0;
-            const right = (b.payload?.science as { significanceScore?: number } | undefined)?.significanceScore ?? 0;
-            return right - left;
-          })
-          .slice(0, 8)
-          .map((c) => candidateToScienceConcept(c))
-          .filter((c): c is ScienceConcept => c !== null)
-          .map((concept) => candidateFromScience(discipline, concept));
+      const scienceReservoir = {
+        total: reservoirCandidates.length,
+        readable: true,
+        unmigrated: false,
+      };
 
-      /**
-       * SCIENCE — TWO LEVELS, ONE DEFAULT
-       *
-       * `foundation` (school level) is the default and is what `chemistry`,
-       * `physics` and `biology` publish: curated explainers, encyclopedic concepts
-       * and discovered explainers only. A research record may never be the default
-       * card.
-       *
-       * `undergraduate` is the scored research lane, attached for the same day as
-       * an alternative behind the level selector. There is no third level: the type
-       * has two members, so "Advanced Research" cannot be selected, filtered or
-       * routed to.
-       */
       const foundationLegs = (discipline: ScienceDiscipline): ContentCandidate<ScienceConcept>[] => [
         ...curatedScience(discipline),
         ...reservoirScience(discipline).filter((candidate) => (candidate.item as ScienceConcept).origin !== 'research'),
@@ -691,16 +684,13 @@ export async function runCuriosityRefresh(
        * through the ledger a second time, because the ledger's subject reservation
        * is what stops one day putting the same idea on two cards.
        */
-      const undergraduatePick = (discipline: ScienceDiscipline): ScienceConcept | undefined => {
-        const pool = researchScience(discipline);
-        if (pool.length === 0) return undefined;
-        const sorted = [...pool].sort((left, right) => {
-          const scoreOf = (candidate: ContentCandidate<ScienceConcept>) =>
-            (candidate.item as ScienceConcept).research?.significanceScore ?? 0;
-          return scoreOf(right) - scoreOf(left) || left.id.localeCompare(right.id);
-        });
-        return sorted[0].item as ScienceConcept;
-      };
+      const undergraduate: Partial<Record<ScienceDiscipline, ScienceConcept>> = {};
+      for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+        const [concept] = undergraduateCandidates(reservoirCandidates, date, discipline);
+        if (concept) undergraduate[discipline] = concept;
+      }
+
+      const scienceDiagnostics = diagnoseScienceLevels(reservoirCandidates, date, scienceReservoir, undergraduate);
 
       const scienceLevels = (reusing && previousPayload?.scienceLevels)
         ? previousPayload.scienceLevels
@@ -710,14 +700,11 @@ export async function runCuriosityRefresh(
               physics: physicsChoice.item as ScienceConcept,
               biology: biologyChoice.item as ScienceConcept,
             },
-            undergraduate: Object.fromEntries(
-              (['chemistry', 'physics', 'biology'] as const)
-                .map((discipline) => [discipline, undergraduatePick(discipline)] as const)
-                .filter(([, concept]) => concept !== undefined),
-            ),
+            undergraduate,
             notes: (['chemistry', 'physics', 'biology'] as const)
-              .filter((discipline) => !undergraduatePick(discipline))
-              .map((discipline) => `${discipline}: no qualified undergraduate-level research record today`),
+              .filter((discipline) => !undergraduate[discipline])
+              .map((discipline) => scienceDiagnostics[discipline].reason),
+            diagnostics: scienceDiagnostics,
           };
 
       if (!reusing) {
@@ -799,16 +786,15 @@ export async function runCuriosityRefresh(
         : await Promise.all([fetchNews(fetchImpl, newsNote), fetchDeveloperRadar(fetchImpl, radarNote)]);
 
       const liveNews = news.length
-        ? pick('ai-world', news.map((item) => candidateFromNews(item)), Math.min(news.length, 10), false)
+        ? pick('ai-world', news.map((item) => candidateFromNews(item)), Math.min(news.length, MAX_AI_WORLD_ARTICLES), false)
         : [];
       const liveRadar = radar.length
         ? pick('developer-radar', radar.map((item) => candidateFromRadar(item)), Math.min(radar.length, 3), false)
         : [];
 
-      const curatedNews = aiBackgroundLibrary.map((entry) => candidateFromNews(entry.item));
       const curatedRadarItems = radarFallbackShelf.map((entry) => candidateFromRadar(entry.item));
 
-      let aiWorldChoices: ContentCandidate<CuriosityNewsItem>[] = liveNews;
+      const aiWorldChoices: ContentCandidate<CuriosityNewsItem>[] = liveNews;
       let radarChoices: ContentCandidate<DeveloperDiscovery>[] = liveRadar;
       let aiWorldOrigin: CuriositySectionOrigin = liveNews.length ? 'new' : 'unavailable';
       let radarOrigin: CuriositySectionOrigin = liveRadar.length ? 'new' : 'unavailable';
@@ -816,17 +802,26 @@ export async function runCuriosityRefresh(
       let radarItems: DeveloperDiscovery[] = radarChoices.map((candidate) => candidate.item);
 
       /*
-        Reservoir last-good: the discovery job stores the headlines and repositories
-        it last saw. If today's live fetch returns nothing and there is no previous
-        day to borrow from, these are a better fallback than a static shelf — they
-        were real items from real sources, just not today's. They are labelled
-        `cached`, and the card says so.
+        AI WORLD IS NEWS OR IT IS HONESTLY EMPTY
+
+        The chain is now: today's first-party feeds → the items published on the last
+        day that had any (kept with their original dates and links, labelled `cached`)
+        → the reservoir's stored articles from the discovery run (also `cached`) →
+        nothing at all, with the card saying fresh news is temporarily unavailable.
+
+        What is deliberately *not* in the chain is the curated explainer shelf. An
+        explainer has no publication date because nothing happened; publishing it under
+        an AI news heading is the substitution this card must never make. If every
+        source is down, the honest card is an empty one that says so.
       */
+      const isRealNews = (item: CuriosityNewsItem) => item.origin !== 'background';
+
       const reservoirNews = reservoirCandidates
         .filter((c) => c.category === 'ai-world' && c.eligible && c.validationStatus === 'valid')
         .filter((c) => c.payload?.article && typeof c.payload.article === 'object')
-        .slice(-10)
         .map((c) => c.payload?.article as CuriosityNewsItem)
+        .filter(isRealNews)
+        .slice(-MAX_AI_WORLD_ARTICLES)
         .reverse();
 
       const reservoirRadar = reservoirCandidates
@@ -836,19 +831,19 @@ export async function runCuriosityRefresh(
         .map((c) => c.payload?.repo as DeveloperDiscovery)
         .reverse();
 
-      if (!aiWorldItems.length && previousPayload?.aiWorld.length) {
-        aiWorldItems = previousPayload.aiWorld;
+      const previouslyPublishedNews = (lastPublishedPayload?.aiWorld ?? []).filter(isRealNews);
+
+      if (!aiWorldItems.length && previouslyPublishedNews.length) {
+        aiWorldItems = previouslyPublishedNews;
         aiWorldOrigin = 'cached';
-        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept the ${previousPayload.aiWorld.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}`);
+        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept the ${previouslyPublishedNews.length} item(s) published for ${state.daily?.date ?? 'an earlier run'}, with their original dates`);
       } else if (!aiWorldItems.length && reservoirNews.length) {
-        aiWorldItems = reservoirNews.slice(0, 10);
+        aiWorldItems = reservoirNews.slice(0, MAX_AI_WORLD_ARTICLES);
         aiWorldOrigin = 'cached';
-        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept ${aiWorldItems.length} item(s) stored by the last discovery run`);
+        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; kept ${aiWorldItems.length} article(s) stored by the last discovery run, with their original dates`);
       } else if (!aiWorldItems.length) {
-        aiWorldChoices = pick('ai-world', curatedNews, CURATED_PER_DAY);
-        aiWorldItems = aiWorldChoices.map((candidate) => candidate.item);
-        aiWorldOrigin = aiWorldItems.length ? 'curated' : 'unavailable';
-        degraded.push(`aiWorld: nothing usable from the live source${newsNote.text ? ` (${newsNote.text})` : ''}; published ${aiWorldItems.length} curated background item(s)`);
+        aiWorldOrigin = 'unavailable';
+        degraded.push(`aiWorld: fresh AI news is temporarily unavailable — no live item, no previously published article and nothing in the reservoir${newsNote.text ? ` (${newsNote.text})` : ''}; the card shows the unavailable state rather than a curated explainer`);
       }
 
       if (!radarItems.length && previousPayload?.developerRadar.length) {
@@ -866,14 +861,21 @@ export async function runCuriosityRefresh(
         degraded.push(`developerRadar: nothing usable from the live source${radarNote.text ? ` (${radarNote.text})` : ''}; published ${radarItems.length} curated shelf item(s)`);
       }
 
-      if (!aiWorldItems.length && !previousPayload?.aiWorld.length) {
-        throw new RangeError(`refusing to publish ${date}: no AI World content from any source`);
-      }
       if (!radarItems.length && !previousPayload?.developerRadar.length) {
         throw new RangeError(`refusing to publish ${date}: no Developer Radar content from any source`);
       }
 
       const payload: DailyPayload = {
+        /*
+          Recorded here, by the path that actually did the fetching. Guessing this at
+          render time is how a cached AI story came to be labelled "published today":
+          a carried-over item still carries `origin: 'live'` from the day it was fetched.
+        */
+        sectionOrigins: {
+          aiWorld: aiWorldOrigin,
+          developerRadar: radarOrigin,
+          history: historyOriginFor(historyEntries),
+        },
         aiWorld: [...aiWorldItems],
         developerRadar: [...radarItems],
         oneThing: oneThingChoice.item as OneThingItem,
@@ -929,7 +931,9 @@ export async function runCuriosityRefresh(
         history: historyCombinedId,
         'ai-world': aiWorldOrigin === 'cached'
           ? (previousIds['ai-world'] || aiWorldItems.map((item) => `cached:${item.source}:${item.title}`).join('+'))
-          : idsFor(aiWorldChoices),
+          : aiWorldOrigin === 'unavailable'
+            ? ''
+            : idsFor(aiWorldChoices),
         'developer-radar': radarOrigin === 'cached'
           ? (previousIds['developer-radar'] || radarItems.map((item) => `cached:${item.name}`).join('+'))
           : idsFor(radarChoices),
@@ -998,6 +1002,25 @@ export async function runCuriosityRefresh(
 
   if (!result.ok) {
     const detail = result.reason === 'busy' ? 'Another refresh holds the lease; nothing was written.' : `Refresh failed: ${result.error}. The last published content is unchanged.`;
+    /*
+      A failed attempt is a fact about the schedule, and until now only successes were
+      written down: `state.runs` recorded every good run and no bad one, so the
+      Settings panel could say when content was last published but never why it
+      stopped advancing. The failure is recorded here, with the trigger and the
+      publisher's own reason. A `busy` result is not recorded — the run that holds the
+      lease will write its own outcome, and a queue of "someone else was running"
+      rows would bury it.
+    */
+    if (result.reason !== 'busy') {
+      await store
+        .withLease(30_000, (state) => ({
+          runs: [
+            ...state.runs,
+            { at: new Date().toISOString(), trigger, ok: false, detail: detail.slice(0, 300) },
+          ].slice(-25),
+        }))
+        .catch(() => null);
+    }
     return {
       ...started,
       store: storeAtReportTime(),
@@ -1074,6 +1097,32 @@ export type CuriosityStatus = {
   pool: Record<CuriosityCategory, { eligible: number; total: number }>;
   reservoir: ReservoirStatusSummary;
   runs: Array<{ at: string; ok: boolean; detail: string; trigger?: RefreshTrigger }>;
+  /**
+   * The scheduler's two halves. `lastSuccessAt` is when content last advanced;
+   * `lastFailure` is the most recent attempt that did not. Before this, only
+   * successes were stored, so a scheduler that had stopped publishing looked
+   * identical to one that had never been configured.
+   */
+  schedulerHealth: {
+    lastSuccessAt: string | null;
+    lastFailure: { at: string; trigger?: RefreshTrigger; detail: string } | null;
+    failedInLast24h: number;
+  };
+  /** Which AI newsrooms are configured, and how the last published card got its items. */
+  aiWorld: {
+    feeds: Array<{ id: string; name: string; url: string; coverage: readonly string[]; verifiedAt?: string; verifiedNote?: string }>;
+    origin: CuriositySectionOrigin;
+    lastPublishedDate?: string;
+    notes: string[];
+  };
+  /** Per-discipline research inventory, so an empty undergraduate tab can explain itself. */
+  science: {
+    date: string;
+    disciplines: ReturnType<typeof diagnoseScienceLevels>;
+    published: { foundation: number; undergraduate: number };
+  };
+  /** How many of the tracked sections are fresh, cached, curated or empty today. */
+  cards: { fresh: number; cached: number; curated: number; unavailable: number };
 };
 
 function blank(value: unknown): boolean {
@@ -1113,13 +1162,19 @@ export function invalidDailyFields(payload: DailyPayload): string[] {
     check('literature.passage', !blank(payload.literature?.passage));
   }
 
-  check('aiWorld has items', (payload.aiWorld?.length ?? 0) > 0);
+  /*
+    AI World may legitimately be empty — "fresh news is temporarily unavailable" is a
+    publishable state, and forcing an item here is what used to put a curated
+    explainer under a news heading. What is *not* publishable is a background item:
+    those have no publication date because nothing happened, so a snapshot carrying
+    one is refused outright.
+  */
   payload.aiWorld?.forEach((item, index) => {
     check(`aiWorld[${index}].title`, !blank(item.title));
     check(`aiWorld[${index}].url`, !invalidUrl(item.url));
     check(`aiWorld[${index}].source`, !blank(item.source));
-    if (item.origin === 'background') check(`aiWorld[${index}] carries no date`, blank(item.publishedAt));
-    else check(`aiWorld[${index}].publishedAt`, !blank(item.publishedAt));
+    check(`aiWorld[${index}] is real news, not curated background`, item.origin !== 'background');
+    check(`aiWorld[${index}].publishedAt`, !blank(item.publishedAt));
   });
 
   check('developerRadar has items', (payload.developerRadar?.length ?? 0) > 0);
@@ -1278,9 +1333,10 @@ export function invalidBookFields(book: BookRecommendation): string[] {
 
 export async function getCuriosityStatus(now: Date = new Date()): Promise<CuriosityStatus> {
   const store = getStateStore();
-  const [state, reservoir] = await Promise.all([
+  const [state, reservoir, candidates] = await Promise.all([
     store.read(),
     getReservoirStatus(),
+    getCandidateStore().readAll().catch(() => [] as KnowledgeCandidate[]),
   ]);
   let runs: CuriosityStatus['runs'] = state.runs.slice(-5).reverse();
   if (runs.length === 0 && store.lastRun) {
@@ -1288,6 +1344,32 @@ export async function getCuriosityStatus(now: Date = new Date()): Promise<Curios
     if (last) runs = [last];
   }
   const date = publicationDate(now);
+  const origins = state.daily
+    ? sectionOrigins(state.daily, date)
+    : ({ aiWorld: 'unavailable', developerRadar: 'curated', history: 'curated' } as SectionOrigins);
+  const cards = Object.values(origins).reduce(
+    (acc, origin) => {
+      if (origin === 'new') acc.fresh += 1;
+      else if (origin === 'cached') acc.cached += 1;
+      else if (origin === 'curated') acc.curated += 1;
+      else acc.unavailable += 1;
+      return acc;
+    },
+    { fresh: 0, cached: 0, curated: 0, unavailable: 0 },
+  );
+  const scienceDisciplines = diagnoseScienceLevels(candidates, date, {
+    total: candidates.length,
+    readable: true,
+  });
+  const scienceUndergraduate = state.daily?.payload.scienceLevels?.undergraduate;
+  const sciencePublished = {
+    foundation: 3,
+    undergraduate: scienceUndergraduate ? Object.keys(scienceUndergraduate).length : 0,
+  };
+  const aiNotes = (state.daily?.degraded ?? []).filter((line) => /^aiWorld:/.test(line));
+  const runsChronological = state.runs.slice().sort((a, b) => (a.at < b.at ? 1 : -1));
+  const lastFailureRun = runsChronological.find((run) => !run.ok) ?? null;
+  const lastSuccessRun = runsChronological.find((run) => run.ok) ?? null;
   const pool = (['one-thing', 'literature', 'learn-something', 'book'] as CuriosityCategory[]).reduce(
     (acc, category) => {
       const entries = poolFor(category);
@@ -1323,9 +1405,12 @@ export async function getCuriosityStatus(now: Date = new Date()): Promise<Curios
           contentIds: state.daily.contentIds,
           degraded: state.daily.degraded,
           sections: sectionOrigins(state.daily, date),
+          // AI World is deliberately not part of this: an empty AI World is a legitimate
+          // day (the first-party feeds were quiet), and when it is empty because a feed
+          // failed, that failure is already in `degraded`. Curated explainers are never
+          // substituted back in, so `aiWorld.length > 0` would only reward padding.
           complete:
             state.daily.degraded.length === 0 &&
-            state.daily.payload.aiWorld.length > 0 &&
             state.daily.payload.developerRadar.length > 0 &&
             state.daily.payload.history !== null &&
             (state.daily.payload.historyEntries?.length ?? 3) >= 3,
@@ -1335,5 +1420,33 @@ export async function getCuriosityStatus(now: Date = new Date()): Promise<Curios
     pool,
     reservoir,
     runs,
+    schedulerHealth: {
+      lastSuccessAt: lastSuccessRun?.at ?? state.daily?.publishedAt ?? null,
+      lastFailure: lastFailureRun
+        ? { at: lastFailureRun.at, trigger: lastFailureRun.trigger, detail: lastFailureRun.detail }
+        : null,
+      failedInLast24h: runsChronological.filter(
+        (run) => !run.ok && now.getTime() - Date.parse(run.at) < 86_400_000,
+      ).length,
+    },
+    aiWorld: {
+      feeds: aiWorldFeeds().map((feed) => ({
+        id: feed.id,
+        name: feed.name,
+        url: feed.url,
+        coverage: feed.coverage,
+        ...(feed.verifiedAt ? { verifiedAt: feed.verifiedAt } : {}),
+        ...(feed.verifiedNote ? { verifiedNote: feed.verifiedNote } : {}),
+      })),
+      origin: origins.aiWorld,
+      ...(state.daily?.date ? { lastPublishedDate: state.daily.date } : {}),
+      notes: aiNotes.length ? aiNotes : ['AI World is published from first-party newsroom feeds only.'],
+    },
+    science: {
+      date,
+      disciplines: scienceDisciplines,
+      published: sciencePublished,
+    },
+    cards,
   };
 }

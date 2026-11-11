@@ -1,5 +1,10 @@
 import { sectionOrigins } from './origins';
 import { curatedHistoryArchive, dailyEditorial } from './content';
+import { daysBetween } from './schedule';
+import { recentSeenIds } from './state';
+import { getCandidateStore } from './reservoir';
+import { diagnoseScienceLevels, undergraduateCandidates } from './science-levels';
+import type { ScienceConcept, ScienceLevelSet } from './types';
 import { catchUpOnRender, currentBook } from './job';
 import { addPublicationDays, publicationDate } from './schedule';
 import { BOOK_INTERVAL_DAYS } from './schedule';
@@ -61,6 +66,10 @@ function publicationFrom(
   reason?: string | null,
 ): CuriosityBriefing['publication'] {
   const bookDay = state.book?.date;
+  const lastPublishedDate = state.daily?.date;
+  // Whole publication days since the newest snapshot, when there is one. A reader
+  // looking at a five-day-old page deserves to be told it is five days old.
+  const staleDays = lastPublishedDate ? Math.max(0, daysBetween(lastPublishedDate, date)) : undefined;
   return {
     date,
     publishedAt: daily?.publishedAt ?? new Date(`${date}T00:00:00+05:30`).toISOString(),
@@ -77,6 +86,8 @@ function publicationFrom(
     bookNextChangeOn: bookDay ? addPublicationDays(bookDay, BOOK_INTERVAL_DAYS) : undefined,
     durability,
     sectionOrigins: sectionOrigins(daily, date),
+    ...(lastPublishedDate ? { lastPublishedDate } : {}),
+    ...(staleDays !== undefined ? { staleDays } : {}),
   };
 }
 
@@ -100,6 +111,57 @@ async function discoveryShelves(date: string): Promise<{ literatureShelf: Discov
   }
 }
 
+/**
+ * A snapshot written before this change could still carry curated explainers in
+ * `aiWorld`. They are dropped on the way to the card: an explainer has no date
+ * because nothing happened, and no render should show one under a news heading.
+ */
+function renderedNews<T extends { origin?: string }>(items: readonly T[] | undefined): T[] {
+  return (items ?? []).filter((item) => item.origin !== 'background');
+}
+
+
+/**
+ * Both science levels for a day that has no published snapshot.
+ *
+ * The undergraduate lane is read from the candidate reservoir here for the same
+ * reason the Literature shelf is: it is a store lookup, not a source call. Doing it
+ * in the fallback matters because "today was never published" must not also mean
+ * "the undergraduate tab is mysteriously blank" — if qualified research is stored,
+ * it shows; if it is not, the diagnostics say why.
+ */
+async function scienceLevelsForFallback(
+  date: string,
+  foundation: { chemistry: ScienceConcept; physics: ScienceConcept; biology: ScienceConcept },
+): Promise<ScienceLevelSet> {
+  try {
+    const records = await getCandidateStore().readAll();
+    const undergraduate: ScienceLevelSet['undergraduate'] = {};
+    for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+      const [concept] = undergraduateCandidates(records, date, discipline);
+      if (concept) undergraduate[discipline] = concept;
+    }
+    const diagnostics = diagnoseScienceLevels(records, date, { total: records.length, readable: true }, undergraduate);
+    return {
+      foundation,
+      undergraduate,
+      notes: (['chemistry', 'physics', 'biology'] as const)
+        .filter((discipline) => !undergraduate[discipline])
+        .map((discipline) => diagnostics[discipline].reason),
+      diagnostics,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      foundation,
+      undergraduate: {},
+      notes: [
+        `science: the research library could not be read (${message}), so no undergraduate record can be confirmed. The Foundation level is unaffected.`,
+      ],
+    };
+  }
+}
+
 export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
   const store = getStateStore();
   const state = await readState();
@@ -115,6 +177,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
       book,
       ...shelves,
       ...daily.payload,
+      aiWorld: renderedNews(daily.payload.aiWorld),
       publication: publicationFrom(daily, store.kind, date, state, store.durability),
     };
   }
@@ -142,6 +205,7 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
           book: currentBook(refreshed, date),
           ...shelves,
           ...refreshed.daily.payload,
+          aiWorld: renderedNews(refreshed.daily.payload.aiWorld),
           publication: publicationFrom(refreshed.daily, store.kind, date, refreshed, store.durability),
         };
       }
@@ -160,8 +224,16 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
       : `nothing has been published for ${date}, and a render never fetches sources — the scheduler fills these sections.`;
   }
 
-  const fallback = dailyEditorial(date);
+  // The fallback runs only when today has no snapshot. Hand it the ledger so it
+  // cannot show an item the published run already showed — the failure mode where a
+  // card looks identical across days without the selector actually repeating.
+  const fallback = dailyEditorial(date, { recentOneThingIds: recentSeenIds(state, 'one-thing', 60) });
   const shelves = await discoveryShelves(date);
+  const fallbackLevels = await scienceLevelsForFallback(date, {
+    chemistry: fallback.chemistry,
+    physics: fallback.physics,
+    biology: fallback.biology,
+  });
   return {
     date,
     book,
@@ -188,6 +260,10 @@ export async function buildBriefing(date: string): Promise<CuriosityBriefing> {
     chemistry: fallback.chemistry,
     physics: fallback.physics,
     biology: fallback.biology,
+    scienceLevels: fallbackLevels,
+    scienceLevelNote: Object.keys(fallbackLevels.undergraduate).length > 0
+      ? 'Both levels have content today.'
+      : 'Foundation level today; no undergraduate record qualified.',
     publication: publicationFrom(null, store.kind, date, state, store.durability, reason),
   };
 }

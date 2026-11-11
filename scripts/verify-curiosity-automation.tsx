@@ -50,13 +50,17 @@ import {
   type CuriosityState,
 } from '../lib/curiosity/state';
 import { rowToPoolEntry } from '../lib/curiosity/content-db';
+import { FileCandidateStore, setCandidateStoreForTesting, type CandidateStore } from '../lib/curiosity/reservoir';
+import { UNDERGRADUATE_GATES, diagnoseScienceLevels, undergraduateCandidates } from '../lib/curiosity/science-levels';
+import type { ScienceDiscipline } from '../lib/discovery/science';
 import { authorizeRefresh } from '../lib/curiosity/refresh-auth';
 import { COVER_PLACEHOLDER, buildRecommendation, lookupBook, openLibraryUserAgent, pickWorkRecord, searchUrl, titlesMatch } from '../lib/curiosity/openlibrary';
-import { NEWS_RECENCY_DAYS, fetchDeveloperRadar, fetchNews, probeSources, selectAiWorldArticles } from '../lib/curiosity/sources';
+import { NEWS_RECENCY_DAYS, aiWorldFeeds, fetchDeveloperRadar, fetchNews, probeSources, selectAiWorldArticles } from '../lib/curiosity/sources';
 import { aiBackgroundLibrary } from '../lib/curiosity/content/ai-background';
 import { radarFallbackShelf } from '../lib/curiosity/content/radar-fallback';
 import { CuriosityScreen } from '../components/curiosity/curiosity-screen';
-import type { BookCandidate, CuriosityPoolEntry } from '../lib/curiosity/types';
+import { ScienceSection } from '../components/curiosity/sections/science-section';
+import type { BookCandidate, CuriosityPoolEntry, KnowledgeCandidate, ScienceConcept } from '../lib/curiosity/types';
 
 const DAY = 86_400_000;
 /** 2026-10-18T18:30:00Z is 2026-10-19 00:00 in Asia/Kolkata. */
@@ -104,6 +108,25 @@ function scriptedFetch(options: { failBooks?: boolean; failFeeds?: boolean; fail
     }
     // Publisher RSS feeds and the Wikipedia anniversaries fallback.
     if (options.failFeeds) throw new Error('scripted: feeds unreachable');
+    /*
+      A realistic newsroom feed rather than an empty channel: since AI World no longer
+      falls back to a curated shelf, an empty fixture would silently remove the card
+      from every scripted run and hide exactly the behaviour these tests are for.
+      Dates are relative to the real clock because the recency window is real.
+    */
+    const published = new Date(Date.now() - 2 * 86_400_000).toUTCString();
+    const feed = (host: string, title: string) =>
+      `<rss version="2.0"><channel><title>${host}</title>` +
+      `<item><title>${title}</title><link>https://${host}/news/story</link>` +
+      `<pubDate>${published}</pubDate><description>A scripted development for the harness, dated and linked.</description></item>` +
+      `</channel></rss>`;
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    if (/openai\.com|anthropic\.com|deepmind\.google|blog\.google|huggingface\.co|blogs\.microsoft\.com|ai\.meta\.com|higgsfield\.ai/.test(host)) {
+      return new Response(feed(host, 'A scripted model release for the harness'), {
+        status: 200,
+        headers: { 'content-type': 'application/rss+xml' },
+      });
+    }
     return new Response('<rss><channel></channel></rss>', { status: 200, headers: { 'content-type': 'application/xml' } });
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
@@ -307,13 +330,13 @@ async function main() {
       const corrupt = await readBriefing(publicationDate(IST_MIDNIGHT(0)));
       assert.equal(corrupt.publication?.origin, 'fallback');
       assert.ok(corrupt.oneThing.explanation.length > 40, 'the fallback card is empty');
-      // The fallback never pretends to be news: background reading has no date to
-      // borrow, and the shelf has no "recently updated" claim to make.
-      assert.ok(corrupt.aiWorld.length > 0, 'the fallback path left the AI card empty');
-      assert.ok(corrupt.aiWorld.every((item) => item.origin === 'background' && item.publishedAt === ''), 'the fallback path presented curated reading as live news');
+      // AI World has no curated fallback any more: with no snapshot there is no news,
+      // and the card says so instead of showing an explainer under a news heading.
+      assert.equal(corrupt.aiWorld.length, 0, 'the fallback path invented AI news');
+      assert.equal(corrupt.publication?.sectionOrigins?.aiWorld, 'unavailable', 'an empty AI World was not labelled unavailable');
       assert.ok(corrupt.developerRadar.every((item) => item.origin === 'curated'), 'the fallback path presented the curated shelf as a discovery');
       assert.equal(corrupt.publication?.durability, getStateStore().durability, 'the page described the storage differently from the store');
-      pass(3, 'failed book lookup kept the previous recommendation; degraded feeds recorded on the snapshot with a cause; a corrupt store falls back to labelled curated content rather than an empty card or an error');
+      pass(3, 'failed book lookup kept the previous recommendation; degraded feeds recorded on the snapshot with a cause; a corrupt store falls back to labelled curated content rather than an error, and AI World is marked unavailable instead of being filled with explainers');
     } finally {
       store.cleanup();
     }
@@ -445,14 +468,16 @@ async function main() {
     const now = Date.UTC(2026, 9, 18);
     const articles = selectAiWorldArticles(
       [
-        { title: 'Good', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'https://openai.com/a' },
-        { title: 'good', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'https://openai.com/dup' },
-        { title: 'Future', source: 'OpenAI', publishedAt: new Date(now + DAY).toUTCString(), summary: '', url: 'https://openai.com/b' },
-        { title: 'No link', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'not-a-url' },
+        { title: 'A model release worth reading', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'https://openai.com/a' },
+        { title: 'A model release worth reading', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'https://openai.com/dup' },
+        { title: 'A future-dated announcement', source: 'OpenAI', publishedAt: new Date(now + DAY).toUTCString(), summary: '', url: 'https://openai.com/b' },
+        { title: 'An item with no usable link', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'not-a-url' },
+        { title: 'Short', source: 'OpenAI', publishedAt: new Date(now - DAY).toUTCString(), summary: '', url: 'https://openai.com/short' },
       ],
       now,
     );
-    assert.deepEqual(articles.map((item) => item.title), ['Good']);
+    // A headline too short to name a development is dropped as a label, not a story.
+    assert.deepEqual(articles.map((item) => item.title), ['A model release worth reading']);
     pass(5, 'covers are hot-linked by cover id with a local placeholder, publisher/year/edition lines come only from Open Library records, preview links only when a scan exists, and the rendered card shows exactly that');
   }
 
@@ -924,19 +949,20 @@ async function main() {
       assert.equal(summary.status, 'published', `an outage run did not publish: ${summary.detail}`);
       const briefing = await readBriefing(summary.date);
       // The four cards the brief cares about most.
-      assert.ok(briefing.aiWorld.length > 0, 'AI World was empty after a publish');
+      // AI World is the one card an outage must leave empty: a news card with no news
+      // says so. Everything else still has honest, labelled content.
+      assert.equal(briefing.aiWorld.length, 0, 'AI World invented content during an outage');
       assert.ok(briefing.developerRadar.length > 0, 'Developer Radar was empty after a publish');
       assert.ok(briefing.history !== null, 'History was empty after a publish');
       assert.ok(briefing.book.title.length > 2, 'the One Book card was empty after a publish');
       // …and they are labelled, which is what makes the fallback honest.
-      assert.ok(briefing.aiWorld.every((item) => item.origin === 'background' && item.publishedAt === ''), 'fallback reading is presented as dated news');
       assert.ok(briefing.developerRadar.every((item) => item.origin === 'curated'), 'fallback shelf items are not marked curated');
       const origins = briefing.publication?.sectionOrigins;
-      assert.equal(origins?.aiWorld, 'curated');
+      assert.equal(origins?.aiWorld, 'unavailable', 'an outage AI World was labelled as something other than unavailable');
       assert.equal(origins?.developerRadar, 'curated');
       assert.equal(origins?.history, 'curated');
       assert.ok((briefing.publication?.degraded?.length ?? 0) >= 3, 'an outage publish recorded no cause');
-      for (const section of ['aiWorld', 'developerRadar', 'history']) {
+      for (const section of ['developerRadar', 'history']) {
         assert.ok(
           (briefing.publication?.degraded ?? []).some((note) => note.startsWith(section) && /\([^)]+\)/.test(note)),
           `${section} was degraded without a stated cause`,
@@ -946,8 +972,13 @@ async function main() {
       assert.doesNotMatch(html, /Invalid Date/, 'a card printed an unparseable date');
       assert.doesNotMatch(html, /Nothing to show yet/, 'the reader was shown an empty card during an outage');
       assert.doesNotMatch(html, /enough rights|ENOENT|EACCES|at .*\.ts\d/, 'an internal error reached the reader-facing page');
-      assert.match(html, /curated/, 'the fallback cards were not labelled as curated');
-      pass(9, 'with every source unreachable the publish still fills all four cards, each labelled curated/background, each recorded with a cause, and the rendered page says nothing false');
+      assert.match(html, /fresh AI news is temporarily unavailable/i, 'the empty AI World card did not say why');
+      // The AI World heading must read "temporarily unavailable", never "curated
+      // reading" — that label is what made explainers look like news.
+      assert.match(html, /AI World[\s\S]{0,200}?temporarily unavailable/, 'the AI World heading did not say it was unavailable');
+      assert.doesNotMatch(html, /AI World[\s\S]{0,200}?curated reading/, 'the AI World heading called itself curated reading');
+      assert.match(html, /curated/, 'the fallback radar cards were not labelled as curated');
+      pass(9, 'with every source unreachable the publish fills every card except AI World, which is marked unavailable and says so; every other card is labelled curated and every degradation is recorded with a cause');
     } finally {
       store.cleanup();
     }
@@ -958,8 +989,8 @@ async function main() {
    * ---------------------------------------------------------------- */
   {
     const now = Date.UTC(2026, 9, 18, 12, 0, 0);
-    const rss = `<rss version="2.0"><channel><title>OpenAI News</title><item><title><![CDATA[First story]]></title><link>https://openai.com/index/first-story/</link><pubDate>${new Date(now - 2 * DAY).toUTCString()}</pubDate><description>&lt;p&gt;Desk &amp; notes&lt;/p&gt;</description></item><item><title>Ancient post</title><link>https://openai.com/index/ancient/</link><pubDate>${new Date(now - 400 * DAY).toUTCString()}</pubDate><description>too old to be news</description></item></channel></rss>`;
-    const atom = `<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Second story</title><link rel="alternate" type="text/html" href="https://deepmind.google/blog/second-story/"/><updated>${new Date(now - 5 * DAY).toISOString()}</updated><summary>Atom summary</summary></entry></feed>`;
+    const rss = `<rss version="2.0"><channel><title>OpenAI News</title><item><title><![CDATA[First story: a new model ships]]></title><link>https://openai.com/index/first-story/</link><pubDate>${new Date(now - 2 * DAY).toUTCString()}</pubDate><description>&lt;p&gt;Desk &amp; notes&lt;/p&gt;</description></item><item><title>Ancient post about retired models</title><link>https://openai.com/index/ancient/</link><pubDate>${new Date(now - 400 * DAY).toUTCString()}</pubDate><description>too old to be news</description></item></channel></rss>`;
+    const atom = `<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Second story: agents in the browser</title><link rel="alternate" type="text/html" href="https://deepmind.google/blog/second-story/"/><updated>${new Date(now - 5 * DAY).toISOString()}</updated><summary>Atom summary</summary></entry></feed>`;
     const htmlPage = `<!doctype html><html><body><item><title>Scraped page title</title><link>https://anthropic.com/news/x</link></item></body></html>`;
     const broken = `<rss version="2.0"><channel><item><title>Truncated and never closed`;
     const seen: string[] = [];
@@ -978,7 +1009,7 @@ async function main() {
     const items = await fetchNews(fetchImpl, note);
     assert.equal(items.length, 2, `expected the RSS + Atom stories only, got ${JSON.stringify(items.map((i) => i.title))}`);
     const [first, second] = items;
-    assert.equal(first.title, 'First story', 'CDATA was not unwrapped');
+    assert.equal(first.title, 'First story: a new model ships', 'CDATA was not unwrapped');
     assert.equal(first.summary, 'Desk & notes', 'entities were not decoded');
     assert.equal(first.origin, 'live');
     assert.ok(Number.isFinite(Date.parse(first.publishedAt)), 'a pubDate was not normalised to a parseable instant');
@@ -1003,10 +1034,10 @@ async function main() {
     );
     assert.deepEqual(emptyItems, []);
     assert.match(emptyNote.text ?? '', /not a feed/, 'an HTML answer was not named in the record');
-    assert.match(emptyNote.text ?? '', /answered 504/, 'an HTTP error was not named in the record');
+    assert.match(emptyNote.text ?? '', /HTTP 504/, 'an HTTP error was not named in the record');
     assert.match(emptyNote.text ?? '', /dns failure|could not be reached/, 'an unreachable host was not named in the record');
-    assert.match(emptyNote.text ?? '', /none of the 6 feeds/, 'a total outage was not described as one');
-    assert.match(emptyNote.text ?? '', /\+3 more/, 'the fourth and later causes were dropped without saying so');
+    assert.match(emptyNote.text ?? '', /none of the \d+ first-party AI feeds/, 'a total outage was not described as one');
+    assert.match(emptyNote.text ?? '', /\+\d+ more/, 'the fourth and later causes were dropped without saying so');
 
     // Quiet-but-reachable feeds say so differently from unreachable ones.
     const quietNote: { text?: string } = {};
@@ -1014,7 +1045,28 @@ async function main() {
     assert.match(quietNote.text ?? '', /nothing new to show/, 'a quiet feed was reported as an outage');
     // The window itself is a number the docs can quote, not folklore.
     assert.equal(NEWS_RECENCY_DAYS, 45);
-    pass(10, 'RSS and Atom both parse (CDATA, entities, self-closing links), a 400-day-old post is dropped by the 45-day window, an HTML page and malformed XML are refused, and one dead host never stops the others');
+
+    // The registry is data, so it can be checked directly: the publishers the brief
+    // names are all covered, every URL is https, no Wikipedia page is registered as
+    // news, and Higgsfield is present only via the changelog feed its own llms.txt
+    // publishes (its /blog/news page is editorial, not a dated release feed).
+    const registry = aiWorldFeeds();
+    for (const publisher of ['OpenAI', 'Anthropic', 'Google DeepMind', 'Google AI', 'Hugging Face', 'Microsoft AI', 'Meta AI', 'Higgsfield']) {
+      assert.ok(registry.some((feed) => feed.name === publisher), `${publisher} is missing from the AI World registry`);
+    }
+    assert.ok(registry.every((feed) => feed.url.startsWith('https://')), 'a feed URL is not https');
+    assert.ok(registry.every((feed) => !/wikipedia\.org/.test(feed.url)), 'a Wikipedia page is registered as a news feed');
+    assert.equal(
+      registry.find((feed) => feed.name === 'Higgsfield')?.url,
+      'https://higgsfield.ai/creator-hub/changelog/rss.xml',
+      'the Higgsfield entry is not the feed its own llms.txt publishes',
+    );
+    assert.ok(registry.every((feed) => feed.coverage.length > 0), 'a feed claims to cover no topic');
+    const covered = new Set(registry.flatMap((feed) => feed.coverage));
+    for (const topic of ['models', 'products', 'agents', 'media', 'coding', 'research', 'industry']) {
+      assert.ok(covered.has(topic as never), `no feed covers ${topic}`);
+    }
+    pass(10, 'RSS and Atom both parse (CDATA, entities, self-closing links), a 400-day-old post is dropped by the 45-day window, an HTML page and malformed XML are refused, one dead host never stops the others, the registry covers all eight required publishers with no Wikipedia entry, and Higgsfield is only its verified changelog feed');
   }
 
   /* ---------------------------------------------------------------- *
@@ -1084,7 +1136,11 @@ async function main() {
       }) as unknown as typeof fetch,
       '2026-10-19',
     );
-    assert.equal(probes.length, 9, 'the probe does not cover every feed, the API, Wikipedia and Open Library');
+    // Derived from the registry, so adding a feed cannot silently shrink the probe.
+    assert.equal(probes.length, aiWorldFeeds().length + 3, 'the probe does not cover every feed, the API, Wikipedia and Open Library');
+    for (const feed of aiWorldFeeds()) {
+      assert.ok(probes.some((probe) => probe.name === feed.name && probe.url === feed.url), `${feed.name} is not probed at its registered URL`);
+    }
     assert.ok(probes.some((probe) => probe.name.includes('GitHub') && !probe.ok && probe.status === 403), 'a rate-limited API was not reported as such');
     assert.ok(probes.some((probe) => !probe.ok && /connection reset/.test(probe.note)), 'a network failure was flattened into a generic error');
     assert.ok(probes.every((probe) => Number.isFinite(probe.ms) && probe.ms >= 0), 'the probe reported no timing');
@@ -1212,8 +1268,7 @@ async function main() {
       for (const [name, broken] of [
         ['empty one-thing title', { ...payload, oneThing: { ...payload.oneThing, title: '   ' } }],
         ['empty radar', { ...payload, developerRadar: [] }],
-        ['empty ai world', { ...payload, aiWorld: [] }],
-        ['dated background item', { ...payload, aiWorld: [{ title: 'T', source: 'S', url: 'https://example.org/t', summary: '', publishedAt: 'Fri, 16 Oct 2026 10:00:00 GMT', origin: 'background' as const }] }],
+        ['background item presented as news', { ...payload, aiWorld: [{ title: 'T', source: 'S', url: 'https://example.org/t', summary: '', publishedAt: 'Fri, 16 Oct 2026 10:00:00 GMT', origin: 'background' as const }] }],
         ['undated news item', { ...payload, aiWorld: [{ title: 'T', source: 'S', url: 'https://example.org/t', summary: '', publishedAt: '', origin: 'live' as const }] }],
         ['unlabelled archive event', { ...payload, history: { date: 'January 1', year: 1900, title: 'T', explanation: 'E', significance: 'S', forThisDate: false } }],
         ['missing history', { ...payload, history: null }],
@@ -1223,6 +1278,10 @@ async function main() {
       ] as const) {
         assert.ok(invalidDailyFields(broken as typeof payload).length > 0, `${name} passed validation`);
       }
+      // An empty AI World is a publishable day: "fresh news is temporarily
+      // unavailable" is honest, and refusing it would push the publisher back
+      // towards filling the card with something that is not news.
+      assert.deepEqual(invalidDailyFields({ ...payload, aiWorld: [] }), [], 'a day with no AI news was refused publication');
       assert.ok(invalidBookFields({ ...validBook, url: 'javascript:alert(1)' }).length > 0, 'a javascript: book link passed validation');
       assert.ok(invalidBookFields({ ...validBook, coverUrl: 'ftp://example.org/cover.jpg' }).length > 0, 'a non-http cover URL passed validation');
 
@@ -1449,6 +1508,13 @@ async function main() {
         assert.doesNotMatch(text, /\d+[kKM] ?stars|trending|most popular/i, `${where}/${id}: invented popularity`);
       }
     }
+    /*
+      The AI background shelf is now reference material, not a publication source.
+      Its rotation is still audited — the archive has to stay clean — but the thing
+      that matters is that it can no longer reach a reader: `dailyEditorial` returns
+      no AI items, and `invalidDailyFields` refuses a payload carrying one.
+    */
+    assert.equal(dailyEditorial('2026-10-19').aiWorld.length, 0, 'the fallback path still publishes curated AI background');
     // Consecutive days never show the same shelf, and the shelves cycle.
     const day1 = curatedAiWorld('2026-10-19').ids;
     const day2 = curatedAiWorld('2026-10-20').ids;
@@ -1471,7 +1537,7 @@ async function main() {
       { id: 'bad-url', category: 'one-thing', item: { title: 'T', explanation: 'E', url: 'javascript:alert(1)' } },
     ];
     for (const row of rejected) assert.equal(rowToPoolEntry(row as never), null, `${JSON.stringify(row.id)} should not become pool content`);
-    pass(18, `${audited} curated records audited: ${CURIOUSITY_CATEGORIES.map((c) => `${c}=${poolFor(c).length}`).join(', ')} plus ${aiBackgroundLibrary.length} background items and ${radarFallbackShelf.length} shelf tools — unique ids, https links, provenance on every row, no placeholders, no invented dates or popularity, rotations that never repeat a neighbour day`);
+    pass(18, `${audited} curated records audited: ${CURIOUSITY_CATEGORIES.map((c) => `${c}=${poolFor(c).length}`).join(', ')} plus ${aiBackgroundLibrary.length} background items (reference only — unreachable from any publish) and ${radarFallbackShelf.length} shelf tools — unique ids, https links, provenance on every row, no placeholders, no invented dates or popularity, rotations that never repeat a neighbour day`);
   }
 
   /* ---------------------------------------------------------------- *
@@ -1529,6 +1595,337 @@ async function main() {
     } catch (error) {
       if (error instanceof assert.AssertionError) throw error;
       results.push(`Unrelated files: could not be verified from git (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 20. Science: two real levels, and an honest empty undergraduate lane
+   * ---------------------------------------------------------------- */
+  {
+    const DIRS: string[] = [];
+    let records: KnowledgeCandidate[] = [];
+    const fakeStore: CandidateStore = {
+      kind: 'file',
+      location: 'scripted',
+      readAll: async () => records,
+      writeUpsert: async () => ({ persisted: true }),
+      readCursors: async () => ({}),
+      writeCursor: async () => {},
+      appendRunLog: async () => {},
+      lastRunLog: async () => null,
+    };
+    setCandidateStoreForTesting(fakeStore);
+
+    const TODAY = publicationDate(IST_MIDNIGHT(0));
+
+    /** A research record shaped the way the discovery job writes one. */
+    const research = (discipline: ScienceDiscipline, overrides: Partial<ScienceConcept> = {}): ScienceConcept => ({
+      id: `${discipline}-research-paper`,
+      topic: `A ${discipline} paper that measured something specific`,
+      aliases: [],
+      origin: 'research',
+      educationLevel: 'undergraduate',
+      levelBasis: 'derived-from-record',
+      provenance: 'peer-reviewed',
+      provenanceLabel: 'Peer-reviewed research',
+      publishedOn: '2026-10-17',
+      venue: 'Journal of Verification',
+      doi: '10.1000/verify.001',
+      simple: 'The authors measured a thing and reported what they found.',
+      connection: 'Selected because it is recent and cited; read the article before repeating the number.',
+      surprising: 'One recent, peer-reviewed paper out of many published this week.',
+      question: 'What would you check before repeating this result?',
+      unknown: 'Whether the result replicates.',
+      source: {
+        url: `https://example.org/${discipline}/paper`,
+        name: 'Journal of Verification · DOI 10.1000/verify.001',
+        attribution: 'Peer-reviewed research. Metadata via Crossref; no full text reproduced.',
+      },
+      // The stored basis of the selection, the way `lib/discovery/science.ts` writes it.
+      research: {
+        doi: '10.1000/verify.001',
+        venue: 'Journal of Verification',
+        authors: ['A. Author', 'B. Author'],
+        institutions: ['Example University'],
+        publishedOn: '2026-10-17',
+        peerReviewed: true,
+        significanceScore: 72,
+        significanceBasis: ['published in the last week', 'indexed by Crossref', 'cited twice'],
+        rights: 'metadata-only',
+        verifiedAgainst: ['Crossref'],
+        foundVia: 'crossref:query.bibliographic',
+      },
+      ...overrides,
+    });
+
+    const candidateFor = (
+      discipline: ScienceDiscipline,
+      concept: ScienceConcept,
+      extra: Partial<KnowledgeCandidate> = {},
+      science: { significanceScore?: number; publishedOn?: string; provenance?: string } = {},
+    ): KnowledgeCandidate => ({
+      id: concept.id,
+      entityId: concept.id,
+      canonicalUrl: concept.source?.url ?? `https://example.org/${discipline}`,
+      category: discipline,
+      subcategory: 'research',
+      title: concept.topic,
+      description: concept.simple,
+      sourceName: 'Journal of Verification',
+      aliases: [],
+      normalizedIdentity: concept.id,
+      fingerprint: concept.id,
+      subjects: [discipline],
+      eventDatePrecision: 'none',
+      payload: {
+        concept,
+        science: {
+          publishedOn: science.publishedOn ?? concept.publishedOn ?? '2026-10-17',
+          provenance: science.provenance ?? concept.provenance ?? 'peer-reviewed',
+          significanceScore: science.significanceScore ?? 72,
+        },
+      },
+      validationStatus: 'valid',
+      eligible: true,
+      discoveredAt: '2026-10-17T00:00:00.000Z',
+      updatedAt: '2026-10-17T00:00:00.000Z',
+      ...extra,
+    });
+
+    /** Publish today's briefing against a given reservoir, on its own store. */
+    const publishWith = async (seeded: KnowledgeCandidate[]) => {
+      const dir = mkdtempSync(join(tmpdir(), 'focusdesk-science-'));
+      DIRS.push(dir);
+      process.env.CURIOSITY_STORE = 'file';
+      process.env.CURIOSITY_STATE_FILE = join(dir, 'state.json');
+      setStateStoreForTesting(null);
+      records = seeded;
+      const run = await runCuriosityRefresh({ now: IST_MIDNIGHT(0), fetchImpl: scriptedFetch().fetchImpl });
+      const state = await getStateStore().read();
+      assert.ok(state.daily, 'a science scenario published no day at all');
+      return { run, state, payload: state.daily!.payload };
+    };
+
+    try {
+      /* --- (a) all three disciplines have a qualified record -------------- */
+      const full = await publishWith(['chemistry', 'physics', 'biology'].map((discipline) =>
+        candidateFor(discipline as ScienceDiscipline, research(discipline as ScienceDiscipline)),
+      ));
+      assert.equal(full.run.status, 'published', 'a day with three qualified research records did not publish');
+      const levels = full.payload.scienceLevels;
+      assert.ok(levels, 'the published payload carries no science levels');
+      assert.deepEqual(
+        Object.keys(levels!.undergraduate ?? {}).sort(),
+        ['biology', 'chemistry', 'physics'],
+        'an undergraduate card was dropped even though its discipline had a qualified record',
+      );
+      for (const discipline of ['chemistry', 'physics', 'biology'] as const) {
+        const under = levels!.undergraduate?.[discipline];
+        assert.equal(under?.educationLevel, 'undergraduate', `${discipline} undergraduate card is not stamped undergraduate`);
+        assert.equal(under?.origin, 'research', `${discipline} undergraduate card is not a research record`);
+        assert.equal(under?.research?.peerReviewed, true, `${discipline} peer-review status was lost`);
+        assert.match(under?.source?.url ?? '', /^https:\/\//, `${discipline} undergraduate card cites no link`);
+        assert.equal(under?.research?.doi, '10.1000/verify.001', 'the DOI did not survive publication');
+        // Foundation stays the default and stays foundation-level.
+        const foundation = levels!.foundation?.[discipline];
+        assert.ok(foundation?.topic, `${discipline} lost its foundation card`);
+        assert.equal(foundation?.educationLevel ?? 'foundation', 'foundation', `${discipline} foundation card is not foundation-level`);
+        assert.notEqual(foundation?.origin, 'research', `${discipline} foundation card is a research record`);
+        // …and the card a reader sees without touching the selector is the foundation one.
+        assert.equal(full.payload[discipline]?.id, foundation?.id, `${discipline} default card is not the foundation card`);
+        assert.notEqual(full.payload[discipline]?.origin, 'research', `${discipline} default card publishes research`);
+      }
+      assert.deepEqual(invalidDailyFields(full.payload), [], 'a payload with both levels failed its own validation');
+      assert.ok(
+        (full.state.daily?.degraded ?? []).some((note) => /foundation level published by default/.test(note)),
+        'the run did not record that foundation is the default level',
+      );
+
+
+      /* --- (b) three disciplines are independent -------------------------- */
+      const chemOnly = await publishWith([candidateFor('chemistry', research('chemistry'))]);
+      const chemLevels = chemOnly.payload.scienceLevels!;
+      assert.deepEqual(Object.keys(chemLevels.undergraduate ?? {}), ['chemistry'], 'a discipline published an undergraduate card it had no record for');
+      assert.equal(chemLevels.notes?.length, 2, 'the two empty disciplines were not explained');
+      for (const [discipline, reason] of Object.entries(chemLevels.diagnostics ?? {})) {
+        assert.match(reason.reason, new RegExp(discipline), `the ${discipline} explanation does not name its discipline`);
+      }
+      assert.equal(chemLevels.diagnostics?.physics.stored, 0, 'a physics record appeared from nowhere');
+      assert.equal(chemLevels.diagnostics?.physics.published, false);
+      assert.equal(chemLevels.diagnostics?.chemistry.qualified, 1, 'a qualified chemistry record was not counted');
+      assert.ok(
+        chemLevels.foundation?.physics && chemLevels.foundation?.biology,
+        'the empty undergraduate disciplines took their foundation cards with them',
+      );
+      const chemStatus = await getCuriosityStatus();
+      assert.equal(chemStatus.science?.published.undergraduate, 1, 'status did not report one undergraduate card');
+      assert.equal(chemStatus.science?.published.foundation, 3, 'status did not report three foundation cards');
+      assert.equal(chemStatus.science?.disciplines.chemistry.qualified, 1);
+      assert.equal(chemStatus.science?.disciplines.physics.qualified, 0);
+
+      /* --- (c) stale, invalid and low-significance records are refused ---- */
+      const refused = await publishWith([
+        candidateFor('chemistry', research('chemistry'), {}, { significanceScore: 10 }),
+        candidateFor('physics', research('physics', { publishedOn: '2025-08-01' }), {}, { publishedOn: '2025-08-01' }),
+        candidateFor('biology', research('biology'), { validationStatus: 'invalid' }),
+      ]);
+      assert.equal(refused.run.status, 'published', 'a day with no qualified research stopped publishing');
+      const refusedLevels = refused.payload.scienceLevels!;
+      assert.deepEqual(refusedLevels.undergraduate, {}, 'a record that failed a gate was published as undergraduate anyway');
+      assert.deepEqual(invalidDailyFields(refused.payload), [], 'an honestly empty undergraduate level failed validation');
+      assert.equal(refusedLevels.diagnostics?.chemistry.qualified, 0);
+      assert.equal(refusedLevels.diagnostics?.chemistry.usable, 1, 'a low score was counted as an unusable record rather than a rejected one');
+      assert.match(refusedLevels.diagnostics?.chemistry.reason ?? '', new RegExp(`significance score of at least ${UNDERGRADUATE_GATES.minimumScore}`), 'the low-significance reason is missing');
+      assert.equal(refusedLevels.diagnostics?.physics.stored, 1);
+      assert.equal(refusedLevels.diagnostics?.physics.usable, 1);
+      assert.equal(refusedLevels.diagnostics?.physics.qualified, 0);
+      assert.match(refusedLevels.diagnostics?.physics.reason ?? '', new RegExp(`${UNDERGRADUATE_GATES.maxAgeDays}-day freshness window`), 'the stale-record reason is missing');
+      assert.equal(refusedLevels.diagnostics?.biology.usable, 0, 'an invalid record was counted as usable');
+      assert.match(refusedLevels.diagnostics?.biology.reason ?? '', /invalid or ineligible/, 'the invalid-record reason is missing');
+      assert.equal(refusedLevels.notes?.length, 3, 'three empty disciplines produced fewer than three explanations');
+      assert.ok(refusedLevels.foundation?.chemistry?.topic, 'the foundation lane emptied because the research lane did');
+      // The selector itself is pure, so its gates can be asserted directly.
+      assert.equal(undergraduateCandidates([candidateFor('chemistry', research('chemistry'), {}, { significanceScore: 10 })], TODAY, 'chemistry').length, 0);
+      assert.match(
+        diagnoseScienceLevels([], TODAY, { total: 0, readable: true }).physics.reason,
+        /research library is empty/,
+        'an empty research library is not described as empty',
+      );
+      assert.match(
+        diagnoseScienceLevels([], TODAY, { total: 0, readable: false }).physics.reason,
+        /could not be read/,
+        'an unreadable research library is described as empty instead of unreadable',
+      );
+      assert.match(
+        diagnoseScienceLevels([], TODAY, { total: 0, readable: true, unmigrated: true }).physics.reason,
+        /migration/,
+        'a missing candidate table is not named',
+      );
+
+      /* --- (d) a valid record survives the file store round trip ---------- */
+      const storePath = join(DIRS[DIRS.length - 1] ?? mkdtempSync(join(tmpdir(), 'focusdesk-science-')), 'candidates.json');
+      const fileStore = new FileCandidateStore(storePath);
+      const written = candidateFor('biology', research('biology', { id: 'biology-hydrated', topic: 'A hydrated biology paper' }));
+      await fileStore.writeUpsert([written]);
+      const hydrated = await fileStore.readAll();
+      assert.equal(hydrated.length, 1, 'the candidate store lost a record between write and read');
+      setCandidateStoreForTesting({
+        ...fakeStore,
+        readAll: async () => hydrated,
+      });
+      // The next day, because a forced same-day re-run deliberately reuses the day's
+      // science picks: re-publishing today does not reshuffle today.
+      const afterHydration = await runCuriosityRefresh({ now: IST_MIDNIGHT(1), fetchImpl: scriptedFetch().fetchImpl });
+      const hydratedState = await getStateStore().read();
+      assert.equal(afterHydration.status, 'published', 'a hydrated research record broke the publication');
+      assert.equal(
+        hydratedState.daily?.payload.scienceLevels?.undergraduate?.biology?.id,
+        'biology-hydrated',
+        'the research record did not survive hydration into the undergraduate lane',
+      );
+      assert.equal(
+        hydratedState.daily?.payload.scienceLevels?.undergraduate?.biology?.research?.peerReviewed,
+        true,
+        'peer-review status was lost on the round trip',
+      );
+      setCandidateStoreForTesting(fakeStore);
+
+      /* --- (e) nothing is ever mislabelled across the two levels ---------- */
+      const mixed = structuredClone(full.payload);
+      mixed.scienceLevels!.undergraduate!.chemistry = mixed.scienceLevels!.foundation!.chemistry;
+      assert.ok(
+        invalidDailyFields(mixed).includes('scienceLevels.undergraduate.chemistry is undergraduate-level'),
+        'a foundation card published under the undergraduate label passed validation',
+      );
+      const demoted = structuredClone(full.payload);
+      demoted.scienceLevels!.foundation!.chemistry = demoted.scienceLevels!.undergraduate!.chemistry!;
+      assert.ok(
+        invalidDailyFields(demoted).includes('scienceLevels.foundation.chemistry is foundation-level'),
+        'a research record was allowed into the foundation lane',
+      );
+
+      /* --- (f) the rendered page offers both levels, foundation first ----- */
+      const briefing = await readBriefing(TODAY);
+      const html = renderToStaticMarkup(
+        createElement(ScienceSection, {
+          concepts: {
+            chemistry: briefing.chemistry,
+            physics: briefing.physics,
+            biology: briefing.biology,
+          },
+          levels: briefing.scienceLevels,
+        }),
+      );
+      assert.match(html, /Foundation/, 'the page does not offer the Foundation level');
+      assert.match(html, /Undergraduate/, 'the page does not offer the Undergraduate level');
+      assert.doesNotMatch(html, /Advanced|Postgraduate|Doctoral/, 'a third level exists in the UI');
+      assert.doesNotMatch(html, /Invalid Date|undefined<|NaN/, 'the science section rendered a broken value');
+
+      pass(20, 'Science publishes two real levels: Foundation is the default card in all three disciplines, a qualified research record reaches Undergraduate with its DOI, peer-review status and link intact, three disciplines are counted independently, stale (61+ days), low-significance (<35) and invalid records are refused with a specific reason, an empty or unreadable library says so instead of showing a blank card, and a record survives the candidate store round trip and publication');
+    } finally {
+      setCandidateStoreForTesting(null);
+      setStateStoreForTesting(null);
+      delete process.env.CURIOSITY_STATE_FILE;
+      delete process.env.CURIOSITY_STORE;
+      for (const dir of DIRS) rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 21. AI World: cached news keeps its own dates, and says it is cached
+   * ---------------------------------------------------------------- */
+  {
+    const store = useTempStore('ai-world-cached');
+    try {
+      const live = await runCuriosityRefresh({ now: IST_MIDNIGHT(0), fetchImpl: scriptedFetch().fetchImpl });
+      assert.equal(live.status, 'published');
+      const day0 = (await getStateStore().read()).daily!;
+      assert.ok(day0.payload.aiWorld.length > 0, 'the live day published no AI news at all');
+      const original = day0.payload.aiWorld.map((item) => ({
+        title: item.title,
+        url: item.url,
+        publishedAt: item.publishedAt,
+        source: item.source,
+      }));
+
+      // Tomorrow every host is down. The card may keep yesterday's stories — but only as
+      // yesterday's stories, with yesterday's dates, labelled as cached.
+      const offline = await runCuriosityRefresh({ now: IST_MIDNIGHT(1), fetchImpl: scriptedFetch({ failEverything: true }).fetchImpl });
+      assert.equal(offline.status, 'published', 'a day whose every feed failed did not publish at all');
+      const day1 = (await getStateStore().read()).daily!;
+      assert.notEqual(day1.date, day0.date, 'the second run published the same day');
+      assert.deepEqual(
+        day1.payload.aiWorld.map((item) => ({ title: item.title, url: item.url, publishedAt: item.publishedAt, source: item.source })),
+        original,
+        'the cached AI news did not keep exactly its original stories and publication dates',
+      );
+      for (const item of day1.payload.aiWorld) {
+        assert.notEqual(item.origin, 'background', 'a curated explainer was used as an AI World fallback');
+      }
+      const status = await getCuriosityStatus();
+      assert.equal(status.daily?.sections?.aiWorld, 'cached', 'the snapshot did not record that the AI card is cached');
+      assert.equal(status.daily?.complete, false, 'a day with an unavailable feed was reported as complete');
+      assert.ok(
+        (day1.degraded ?? []).some((line) => /^aiWorld:/.test(line) && /original dates/.test(line)),
+        'the run did not record that the kept items carry their original dates',
+      );
+
+      const briefing = await readBriefing(day1.date);
+      assert.equal(briefing.publication?.sectionOrigins?.aiWorld, 'cached');
+      const html = renderToStaticMarkup(createElement(CuriosityScreen, { briefing }));
+      assert.match(html, /cached — original dates kept/, 'the AI World heading did not say the items are cached');
+      assert.doesNotMatch(html, /AI World[\s\S]{0,200}?curated reading/, 'the AI World card still calls itself curated reading');
+      // The items themselves still print their own dates, not today's. The card prints
+      // the same `'en'` short form the component uses, so the assertion formats it the
+      // same way rather than guessing a locale.
+      for (const item of day1.payload.aiWorld.slice(0, 3)) {
+        const printed = new Date(Date.parse(item.publishedAt)).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+        assert.ok(html.includes(printed), `the card did not print the item's own date (${printed})`);
+      }
+
+      pass(21, 'when every feed fails the day still publishes, the AI card keeps exactly yesterday\'s live stories with their original publication dates under a “cached — original dates kept” label, the snapshot records sections.aiWorld = cached and the reason with the source date, the day is not reported complete, and no curated explainer is substituted in');
+    } finally {
+      store.cleanup();
     }
   }
 

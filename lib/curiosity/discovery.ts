@@ -69,8 +69,14 @@ export const SCIENCE_DISCIPLINES: Record<ScienceDiscipline, DisciplineConfig> = 
       'Category:Chemical elements',
       'Category:Biochemistry',
       'Category:Materials science',
+      /* The reader-facing coverage this card promises: everyday chemistry and the
+         environment are chemistry too, and a rotation over eight categories kept
+         them off the card entirely. */
+      'Category:Environmental chemistry',
+      'Category:Food chemistry',
+      'Category:Polymer chemistry',
     ],
-    subfields: ['reactions', 'organic chemistry', 'inorganic chemistry', 'analytical chemistry', 'physical chemistry', 'elements', 'biochemistry', 'materials'],
+    subfields: ['reactions', 'organic chemistry', 'inorganic chemistry', 'analytical chemistry', 'physical chemistry', 'elements', 'biochemistry', 'materials', 'environmental chemistry', 'food chemistry', 'polymer chemistry'],
     connectionWords: /\b(used|uses|using|applied|application|applications|found in|occurs|occur|important|essential|role|produces|produced|industry|industrial|medicine|medical|everyday|household|food|agriculture|energy|battery|catalyst|manufactur|common)\b/i,
   },
   physics: {
@@ -85,8 +91,15 @@ export const SCIENCE_DISCIPLINES: Record<ScienceDiscipline, DisciplineConfig> = 
       'Category:Waves',
       'Category:Condensed matter physics',
       'Category:Astrophysics',
+      /* Space, the atmosphere and the solid Earth: the three "where do we see it"
+         topics school physics is supposed to cover, and none of them was reachable
+         from the rotation before. */
+      'Category:Astronomy',
+      'Category:Atmospheric sciences',
+      'Category:Geophysics',
+      'Category:Applied and interdisciplinary physics',
     ],
-    subfields: ['mechanics', 'thermodynamics', 'electromagnetism', 'optics', 'quantum mechanics', 'relativity', 'waves', 'condensed matter', 'astrophysics'],
+    subfields: ['mechanics', 'thermodynamics', 'electromagnetism', 'optics', 'quantum mechanics', 'relativity', 'waves', 'condensed matter', 'astrophysics', 'astronomy', 'atmospheric science', 'geophysics', 'applied physics'],
     connectionWords: /\b(used|uses|using|applied|application|applications|found in|occurs|occur|important|essential|role|produces|produced|industry|industrial|medicine|medical|everyday|household|energy|device|instrument|measurement|engine|common|nature)\b/i,
   },
   biology: {
@@ -101,8 +114,14 @@ export const SCIENCE_DISCIPLINES: Record<ScienceDiscipline, DisciplineConfig> = 
       'Category:Botany',
       'Category:Zoology',
       'Category:Immunology',
+      /* The human body and the science of everyday life, which the biology card
+         promised and never rotated to. */
+      'Category:Human anatomy',
+      'Category:Neuroscience',
+      'Category:Nutrition',
+      'Category:Environmental science',
     ],
-    subfields: ['cell biology', 'genetics', 'evolution', 'ecology', 'physiology', 'microbiology', 'botany', 'zoology', 'immunology'],
+    subfields: ['cell biology', 'genetics', 'evolution', 'ecology', 'physiology', 'microbiology', 'botany', 'zoology', 'immunology', 'human anatomy', 'neuroscience', 'nutrition', 'environmental science'],
     connectionWords: /\b(used|uses|using|applied|application|applications|found in|occurs|occur|important|essential|role|produces|produced|medicine|medical|everyday|food|agriculture|disease|health|plant|animal|human|environment|common)\b/i,
   },
 };

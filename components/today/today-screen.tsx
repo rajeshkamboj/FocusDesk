@@ -7,13 +7,13 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useData } from '@/components/data/data-provider';
 import { Button } from '@/components/ui/button';
-import { IconChevronDown, IconPlus, IconTasks, IconClock, IconFlag } from '@/components/ui/icons';
+import { IconCalendar, IconChevronDown, IconPlus, IconTasks } from '@/components/ui/icons';
 import { TaskSection, TaskList } from '@/components/tasks/task-list';
 import { TaskFormModal } from '@/components/tasks/task-form-modal';
 import { ExecutionWarnings } from './execution-warnings';
 import { PriorityCard } from './priority-card';
 import { WellbeingCard } from './wellbeing-card';
-import { formatDuration, formatLongDate, todayISO, weekdayName, daysBetween } from '@/lib/dates';
+import { formatLongDate, todayISO, weekdayName } from '@/lib/dates';
 import { completedTasksOn, isOpenTask, overdueTasks, tasksWithApproachingDeadline } from '@/lib/selectors';
 import { getUserDisplayName } from '@/lib/auth/display-name';
 
@@ -92,38 +92,23 @@ export function TodayScreen() {
     <div className="mx-auto w-full max-w-3xl px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-10 xl:max-w-6xl">
       {/* Header */}
       <header className="mb-8">
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_290px] sm:items-start sm:gap-x-8">
-          <div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_290px] sm:items-stretch sm:gap-x-4">
+          <div className="flex h-full min-h-[130px] min-w-0 flex-col justify-center rounded-2xl border border-line bg-surface px-5 py-4 shadow-card sm:px-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3 [overflow-wrap:anywhere]">{greeting}</p>
             <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight text-ink">
               Today <span className="font-normal text-ink-3">— {dayName}</span>
             </h1>
-            <p className="mt-1 text-sm text-ink-2">{formatLongDate(today)}</p>
+            <p className="mt-2 inline-flex items-center gap-2 text-sm text-ink-2">
+              <IconCalendar width={15} height={15} />
+              {formatLongDate(today)}
+            </p>
           </div>
           <div className="w-full min-w-0 sm:justify-self-end">
-            <ProgressSegments done={done} total={total} />
-            {totalMinutes > 0 ? (
-              <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-3">
-                <IconClock width={12} height={12} />
-                {formatDuration(totalMinutes)} of work planned
-              </p>
-            ) : null}
+            <ProgressSegments done={done} total={total} plannedMinutes={totalMinutes} />
           </div>
         </div>
 
-        {approaching.length > 0 ? (
-          <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-line bg-warning-soft/60 px-4 py-3">
-            <IconFlag width={15} height={15} className="mt-0.5 shrink-0 text-warning" />
-            <p className="text-[12.5px] leading-relaxed text-ink-2">
-              {approaching.length === 1 ? 'A deadline needs attention: ' : `${approaching.length} deadlines need attention: `}
-              {approaching
-                .slice(0, 3)
-                .map((t) => `“${t.title}” (${daysBetween(today, t.dueDate!) < 0 ? `${-daysBetween(today, t.dueDate!)} days overdue` : daysBetween(today, t.dueDate!) === 0 ? 'due today' : `in ${daysBetween(today, t.dueDate!)} days`})`)
-                .join(', ')}
-            </p>
-          </div>
-        ) : null}
-        <ExecutionWarnings data={data} date={today} />
+        <ExecutionWarnings data={data} date={today} approaching={approaching} />
       </header>
 
       {/* Priority, well-being, tasks and review all sit on the same master grid.

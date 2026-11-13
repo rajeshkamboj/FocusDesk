@@ -1,6 +1,14 @@
-import { IconGoals } from '@/components/ui/icons';
+import { IconClock, IconGoals } from '@/components/ui/icons';
 
-export function ProgressSegments({ done, total }: { done: number; total: number }) {
+export function ProgressSegments({
+  done,
+  total,
+  plannedMinutes = 0,
+}: {
+  done: number;
+  total: number;
+  plannedMinutes?: number;
+}) {
   const safeTotal = Math.max(0, total);
   const safeDone = Math.max(0, done);
   const percent = safeTotal > 0 ? Math.min(100, Math.round((safeDone / safeTotal) * 100)) : 0;
@@ -14,7 +22,7 @@ export function ProgressSegments({ done, total }: { done: number; total: number 
   return (
     <section
       aria-label="Today's progress"
-      className="rounded-2xl border border-line bg-surface px-4 py-4 shadow-card"
+      className="h-full min-h-[130px] rounded-2xl border border-line bg-surface px-4 py-4 shadow-card"
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
@@ -62,6 +70,15 @@ export function ProgressSegments({ done, total }: { done: number; total: number 
           {safeTotal === 0 ? 'No tasks' : `${remaining} remaining`}
         </span>
       </div>
+
+      {plannedMinutes > 0 ? (
+        <p className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-ink-3">
+          <IconClock width={12} height={12} />
+          {Math.floor(plannedMinutes / 60) > 0 ? `${Math.floor(plannedMinutes / 60)}h ` : ''}
+          {plannedMinutes % 60 > 0 ? `${plannedMinutes % 60}m` : ''}
+          {' '}of work planned
+        </p>
+      ) : null}
     </section>
   );
 }

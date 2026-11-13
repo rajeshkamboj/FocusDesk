@@ -235,7 +235,7 @@ export function TaskRow({
         data-task-id={task.id}
         // Focusable only programmatically, so navigation can move focus here.
         tabIndex={-1}
-        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl xl:items-center border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
+        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
       >
         {flashKey !== undefined ? (
           // Keyed by the request so a repeat navigation restarts the animation.
@@ -256,7 +256,7 @@ export function TaskRow({
         />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-1.5">
+          <div className={wideLayout ? "flex items-start gap-1.5 xl:items-center" : "flex items-start gap-1.5"}>
             <div className="min-w-0 flex-1">
               {hasDetails ? (
                 <button

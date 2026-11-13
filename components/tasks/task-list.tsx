@@ -28,7 +28,7 @@ export function TaskList({ tasks, showDates = true, hierarchical = false, wideLa
   return (
     <div className="space-y-0.5">
       {orderedTasks.map((task) => (
-        <TaskRow key={task.id} task={task} showDate={showDates} />
+        <TaskRow key={task.id} task={task} showDate={showDates} wideLayout={wideLayout} />
       ))}
     </div>
   );

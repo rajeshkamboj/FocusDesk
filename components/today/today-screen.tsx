@@ -140,7 +140,7 @@ export function TodayScreen() {
         </aside>
 
         {/* Tasks */}
-        <div className="mt-9 space-y-6 xl:col-start-1 xl:row-start-2">
+        <div className="mt-9 space-y-6 xl:col-span-2 xl:row-start-2">
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Today&apos;s tasks</h2>
             <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
@@ -163,9 +163,9 @@ export function TodayScreen() {
             </div>
           ) : (
             <>
-              {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} /> : null}
-              {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} /> : null}
-              {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} /> : null}
+              {priority.length > 0 ? <TaskSection title="Priority" hint="important" tasks={priority} showDates={false} wideLayout /> : null}
+              {other.length > 0 ? <TaskSection title="Other tasks" hint="normal" tasks={other} showDates={false} wideLayout /> : null}
+              {optional.length > 0 ? <TaskSection title="Optional" hint="less important" tasks={optional} showDates={false} wideLayout /> : null}
               {completedToday.length > 0 ? (
                 <section>
                   <button
@@ -186,7 +186,7 @@ export function TodayScreen() {
                       className={`text-ink-3 transition-transform duration-150 ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
                     />
                   </button>
-                  {showCompleted ? <TaskList tasks={completedToday} showDates={false} /> : null}
+                  {showCompleted ? <TaskList tasks={completedToday} showDates={false} wideLayout /> : null}
                 </section>
               ) : null}
             </>

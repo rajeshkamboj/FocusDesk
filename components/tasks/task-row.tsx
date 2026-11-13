@@ -56,11 +56,14 @@ function TaskCheckbox({ checked, onChange, label }: { checked: boolean; onChange
 export function TaskRow({
   task,
   showDate = true,
+  wideLayout = false,
   selection,
   flashKey,
 }: {
   task: Task;
   showDate?: boolean;
+  /** Use a single-line desktop summary for wide Today task rows. */
+  wideLayout?: boolean;
   /** Present only while the screen's bulk-select mode is on. */
   selection?: RowSelection;
   /**
@@ -148,8 +151,8 @@ export function TaskRow({
 
   /** Title, badges and meta line — the summary of the row, and the click target that toggles the description. */
   const taskSummary = (
-    <>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className={wideLayout ? 'xl:flex xl:items-center xl:gap-4' : undefined}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 xl:min-w-0 xl:flex-1">
         <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight}`}>
           {task.title}
         </span>
@@ -178,9 +181,11 @@ export function TaskRow({
         workingLabel !== null ||
         focusedLabel !== '' ||
         task.tags.length > 0) && (
-        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3">
+        <div className={wideLayout
+          ? 'mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3 xl:mt-0 xl:max-w-[52%] xl:flex-nowrap xl:justify-end'
+          : 'mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3'}>
           {project ? (
-            <span className="font-medium text-ink-2">
+            <span className={wideLayout ? 'max-w-[22rem] truncate font-medium text-ink-2' : 'font-medium text-ink-2'}>
               {project.name}
               {milestone ? <span className="font-normal text-ink-3"> · {milestone.name}</span> : null}
             </span>
@@ -221,7 +226,7 @@ export function TaskRow({
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 
   return (
@@ -230,7 +235,7 @@ export function TaskRow({
         data-task-id={task.id}
         // Focusable only programmatically, so navigation can move focus here.
         tabIndex={-1}
-        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
+        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
       >
         {flashKey !== undefined ? (
           // Keyed by the request so a repeat navigation restarts the animation.
@@ -251,7 +256,7 @@ export function TaskRow({
         />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-1.5">
+          <div className={wideLayout ? "flex items-start gap-1.5 xl:items-center" : "flex items-start gap-1.5"}>
             <div className="min-w-0 flex-1">
               {hasDetails ? (
                 <button

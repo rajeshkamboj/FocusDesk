@@ -92,7 +92,7 @@ export function PriorityCard() {
 
   if (!priority) {
     return (
-      <div className="animate-rise-in rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
+      <div className="animate-rise-in h-full rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
         <div className="flex items-center gap-2 text-accent">
           <IconFlame width={18} height={18} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">Today&apos;s priority</span>
@@ -129,7 +129,7 @@ export function PriorityCard() {
   }
 
   return (
-    <div className="animate-rise-in rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
+    <div className="animate-rise-in h-full rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
       <div className="flex items-center gap-2 text-accent">
         <IconFlame width={18} height={18} />
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">Today&apos;s priority</span>

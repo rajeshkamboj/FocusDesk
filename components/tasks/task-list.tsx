@@ -6,7 +6,7 @@ import { uncompletedTasksFirst } from '@/lib/selectors';
 import { taskHierarchyRows } from '@/lib/task-hierarchy';
 import { TaskRow } from './task-row';
 
-export function TaskList({ tasks, showDates = true, hierarchical = false }: { tasks: Task[]; showDates?: boolean; hierarchical?: boolean }) {
+export function TaskList({ tasks, showDates = true, hierarchical = false, wideLayout = false }: { tasks: Task[]; showDates?: boolean; hierarchical?: boolean; wideLayout?: boolean }) {
   const orderedTasks = uncompletedTasksFirst(tasks);
   if (hierarchical) {
     return (
@@ -17,7 +17,7 @@ export function TaskList({ tasks, showDates = true, hierarchical = false }: { ta
                 The level and immediate-parent label disambiguate capped indentation. */}
             {depth >= 5 ? <p className="px-3 text-[10px] text-ink-3">Task level {depth + 1}</p> : null}
             <div className={depth > 0 ? 'border-l border-line' : undefined}>
-              <TaskRow task={task} showDate={showDates} />
+              <TaskRow task={task} showDate={showDates} wideLayout={wideLayout} />
             </div>
           </div>
         ))}
@@ -40,12 +40,14 @@ export function TaskSection({
   tasks,
   action,
   showDates = true,
+  wideLayout = false,
 }: {
   title: string;
   hint?: string;
   tasks: Task[];
   action?: ReactNode;
   showDates?: boolean;
+  wideLayout?: boolean;
 }) {
   return (
     <section>
@@ -58,7 +60,7 @@ export function TaskSection({
         {action}
       </div>
       {tasks.length > 0 ? (
-        <TaskList tasks={tasks} showDates={showDates} />
+        <TaskList tasks={tasks} showDates={showDates} wideLayout={wideLayout} />
       ) : (
         <p className="px-3 py-1.5 text-[13px] text-ink-3">Nothing here.</p>
       )}

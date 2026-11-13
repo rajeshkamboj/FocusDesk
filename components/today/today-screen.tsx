@@ -113,14 +113,14 @@ export function TodayScreen() {
 
       {/* Priority, well-being, tasks and review all sit on the same master grid.
           On smaller screens the two columns collapse into the natural document flow. */}
-      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_290px] xl:items-start xl:gap-x-8">
+      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_290px] xl:items-stretch xl:gap-x-8">
         {/* Priority */}
         <div className="xl:col-start-1 xl:row-start-1">
           <PriorityCard />
         </div>
 
         {/* Daily well-being — quiet and secondary, never a task list */}
-        <aside className="mt-9 xl:col-start-2 xl:row-start-1 xl:mt-0">
+        <aside className="mt-9 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:h-full">
           <WellbeingCard />
         </aside>
 

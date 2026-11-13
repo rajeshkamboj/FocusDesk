@@ -207,7 +207,7 @@ export function WellbeingCard() {
   return (
     <section
       aria-labelledby="wellbeing-heading"
-      className="rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:px-5 sm:py-4"
+      className="flex h-full items-center rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:px-5 sm:py-4"
     >
       <WellbeingChecklist headingId="wellbeing-heading" desktopStacked />
     </section>

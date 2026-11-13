@@ -118,8 +118,11 @@ export function ExecutionWarnings({
         </span>
       </button>
 
-      {expanded ? (
-        <div id="today-notifications-content" className="space-y-2 px-3 pb-3 sm:px-4 sm:pb-4">
+      <div
+        id="today-notifications-content"
+        hidden={!expanded}
+        className="space-y-2 px-3 pb-3 sm:px-4 sm:pb-4"
+      >
           {approaching.length > 0 ? (
             <div className="grid min-w-0 gap-2 rounded-xl border border-warning/25 bg-warning-soft/40 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="flex min-w-0 items-start gap-3">
@@ -183,8 +186,7 @@ export function ExecutionWarnings({
               </Link>
             </div>
           ) : null}
-        </div>
-      ) : null}
+      </div>
     </section>
   );
 }

@@ -19,22 +19,25 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
   const elapsed = Math.max(0, Math.floor(elapsedSeconds));
   const cycle = Math.floor(elapsed / CYCLE_SECONDS);
   const progress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS;
-  const secondsUntilFlip = CYCLE_SECONDS - (elapsed % CYCLE_SECONDS);
   const isInverted = cycle % 2 === 1;
+  // In odd cycles the glass is upside down, so the previously full lower
+  // chamber becomes the new upper chamber and drains from there.
+  const sandProgress = isInverted ? 1 - progress : progress;
+  const secondsUntilFlip = CYCLE_SECONDS - (elapsed % CYCLE_SECONDS);
 
   // The sand is drawn in one orientation. Flipping the glass also turns the
   // accumulated lower chamber into the full upper chamber for the next cycle.
-  const topSandY = 31 + progress * 106;
-  const topSandHeight = 111 - progress * 106;
-  const bottomSandY = 250 - progress * 105;
-  const bottomSandHeight = progress * 105;
+  const topSandY = 31 + sandProgress * 106;
+  const topSandHeight = 111 - sandProgress * 106;
+  const bottomSandY = 250 - sandProgress * 105;
+  const bottomSandHeight = sandProgress * 105;
 
   return (
     <section
       className="mt-7 flex items-center justify-center gap-5 sm:gap-7"
       aria-label={`Hourglass cycle ${cycle + 1}. Next flip in ${formatCountdown(secondsUntilFlip)}`}
     >
-      <div className="hourglass-glow relative flex h-[172px] w-[116px] items-center justify-center sm:h-[190px] sm:w-[130px]">
+      <div className="relative flex h-[172px] w-[116px] items-center justify-center sm:h-[190px] sm:w-[130px]">
         <svg
           viewBox="0 0 200 280"
           role="img"
@@ -100,8 +103,8 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
             <path d={`M45 ${bottomSandY + 2} Q100 ${bottomSandY - 5} 155 ${bottomSandY + 2}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".58" />
           </g>
 
-          <g opacity={progress > 0.015 && progress < 0.99 ? 1 : 0}>
-            <path d="M100 132 L100 202" stroke="#f8d47f" strokeWidth="2.2" strokeLinecap="round" strokeDasharray="2 7" className="animate-pulse" />
+          <g opacity={sandProgress > 0.015 && sandProgress < 0.99 ? 1 : 0}>
+            <path d="M100 132 L100 202" stroke="#f8d47f" strokeWidth="2.2" strokeLinecap="round" strokeDasharray="2 7" className="animate-pulse motion-reduce:animate-none" />
             <circle cx="100" cy="146" r="2.1" fill="#fff0bd" />
             <circle cx="100" cy="163" r="1.7" fill="#f8cf70" />
             <circle cx="100" cy="181" r="1.5" fill="#e6a83e" />

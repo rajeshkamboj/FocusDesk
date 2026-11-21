@@ -4,6 +4,7 @@ import { useData } from '@/components/data/data-provider';
 import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
 import { IconCheck, IconPause, IconPlay, IconX } from '@/components/ui/icons';
+import { FocusHourglass } from '@/components/layout/focus-hourglass';
 import { formatStopwatch } from '@/lib/dates';
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { useNow } from '@/components/tasks/use-now';
@@ -49,7 +50,7 @@ export function FocusMode() {
   const toggleLabel = running ? 'Pause' : paused ? 'Resume' : 'Start';
 
   return (
-    <div className="fixed inset-0 z-[80] flex animate-fade-in flex-col items-center justify-center bg-background">
+    <div className="fixed inset-0 z-[80] flex animate-fade-in flex-col items-center justify-center overflow-y-auto bg-background px-4 py-8">
       <button
         onClick={stopFocus}
         aria-label="Exit focus mode"
@@ -58,7 +59,7 @@ export function FocusMode() {
         <IconX width={22} height={22} />
       </button>
 
-      <div className="flex w-full max-w-xl flex-col items-center px-8 text-center">
+      <div className="flex w-full max-w-xl flex-col items-center px-4 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">
           {focusTarget.type === 'daily-priority' ? "Today's priority" : 'Focusing on'}
         </p>
@@ -71,7 +72,9 @@ export function FocusMode() {
           {formatStopwatch(elapsed)}
         </div>
 
-        <div className="mt-12 flex items-center gap-3">
+        <FocusHourglass elapsedSeconds={elapsed} />
+
+        <div className="mt-8 flex items-center gap-3">
           <Button
             variant="secondary"
             size="lg"

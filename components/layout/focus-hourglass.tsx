@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 
 const CYCLE_SECONDS = 30 * 60;
 const CHAMBER_TOP = 27;
@@ -26,8 +26,25 @@ function formatCountdown(totalSeconds: number): string {
  *   chamber fills from its rim toward the neck. The 3D flip maps those local
  *   chambers to the correct physical top and bottom on screen.
  */
-export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
+export function FocusHourglass({ elapsedSeconds, isRunning }: { elapsedSeconds: number; isRunning: boolean }) {
   const gradientId = useId().replace(/:/g, '');
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Pause both SVG's native SMIL grain/dash animations and the CSS 3D flip
+  // transition. Resuming continues each animation from its exact paused time.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const animations = svg.getAnimations({ subtree: true });
+    if (isRunning) {
+      svg.unpauseAnimations();
+      animations.forEach((animation) => animation.play());
+    } else {
+      svg.pauseAnimations();
+      animations.forEach((animation) => animation.pause());
+    }
+  }, [isRunning]);
   const elapsed = Math.max(0, Math.floor(elapsedSeconds));
   const cycleIndex = Math.floor(elapsed / CYCLE_SECONDS);
   const progress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS;

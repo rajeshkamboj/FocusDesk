@@ -72,7 +72,7 @@ export function FocusMode() {
           {formatStopwatch(elapsed)}
         </div>
 
-        <FocusHourglass elapsedSeconds={elapsed} />
+        <FocusHourglass elapsedSeconds={elapsed} isRunning={running} />
 
         <div className="mt-8 flex items-center gap-3">
           <Button

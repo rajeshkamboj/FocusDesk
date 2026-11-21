@@ -83,6 +83,7 @@ export function FocusHourglass({ elapsedSeconds, isRunning }: { elapsedSeconds: 
         style={{ perspective: '900px' }}
       >
         <svg
+          ref={svgRef}
           viewBox="0 0 200 280"
           role="img"
           aria-label="Glass hourglass with flowing golden sand"

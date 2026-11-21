@@ -47,9 +47,13 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
   const topSurfaceY = inverted ? topSandY + topSandHeight : topSandY;
   const bottomSurfaceY = bottomSandY;
   const secondsUntilFlip = CYCLE_SECONDS - (elapsed % CYCLE_SECONDS);
+  // The stream must always begin at the physical upper pile's neck and
+  // end at the physical lower pile's current surface. When the glass is
+  // inverted, local SVG coordinates run opposite to screen-space gravity.
+  // Therefore reverse the local path and terminate it at the growing pile.
   const flowPath = inverted
-    ? `M100 ${CHAMBER_BOTTOM - 5} L100 ${NECK + 5}`
-    : `M100 ${CHAMBER_TOP + 5} L100 ${NECK + 5}`;
+    ? `M100 ${NECK + 5} L100 ${topSandY + topSandHeight}`
+    : `M100 ${NECK - 5} L100 ${bottomSandY}`;
   const isFlowing = progress > 0.003 && progress < 0.997;
 
   return (

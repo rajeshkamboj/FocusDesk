@@ -28,8 +28,8 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
   const bottomFill = 1 - topFill;
   const topSandHeight = 113 * topFill;
   // Keep the remaining sand at the narrow neck, not stuck to the upper rim.
-  // As the chamber empties, its horizontal sand surface moves upward from
-  // the neck toward the top (in screen coordinates, y decreases when fuller).
+  // As the chamber empties, its horizontal sand surface moves down toward
+  // the neck; it rises toward the rim again as the chamber fills.
   const topSandY = 140 - topSandHeight;
   const bottomSandHeight = 113 * bottomFill;
   const bottomSandY = 253 - bottomSandHeight;

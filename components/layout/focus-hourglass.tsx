@@ -20,17 +20,19 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
   const cycle = Math.floor(elapsed / CYCLE_SECONDS);
   const progress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS;
   const isInverted = cycle % 2 === 1;
-  // In odd cycles the glass is upside down, so the previously full lower
-  // chamber becomes the new upper chamber and drains from there.
-  const sandProgress = isInverted ? 1 - progress : progress;
+  // At the start of each half-hour, the upper chamber is full and the
+  // lower chamber is empty in the glass's current orientation. During the
+  // cycle, sand transfers continuously. On alternate cycles the SVG is
+  // inverted, so the local flow direction and chamber levels reverse.
+  const topFill = isInverted ? progress : 1 - progress;
+  const bottomFill = 1 - topFill;
+  const topSandY = 27;
+  const topSandHeight = 113 * topFill;
+  const bottomSandHeight = 113 * bottomFill;
+  const bottomSandY = 253 - bottomSandHeight;
   const secondsUntilFlip = CYCLE_SECONDS - (elapsed % CYCLE_SECONDS);
-
-  // The sand is drawn in one orientation. Flipping the glass also turns the
-  // accumulated lower chamber into the full upper chamber for the next cycle.
-  const topSandY = 31 + sandProgress * 106;
-  const topSandHeight = 111 - sandProgress * 106;
-  const bottomSandY = 250 - sandProgress * 105;
-  const bottomSandHeight = sandProgress * 105;
+  const flowPath = isInverted ? 'M100 203 L100 136' : 'M100 136 L100 203';
+  const isFlowing = progress > 0.005 && progress < 0.995;
 
   return (
     <section
@@ -96,19 +98,38 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
 
           <g clipPath={`url(#${gradientId}-top)`}>
             <rect x="30" y={topSandY} width="140" height={topSandHeight} fill={`url(#${gradientId}-sand)`} />
-            <path d={`M44 ${topSandY + 2} Q100 ${topSandY - 5} 156 ${topSandY + 2}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".72" />
+            <path d={`M44 ${topSandY + topSandHeight} Q100 ${topSandY + topSandHeight + 5} 156 ${topSandY + topSandHeight}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".72" />
           </g>
           <g clipPath={`url(#${gradientId}-bottom)`}>
             <rect x="30" y={bottomSandY} width="140" height={bottomSandHeight + 4} fill={`url(#${gradientId}-sand)`} />
-            <path d={`M45 ${bottomSandY + 2} Q100 ${bottomSandY - 5} 155 ${bottomSandY + 2}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".58" />
+            <path d={`M45 ${bottomSandY} Q100 ${bottomSandY - 5} 155 ${bottomSandY}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".58" />
           </g>
 
-          <g opacity={sandProgress > 0.015 && sandProgress < 0.99 ? 1 : 0}>
-            <path d="M100 132 L100 202" stroke="#f8d47f" strokeWidth="2.2" strokeLinecap="round" strokeDasharray="2 7" className="animate-pulse motion-reduce:animate-none" />
-            <circle cx="100" cy="146" r="2.1" fill="#fff0bd" />
-            <circle cx="100" cy="163" r="1.7" fill="#f8cf70" />
-            <circle cx="100" cy="181" r="1.5" fill="#e6a83e" />
-          </g>
+          {isFlowing && (
+            <g>
+              <path
+                d={flowPath}
+                fill="none"
+                stroke="#f8d47f"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeDasharray="2 5"
+                opacity=".9"
+              >
+                <animate attributeName="stroke-dashoffset" values="0;-14" dur=".42s" repeatCount="indefinite" />
+              </path>
+              {[0, 1, 2].map((grain) => (
+                <circle key={grain} r={grain === 1 ? 1.8 : 1.35} fill={grain === 1 ? "#fff0bd" : "#e6a83e"}>
+                  <animateMotion
+                    path={flowPath}
+                    dur="0.72s"
+                    begin={`-${grain * 0.24}s`}
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              ))}
+            </g>
+          )}
 
           <path d="M30 22 Q100 14 170 22 L170 30 Q100 37 30 30 Z" fill={`url(#${gradientId}-rim)`} stroke="#f5d9aa" strokeOpacity=".45" />
           <path d="M30 250 Q100 257 170 250 L170 258 Q100 266 30 258 Z" fill={`url(#${gradientId}-rim)`} stroke="#f5d9aa" strokeOpacity=".45" />

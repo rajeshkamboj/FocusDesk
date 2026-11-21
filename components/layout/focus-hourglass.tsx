@@ -26,8 +26,11 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
   // inverted, so the local flow direction and chamber levels reverse.
   const topFill = isInverted ? progress : 1 - progress;
   const bottomFill = 1 - topFill;
-  const topSandY = 27;
   const topSandHeight = 113 * topFill;
+  // Keep the remaining sand at the narrow neck, not stuck to the upper rim.
+  // As the chamber empties, its horizontal sand surface moves upward from
+  // the neck toward the top (in screen coordinates, y decreases when fuller).
+  const topSandY = 140 - topSandHeight;
   const bottomSandHeight = 113 * bottomFill;
   const bottomSandY = 253 - bottomSandHeight;
   const secondsUntilFlip = CYCLE_SECONDS - (elapsed % CYCLE_SECONDS);
@@ -98,7 +101,7 @@ export function FocusHourglass({ elapsedSeconds }: { elapsedSeconds: number }) {
 
           <g clipPath={`url(#${gradientId}-top)`}>
             <rect x="30" y={topSandY} width="140" height={topSandHeight} fill={`url(#${gradientId}-sand)`} />
-            <path d={`M44 ${topSandY + topSandHeight} Q100 ${topSandY + topSandHeight + 5} 156 ${topSandY + topSandHeight}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".72" />
+            <path d={`M44 ${topSandY} Q100 ${topSandY + 5} 156 ${topSandY}`} fill="none" stroke="#fff0bd" strokeWidth="2" opacity=".72" />
           </g>
           <g clipPath={`url(#${gradientId}-bottom)`}>
             <rect x="30" y={bottomSandY} width="140" height={bottomSandHeight + 4} fill={`url(#${gradientId}-sand)`} />

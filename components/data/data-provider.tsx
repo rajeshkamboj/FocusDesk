@@ -1344,6 +1344,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       updateDailyPriority: async (id, patch) => {
+        const before = dataRef.current.dailyPriorities.find((p) => p.id === id);
+        if (!before) return;
         const updated = await repo().dailyPriorities.update(id, patch);
         setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
         if (patch.title !== undefined) {

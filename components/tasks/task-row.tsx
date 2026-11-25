@@ -237,7 +237,7 @@ export function TaskRow({
         data-task-id={task.id}
         // Focusable only programmatically, so navigation can move focus here.
         tabIndex={-1}
-        className={`group relative scroll-my-24 items-start rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${compactMobile ? 'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1.5 sm:flex sm:gap-3' : 'flex gap-3'} ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
+        className={`group relative scroll-my-24 items-start rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${compactMobile ? 'grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 sm:flex sm:gap-3' : 'flex gap-3'} ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
       >
         {flashKey !== undefined ? (
           // Keyed by the request so a repeat navigation restarts the animation.
@@ -293,23 +293,11 @@ export function TaskRow({
               ) : null}
             </div>
 
-            <button
-              type="button"
-              aria-label={subtasksToggleLabel}
-              aria-expanded={subtasksOpen}
-              title={subtasks.length > 0 ? `${completedSubtasks} of ${subtasks.length} subtasks completed` : 'Add subtask'}
-              onClick={() => setSubtasksOpen((isOpen) => !isOpen)}
-              className={`mt-[-2px] inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] font-medium tabular-nums text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${compactMobile ? "max-sm:col-start-2 max-sm:row-start-2 max-sm:mt-0 max-sm:h-10 max-sm:min-w-10 max-sm:justify-self-end max-sm:justify-center max-sm:border max-sm:border-line" : ""}`}
-            >
-              {subtasks.length > 0 ? <span>{completedSubtasks}/{subtasks.length}</span> : null}
-              {subtasks.length === 0 && !subtasksOpen ? <IconPlus width={15} height={15} /> : (
-                <IconChevronDown width={13} height={13} className={`transition-transform ${subtasksOpen ? 'rotate-180' : ''}`} />
-              )}
-            </button>
+
           </div>
 
           {subtasksOpen ? (
-            <div className={compactMobile ? "max-sm:col-span-4 max-sm:col-start-1 max-sm:row-start-3 sm:contents" : "contents"}>
+            <div className={compactMobile ? "max-sm:col-span-3 max-sm:col-start-1 max-sm:row-start-2 sm:contents" : "contents"}>
             <TaskSubtasks
               parentTaskId={task.id}
               parentCompleted={done}
@@ -320,75 +308,7 @@ export function TaskRow({
           ) : null}
         </div>
 
-        {!done && !cancelled ? (
-          <div className={`flex shrink-0 items-center gap-1.5 ${compactMobile ? "max-sm:col-start-3 max-sm:row-start-2" : ""}`}>
-            {running ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={timerBusy}
-                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
-                  aria-label="Pause timer"
-                  onClick={() => void runTimerAction(() => actions.pauseTask(task.id))}
-                >
-                  <IconPause width={13} height={13} />
-                  <span className="hidden sm:inline">Pause</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="soft"
-                  disabled={timerBusy}
-                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
-                  aria-label="Finish task"
-                  onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
-                >
-                  <IconCheck width={13} height={13} />
-                  <span className="hidden sm:inline">Finish</span>
-                </Button>
-              </>
-            ) : paused ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={timerBusy}
-                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
-                  aria-label="Resume timer"
-                  onClick={() => void runTimerAction(() => actions.resumeTask(task.id))}
-                >
-                  <IconPlay width={13} height={13} />
-                  <span className="hidden sm:inline">Resume</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="soft"
-                  disabled={timerBusy}
-                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
-                  aria-label="Finish task"
-                  onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
-                >
-                  <IconCheck width={13} height={13} />
-                  <span className="hidden sm:inline">Finish</span>
-                </Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={timerBusy}
-                className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2 max-sm:border-accent/50 max-sm:bg-accent-soft max-sm:text-accent" : ""}
-                aria-label="Start task"
-                onClick={startTimer}
-              >
-                <IconPlay width={13} height={13} />
-                <span className="hidden sm:inline">Start</span>
-              </Button>
-            )}
-          </div>
-        ) : null}
-
-        <div className={compactMobile ? "max-sm:col-start-4 max-sm:row-start-2 sm:contents" : "contents"}>
+        <div className={compactMobile ? "max-sm:col-start-3 max-sm:row-start-1 max-sm:self-start sm:contents" : "contents"}>
         <Menu
           portal
           touch
@@ -406,6 +326,7 @@ export function TaskRow({
                 toggle();
               }}
               onPointerDown={(event) => event.stopPropagation()}
+              onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); toggle(); }}
               aria-label="Task actions"
               aria-haspopup="menu"
               aria-expanded={open}
@@ -426,22 +347,33 @@ export function TaskRow({
 
               {!done && !cancelled ? (
                 <>
-                  {task.status !== 'in_progress' ? (
-                    <MenuItem
-                      onClick={() => {
-                        void actions.startTask(task.id);
-                        close();
-                      }}
-                    >
-                      <IconPlay width={14} height={14} /> Start (in progress)
+                  {running ? (
+                    <>
+                      <MenuItem onClick={() => { void actions.pauseTask(task.id); close(); }}>
+                        <IconPause width={14} height={14} /> Pause timer
+                      </MenuItem>
+                      <MenuItem onClick={() => { void actions.finishTask(task.id); close(); }}>
+                        <IconCheck width={14} height={14} /> Finish timer
+                      </MenuItem>
+                    </>
+                  ) : paused ? (
+                    <>
+                      <MenuItem onClick={() => { void actions.resumeTask(task.id); close(); }}>
+                        <IconPlay width={14} height={14} /> Resume timer
+                      </MenuItem>
+                      <MenuItem onClick={() => { void actions.finishTask(task.id); close(); }}>
+                        <IconCheck width={14} height={14} /> Finish timer
+                      </MenuItem>
+                    </>
+                  ) : (
+                    <MenuItem onClick={() => { void actions.startTask(task.id); close(); }}>
+                      <IconPlay width={14} height={14} /> Start timer
                     </MenuItem>
-                  ) : null}
-                  <MenuItem
-                    onClick={() => {
-                      void actions.completeTask(task.id);
-                      close();
-                    }}
-                  >
+                  )}
+                  <MenuItem onClick={() => { setSubtasksOpen(true); close(); }}>
+                    <IconPlus width={14} height={14} /> Add subtask{(subtasks.length > 0 || completedSubtasks > 0) ? ` · ${completedSubtasks}/${subtasks.length} complete` : ''}
+                  </MenuItem>
+                  <MenuItem onClick={() => { void actions.completeTask(task.id); close(); }}>
                     Mark complete
                   </MenuItem>
                 </>

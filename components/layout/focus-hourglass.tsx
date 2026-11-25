@@ -75,11 +75,11 @@ export function FocusHourglass({ elapsedSeconds, isRunning }: { elapsedSeconds: 
 
   return (
     <section
-      className="mt-7 flex items-center justify-center gap-5 sm:gap-7"
+      className="mt-3 flex min-w-0 items-center justify-center gap-3 sm:mt-7 sm:gap-7"
       aria-label={`Hourglass cycle ${cycleIndex + 1}. Next flip in ${formatCountdown(secondsUntilFlip)}`}
     >
       <div
-        className="relative flex h-[172px] w-[116px] items-center justify-center sm:h-[190px] sm:w-[130px]"
+        className="relative flex h-[118px] w-[80px] shrink-0 items-center justify-center sm:h-[190px] sm:w-[130px]"
         style={{ perspective: '900px' }}
       >
         <svg
@@ -235,16 +235,16 @@ export function FocusHourglass({ elapsedSeconds, isRunning }: { elapsedSeconds: 
         </svg>
       </div>
 
-      <div className="min-w-[112px] text-left">
+      <div className="min-w-0 max-w-[160px] flex-1 text-left sm:min-w-[112px] sm:flex-none">
         <p className="text-xs font-medium text-ink-3">Hourglass cycle</p>
         <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-[#f4c66e]">
           {cycleIndex + 1}
         </p>
-        <p className="mt-4 text-xs text-ink-3">Next flip in</p>
-        <p className="mt-1 rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-lg font-medium tabular-nums text-ink">
+        <p className="mt-2 text-xs text-ink-3 sm:mt-4">Next flip in</p>
+        <p className="mt-1 rounded-lg border border-line bg-surface-2 px-2 py-1 font-mono text-lg sm:px-3 sm:py-2 font-medium tabular-nums text-ink">
           {formatCountdown(secondsUntilFlip)}
         </p>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+        <div className="mt-2 h-1.5 w-full sm:mt-3 overflow-hidden rounded-full bg-surface-3">
           <div
             className="h-full rounded-full bg-gradient-to-r from-[#c98228] via-[#f6bf55] to-[#ffe7a0] transition-[width] duration-500"
             style={{ width: `${progress * 100}%` }}

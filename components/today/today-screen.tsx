@@ -125,10 +125,10 @@ export function TodayScreen() {
         </aside>
 
         {/* Tasks */}
-        <div className="mt-9 space-y-6 xl:col-span-2 xl:row-start-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Today&apos;s tasks</h2>
-            <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
+        <div className="mt-9 space-y-4 sm:space-y-6 xl:col-span-2 xl:row-start-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold tracking-tight text-ink sm:text-[11px] sm:uppercase sm:tracking-[0.14em] sm:text-ink-3">Today&apos;s tasks</h2>
+            <Button variant="secondary" size="sm" className="max-sm:min-h-10 max-sm:shrink-0" onClick={() => setAddOpen(true)}>
               <IconPlus width={15} height={15} />
               Add Task
             </Button>

@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
-import { IconCheck, IconFlame, IconPencil, IconPlay } from '@/components/ui/icons';
+import { IconCheck, IconChevronDown, IconFlame, IconPencil, IconPlay } from '@/components/ui/icons';
 import { formatFocusedTime, formatStopwatch, todayISO } from '@/lib/dates';
 import { dailyPriorityTimerTaskId } from '@/lib/selectors';
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
@@ -103,10 +103,10 @@ export function PriorityCard() {
 
       <form className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:gap-2.5" onSubmit={addManualPriority}>
         <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Enter today's priority" className={`${PRIORITY_INPUT_CLASS} text-base sm:flex-1 sm:text-[15px]`} />
-        <div className="flex shrink-0 items-stretch gap-0">
+        <div className="flex shrink-0 items-stretch gap-3">
           <div className="relative">
             <Button type="button" variant="secondary" size="lg" onClick={() => setPickerOpen((v) => !v)} aria-label="Choose existing tasks" aria-expanded={pickerOpen}>
-              <span className="text-base leading-none">⌄</span>
+              <IconChevronDown width={16} height={16} />
             </Button>
             {pickerOpen ? (
               <div className="absolute left-0 top-full z-50 mt-2 w-[min(88vw,390px)] rounded-xl border border-line bg-surface p-3 shadow-xl sm:left-auto sm:right-0">

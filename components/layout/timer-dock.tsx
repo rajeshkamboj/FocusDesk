@@ -45,7 +45,7 @@ function initialCollapsed(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches;
 }
 
-export function TimerDock() {
+export function TimerDock({ inlineMobile = false }: { inlineMobile?: boolean }) {
   const { ready, data, actions } = useData();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -111,7 +111,7 @@ export function TimerDock() {
   return (
     <>
       {showDock ? (
-        <div className="pointer-events-none fixed right-3 top-3 z-50 sm:right-4 sm:top-4 xl:right-6 xl:bottom-6 xl:top-auto print:hidden">
+        <div className={`pointer-events-none z-50 print:hidden ${inlineMobile ? "sticky top-0 flex justify-end bg-background px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:fixed sm:right-4 sm:top-4 sm:bg-transparent sm:p-0 xl:right-6 xl:bottom-6 xl:top-auto" : "fixed right-3 top-3 sm:right-4 sm:top-4 xl:right-6 xl:bottom-6 xl:top-auto"}`}>
           {collapsed ? (
             <button
               onClick={() => setCollapsedPref(false)}

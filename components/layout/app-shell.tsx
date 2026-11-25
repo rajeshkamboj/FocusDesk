@@ -44,6 +44,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh">
       <Sidebar />
       <MobileNav />
+      <TimerDock inlineMobile={pathname === "/today" || pathname === "/"} />
       {/*
         Bottom clearance derived from the bar it has to clear, not guessed.
         MobileNav is `h-16` (4rem) plus `pb-[env(safe-area-inset-bottom)]`, so
@@ -62,7 +63,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         )}
       </main>
       <QuickAdd />
-      <TimerDock />
       <FocusMode />
       <Toaster />
       <RegisterSW />

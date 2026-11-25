@@ -288,6 +288,7 @@ const dailyPriorityMap = {
     completed: d.completed,
     completed_at: d.completedAt ?? null,
     due_date: d.dueDate ?? null,
+    task_id: d.taskId ?? null,
     postponement_count: d.postponementCount ?? 0,
   }),
   fromRow: (r: Row): DailyPriority => ({
@@ -297,6 +298,7 @@ const dailyPriorityMap = {
     completed: bool(r.completed),
     completedAt: str(r.completed_at),
     dueDate: str(r.due_date),
+    taskId: str(r.task_id),
     postponementCount: num(r.postponement_count) ?? 0,
   }),
 };
@@ -811,6 +813,7 @@ export class SupabaseRepository implements AppRepository {
       date: input.date,
       title: input.title.trim(),
       completed: false,
+      taskId: input.taskId,
     }));
 
     this.weeklyPriorities = new RestCollection(this.http, 'weekly_priorities', weeklyPriorityMap, (input) => ({

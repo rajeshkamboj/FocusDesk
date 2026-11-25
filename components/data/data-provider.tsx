@@ -137,6 +137,7 @@ export interface DataActions {
 
   /* Daily priorities */
   setDailyPriority(title: string, date?: ISODate): Promise<DailyPriority>;
+  addDailyPriorityTasks(taskIds: string[], date?: ISODate): Promise<DailyPriority[]>;
   /** Start or resume the normal Task timer associated with a daily priority. */
   startDailyPriorityTimer(id: string): Promise<Task | null>;
   updateDailyPriority(id: string, patch: Partial<DailyPriority>): Promise<void>;
@@ -1276,16 +1277,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setDailyPriority: async (title, date) => {
         const day = date ?? todayISO();
-        const existing = dataRef.current.dailyPriorities.find((p) => p.date === day);
-        if (existing) {
-          const updated = await repo().dailyPriorities.update(existing.id, { title: title.trim() });
-          setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
-          const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(existing.id));
-          if (timerTask) await applyTaskPatch(timerTask.id, { title: updated.title }, 'Could not update the priority timer task');
-          return updated;
-        }
         const created = await repo().dailyPriorities.create({ date: day, title: title.trim() });
         setData((d) => ({ ...d, dailyPriorities: [...d.dailyPriorities, created] }));
+        return created;
+      },
+
+      addDailyPriorityTasks: async (taskIds, date) => {
+        const day = date ?? todayISO();
+        const linkedIds = new Set(dataRef.current.dailyPriorities.filter((p) => p.date === day && p.taskId).map((p) => p.taskId));
+        const selected = taskIds.map((id) => dataRef.current.tasks.find((task) => task.id === id))
+          .filter((task): task is Task => Boolean(task && !task.archived && task.status !== 'completed' && task.status !== 'cancelled' && !linkedIds.has(task.id)));
+        const created: DailyPriority[] = [];
+        for (const task of selected) created.push(await repo().dailyPriorities.create({ date: day, title: task.title, taskId: task.id }));
+        if (created.length) setData((d) => ({ ...d, dailyPriorities: [...d.dailyPriorities, ...created] }));
         return created;
       },
 
@@ -1300,7 +1304,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // DailyPriority is its own planning record, not a Task. Give it one
           // stable, app-owned Task row so its focus session uses the exact same
           // startedAt/pausedAt/actualDurationSeconds lifecycle as every task.
-          const taskId = dailyPriorityTimerTaskId(priority.id);
+          const taskId = priority.taskId ?? dailyPriorityTimerTaskId(priority.id);
           // Exactly the same rule as a task row's Start button: none. The
           // priority's timer is an ordinary task timer, so it starts next to
           // whatever else is already running and stops nothing.
@@ -1313,7 +1317,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               status: 'created',
             });
             addTaskState(task);
-          } else if (task.title !== priority.title) {
+          } else if (!priority.taskId && task.title !== priority.title) {
             const renamed = await applyTaskPatch(task.id, { title: priority.title }, 'Could not update the priority timer task');
             if (!renamed) return null;
             task = renamed;
@@ -1340,10 +1344,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       updateDailyPriority: async (id, patch) => {
+        const before = dataRef.current.dailyPriorities.find((p) => p.id === id);
+        if (!before) return;
         const updated = await repo().dailyPriorities.update(id, patch);
         setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
         if (patch.title !== undefined) {
-          const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
+          const timerTask = before.taskId ? undefined : dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
           if (timerTask && timerTask.title !== updated.title) {
             await applyTaskPatch(timerTask.id, { title: updated.title }, 'Could not update the priority timer task');
           }
@@ -1355,7 +1361,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!before) return;
         const completed = !before.completed;
         const completedAt = completed ? new Date().toISOString() : undefined;
-        const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
+        const timerTask = dataRef.current.tasks.find((t) => t.id === (before.taskId ?? dailyPriorityTimerTaskId(id)));
 
         // The priority itself remains in daily_priorities, but any elapsed time
         // lives only on its associated normal Task record. Keep both lifecycle

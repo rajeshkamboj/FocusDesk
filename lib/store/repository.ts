@@ -62,6 +62,7 @@ export interface EntityRepository<T, C> {
 export interface DailyPriorityInput {
   date: string;
   title: string;
+  taskId?: string;
 }
 
 export interface WeeklyPriorityInput {

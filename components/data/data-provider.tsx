@@ -1317,7 +1317,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               status: 'created',
             });
             addTaskState(task);
-          } else if (task.title !== priority.title) {
+          } else if (!priority.taskId && task.title !== priority.title) {
             const renamed = await applyTaskPatch(task.id, { title: priority.title }, 'Could not update the priority timer task');
             if (!renamed) return null;
             task = renamed;
@@ -1347,7 +1347,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const updated = await repo().dailyPriorities.update(id, patch);
         setData((d) => ({ ...d, dailyPriorities: d.dailyPriorities.map((p) => (p.id === updated.id ? updated : p)) }));
         if (patch.title !== undefined) {
-          const timerTask = dataRef.current.tasks.find((t) => t.id === (before.taskId ?? dailyPriorityTimerTaskId(id)));
+          const timerTask = before.taskId ? undefined : dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
           if (timerTask && timerTask.title !== updated.title) {
             await applyTaskPatch(timerTask.id, { title: updated.title }, 'Could not update the priority timer task');
           }
@@ -1359,7 +1359,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!before) return;
         const completed = !before.completed;
         const completedAt = completed ? new Date().toISOString() : undefined;
-        const timerTask = dataRef.current.tasks.find((t) => t.id === dailyPriorityTimerTaskId(id));
+        const timerTask = dataRef.current.tasks.find((t) => t.id === (before.taskId ?? dailyPriorityTimerTaskId(id)));
 
         // The priority itself remains in daily_priorities, but any elapsed time
         // lives only on its associated normal Task record. Keep both lifecycle

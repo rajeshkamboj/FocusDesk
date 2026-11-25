@@ -5,6 +5,7 @@ import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
 import { IconCheck, IconPause, IconPlay, IconX } from '@/components/ui/icons';
 import { FocusHourglass } from '@/components/layout/focus-hourglass';
+import { CopyTaskContextIconButton } from '@/components/tasks/copy-task-context';
 import { formatStopwatch } from '@/lib/dates';
 import { elapsedActiveSeconds, isTimerPaused, isTimerRunning } from '@/lib/timer';
 import { useNow } from '@/components/tasks/use-now';
@@ -70,17 +71,32 @@ export function FocusMode() {
         </h1>
 
         {(project || timerTask?.description) ? (
-          <div className="mt-4 w-full max-w-lg space-y-2 rounded-xl border border-line bg-surface/60 px-4 py-3 text-left">
-            {project ? (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-3">Project</p>
-                <p className="mt-1 text-sm font-semibold text-accent">{project.name}</p>
-              </div>
-            ) : null}
-            {timerTask?.description ? (
-              <div>
-                {project ? <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-3">Task description</p> : null}
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{timerTask.description}</p>
+          <div className="relative mt-5 w-full max-w-2xl rounded-2xl border border-accent/50 bg-surface/70 p-3 text-left shadow-[0_0_28px_rgba(59,130,246,0.08)] sm:p-4">
+            <div className="grid gap-3 sm:grid-cols-[minmax(150px,0.72fr)_minmax(0,1.6fr)] sm:gap-4">
+              {project ? (
+                <div className="flex min-h-[116px] flex-col justify-center rounded-xl bg-accent-soft/60 px-4 py-3">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="mb-3 h-7 w-7 text-accent">
+                    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+                    <path d="m3 12 9 5 9-5M3 16l9 5 9-5" />
+                  </svg>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Project</p>
+                  <p className="mt-1 text-sm font-semibold leading-snug text-ink">{project.name}</p>
+                </div>
+              ) : null}
+              {timerTask?.description ? (
+                <div className="min-w-0 py-1 sm:border-l sm:border-line sm:pl-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-3">Task details</p>
+                  <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-2">{timerTask.description}</p>
+                </div>
+              ) : project ? (
+                <div className="flex items-center py-2 sm:border-l sm:border-line sm:pl-4">
+                  <p className="text-sm text-ink-3">No task description added.</p>
+                </div>
+              ) : null}
+            </div>
+            {timerTask ? (
+              <div className="mt-3 flex justify-end border-t border-line/70 pt-3">
+                <CopyTaskContextIconButton taskId={timerTask.id} />
               </div>
             ) : null}
           </div>

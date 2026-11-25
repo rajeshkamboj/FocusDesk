@@ -22,6 +22,7 @@ export function FocusMode() {
       : focusTarget.timerTaskId
     : undefined;
   const timerTask = timerTaskId ? data.tasks.find((task) => task.id === timerTaskId) : undefined;
+  const project = timerTask?.projectId ? data.projects.find((item) => item.id === timerTask.projectId) : undefined;
   const running = timerTask ? isTimerRunning(timerTask) : false;
   const paused = timerTask ? isTimerPaused(timerTask) : false;
   const now = useNow(running);
@@ -67,6 +68,23 @@ export function FocusMode() {
         <h1 className="mt-6 text-balance text-3xl font-semibold leading-snug tracking-tight text-ink sm:text-4xl">
           {focusTarget.title}
         </h1>
+
+        {(project || timerTask?.description) ? (
+          <div className="mt-4 w-full max-w-lg space-y-2 rounded-xl border border-line bg-surface/60 px-4 py-3 text-left">
+            {project ? (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-3">Project</p>
+                <p className="mt-1 text-sm font-semibold text-accent">{project.name}</p>
+              </div>
+            ) : null}
+            {timerTask?.description ? (
+              <div>
+                {project ? <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-3">Task description</p> : null}
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{timerTask.description}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-10 font-mono text-6xl font-light tabular-nums tracking-tight text-ink-2 sm:text-7xl">
           {formatStopwatch(elapsed)}

@@ -260,6 +260,8 @@ export interface DailyPriority {
   completedAt?: ISODateTime;
   /** Optional deadline for the priority, separate from its day. */
   dueDate?: ISODate;
+  /** Existing task linked into Today's Priority; the task remains the source of truth. */
+  taskId?: ID;
   /** How many times the priority has been moved to another day. */
   postponementCount?: number;
 }

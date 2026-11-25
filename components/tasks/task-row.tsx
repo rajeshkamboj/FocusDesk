@@ -12,7 +12,6 @@ import { Modal } from '@/components/ui/modal';
 import {
   IconArchive,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
   IconClock,
   IconFlag,
@@ -112,9 +111,6 @@ export function TaskRow({
   const hasDetails = hasDescription || focusedLabel !== '';
   const subtasks = subtasksForTask(data.subtasks, task.id);
   const completedSubtasks = subtasks.filter((subtask) => subtask.completed).length;
-  const subtasksToggleLabel = subtasksOpen
-    ? subtasks.length > 0 ? `Collapse subtasks: ${completedSubtasks}/${subtasks.length} complete` : 'Collapse subtasks'
-    : subtasks.length > 0 ? `Expand subtasks: ${completedSubtasks}/${subtasks.length} complete` : 'Add subtask';
 
   /**
    * Timers are independent: starting this one never stops, pauses or replaces

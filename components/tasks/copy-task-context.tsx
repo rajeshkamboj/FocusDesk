@@ -150,3 +150,29 @@ export function CopyTaskContextButton({
     </span>
   );
 }
+
+
+/** Compact icon-only copy action for surfaces that already identify the task. */
+export function CopyTaskContextIconButton({
+  taskId,
+  className = '',
+}: {
+  taskId: string;
+  className?: string;
+}) {
+  const { state, run } = useCopyAction(taskId);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void run()}
+        aria-label={state === 'copied' ? 'Task context copied' : 'Copy task prompt'}
+        title={state === 'copied' ? 'Copied' : 'Copy task prompt'}
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/50 bg-surface text-accent transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${className}`}
+      >
+        {state === 'copied' ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
+      </button>
+      <LiveStatus state={state} />
+    </>
+  );
+}

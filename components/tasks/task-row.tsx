@@ -144,16 +144,18 @@ export function TaskRow({
   const rowBg = done
     ? 'border-accent-soft/70 bg-accent-soft/40'
     : overdue
-      ? 'border-danger-soft bg-danger-soft/30'
-      : 'border-transparent hover:border-line hover:bg-surface';
+      ? (wideLayout && !selection ? 'max-sm:border-line max-sm:bg-surface sm:border-danger-soft sm:bg-danger-soft/30' : 'border-danger-soft bg-danger-soft/30')
+      : (wideLayout && !selection ? 'max-sm:border-line max-sm:bg-surface sm:border-transparent hover:border-line hover:bg-surface' : 'border-transparent hover:border-line hover:bg-surface');
+  // Today uses a compact mobile grid; other screens and bulk selection retain their existing layout.
+  const compactMobile = wideLayout && !selection;
   const titleColor = done ? 'text-ink-2' : cancelled ? 'text-ink-3 line-through' : 'text-ink';
   const titleWeight = done ? 'font-normal' : 'font-medium';
 
   /** Title, badges and meta line — the summary of the row, and the click target that toggles the description. */
   const taskSummary = (
     <div className={wideLayout ? 'xl:flex xl:items-center xl:gap-4' : undefined}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 xl:min-w-0 xl:flex-1">
-        <span className={`text-[14px] leading-snug ${titleColor} ${titleWeight}`}>
+      <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 xl:min-w-0 xl:flex-1 ${compactMobile ? "max-sm:block" : ""}`}>
+        <span className={`text-[14px] leading-snug [overflow-wrap:anywhere] ${titleColor} ${titleWeight}`}>
           {task.title}
         </span>
         {hasDetails ? (
@@ -161,7 +163,7 @@ export function TaskRow({
             width={12}
             height={12}
             aria-hidden="true"
-            className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+            className={`shrink-0 text-ink-3 transition-transform duration-150 ${compactMobile ? "max-sm:ml-1 max-sm:inline-block max-sm:align-middle" : ""} ${expanded ? 'rotate-90' : ''}`}
           />
         ) : null}
         {task.status === 'in_progress' && !done && !paused ? <Badge tone="accent">In progress</Badge> : null}
@@ -185,7 +187,7 @@ export function TaskRow({
           ? 'mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3 xl:mt-0 xl:max-w-[52%] xl:flex-nowrap xl:justify-end'
           : 'mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3'}>
           {project ? (
-            <span className={wideLayout ? 'max-w-[22rem] truncate font-medium text-ink-2' : 'font-medium text-ink-2'}>
+            <span className={wideLayout ? 'min-w-0 max-w-full break-words font-medium text-ink-2 sm:max-w-[22rem] sm:truncate' : 'font-medium text-ink-2'}>
               {project.name}
               {milestone ? <span className="font-normal text-ink-3"> · {milestone.name}</span> : null}
             </span>
@@ -205,7 +207,7 @@ export function TaskRow({
           {dueLabel ? (
             <span
               className={`inline-flex items-center gap-1 ${
-                overdue ? 'font-medium text-danger' : dueLabel.includes('today') || dueLabel.includes('tomorrow') ? 'font-medium text-warning' : ''
+                overdue ? `font-medium text-danger ${compactMobile ? 'max-sm:rounded-md max-sm:bg-danger-soft max-sm:px-1.5 max-sm:py-0.5' : ''}` : dueLabel.includes('today') || dueLabel.includes('tomorrow') ? 'font-medium text-warning' : ''
               }`}
             >
               <IconFlag width={12} height={12} />
@@ -235,7 +237,7 @@ export function TaskRow({
         data-task-id={task.id}
         // Focusable only programmatically, so navigation can move focus here.
         tabIndex={-1}
-        className={`group relative flex scroll-my-24 items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
+        className={`group relative scroll-my-24 items-start rounded-xl border px-3 py-2.5 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${compactMobile ? 'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1.5 sm:flex sm:gap-3' : 'flex gap-3'} ${wideLayout ? 'xl:items-center' : ''} ${selection?.selected ? 'border-accent/50 bg-accent-soft/30' : ''} ${rowBg}`}
       >
         {flashKey !== undefined ? (
           // Keyed by the request so a repeat navigation restarts the animation.
@@ -255,9 +257,9 @@ export function TaskRow({
           onChange={() => void (done ? actions.reopenTask(task.id) : actions.completeTask(task.id))}
         />
 
-        <div className="min-w-0 flex-1">
-          <div className={wideLayout ? "flex items-start gap-1.5 xl:items-center" : "flex items-start gap-1.5"}>
-            <div className="min-w-0 flex-1">
+        <div className={compactMobile ? "max-sm:contents sm:min-w-0 sm:flex-1" : "min-w-0 flex-1"}>
+          <div className={wideLayout ? `flex items-start gap-1.5 xl:items-center ${compactMobile ? "max-sm:contents" : ""}` : "flex items-start gap-1.5"}>
+            <div className={`min-w-0 flex-1 ${compactMobile ? "max-sm:col-span-3 max-sm:col-start-2 max-sm:row-start-1" : ""}`}>
               {hasDetails ? (
                 <button
                   type="button"
@@ -297,7 +299,7 @@ export function TaskRow({
               aria-expanded={subtasksOpen}
               title={subtasks.length > 0 ? `${completedSubtasks} of ${subtasks.length} subtasks completed` : 'Add subtask'}
               onClick={() => setSubtasksOpen((isOpen) => !isOpen)}
-              className="mt-[-2px] inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] font-medium tabular-nums text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              className={`mt-[-2px] inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] font-medium tabular-nums text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${compactMobile ? "max-sm:col-start-2 max-sm:row-start-2 max-sm:mt-0 max-sm:h-10 max-sm:min-w-10 max-sm:justify-self-end max-sm:justify-center max-sm:border max-sm:border-line" : ""}`}
             >
               {subtasks.length > 0 ? <span>{completedSubtasks}/{subtasks.length}</span> : null}
               {subtasks.length === 0 && !subtasksOpen ? <IconPlus width={15} height={15} /> : (
@@ -307,23 +309,26 @@ export function TaskRow({
           </div>
 
           {subtasksOpen ? (
+            <div className={compactMobile ? "max-sm:col-span-4 max-sm:col-start-1 max-sm:row-start-3 sm:contents" : "contents"}>
             <TaskSubtasks
               parentTaskId={task.id}
               parentCompleted={done}
               subtasks={subtasks}
               autoFocusInput={subtasks.length === 0}
             />
+            </div>
           ) : null}
         </div>
 
         {!done && !cancelled ? (
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className={`flex shrink-0 items-center gap-1.5 ${compactMobile ? "max-sm:col-start-3 max-sm:row-start-2" : ""}`}>
             {running ? (
               <>
                 <Button
                   size="sm"
                   variant="secondary"
                   disabled={timerBusy}
+                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
                   aria-label="Pause timer"
                   onClick={() => void runTimerAction(() => actions.pauseTask(task.id))}
                 >
@@ -334,6 +339,7 @@ export function TaskRow({
                   size="sm"
                   variant="soft"
                   disabled={timerBusy}
+                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
                   aria-label="Finish task"
                   onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
                 >
@@ -347,6 +353,7 @@ export function TaskRow({
                   size="sm"
                   variant="secondary"
                   disabled={timerBusy}
+                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
                   aria-label="Resume timer"
                   onClick={() => void runTimerAction(() => actions.resumeTask(task.id))}
                 >
@@ -357,6 +364,7 @@ export function TaskRow({
                   size="sm"
                   variant="soft"
                   disabled={timerBusy}
+                  className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2" : ""}
                   aria-label="Finish task"
                   onClick={() => void runTimerAction(() => actions.finishTask(task.id))}
                 >
@@ -369,6 +377,7 @@ export function TaskRow({
                 size="sm"
                 variant="secondary"
                 disabled={timerBusy}
+                className={compactMobile ? "max-sm:h-10 max-sm:min-w-10 max-sm:px-2 max-sm:border-accent/50 max-sm:bg-accent-soft max-sm:text-accent" : ""}
                 aria-label="Start task"
                 onClick={startTimer}
               >
@@ -379,6 +388,7 @@ export function TaskRow({
           </div>
         ) : null}
 
+        <div className={compactMobile ? "max-sm:col-start-4 max-sm:row-start-2 sm:contents" : "contents"}>
         <Menu
           portal
           touch
@@ -400,7 +410,7 @@ export function TaskRow({
               aria-haspopup="menu"
               aria-expanded={open}
               aria-controls={open ? menuId : undefined}
-              className="task-actions-trigger inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-ink-3 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:bg-surface-2 aria-expanded:opacity-100"
+              className={`task-actions-trigger inline-flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-ink-3 transition-all hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:bg-surface-2 aria-expanded:opacity-100 ${compactMobile ? "max-sm:size-10 max-sm:border max-sm:border-line" : ""}`}
             >
               <IconMore width={17} height={17} />
             </button>
@@ -532,6 +542,7 @@ export function TaskRow({
             </>
           )}
         </Menu>
+        </div>
       </div>
 
       <TaskFormModal open={editOpen} onClose={() => setEditOpen(false)} task={task} />

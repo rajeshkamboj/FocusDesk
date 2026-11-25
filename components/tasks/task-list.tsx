@@ -10,7 +10,7 @@ export function TaskList({ tasks, showDates = true, hierarchical = false, wideLa
   const orderedTasks = uncompletedTasksFirst(tasks);
   if (hierarchical) {
     return (
-      <div aria-label="Task hierarchy" className="space-y-0.5">
+      <div aria-label="Task hierarchy" className={wideLayout ? "space-y-2 sm:space-y-0.5" : "space-y-0.5"}>
         {taskHierarchyRows(orderedTasks).map(({ task, depth }) => (
           <div key={task.id} data-task-depth={depth} style={{ paddingLeft: `min(${depth * 12}px, 20%)` }}>
             {/* Keep deep trees usable on a phone without clipping task menus.
@@ -26,7 +26,7 @@ export function TaskList({ tasks, showDates = true, hierarchical = false, wideLa
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className={wideLayout ? "space-y-2 sm:space-y-0.5" : "space-y-0.5"}>
       {orderedTasks.map((task) => (
         <TaskRow key={task.id} task={task} showDate={showDates} wideLayout={wideLayout} />
       ))}
@@ -51,11 +51,11 @@ export function TaskSection({
 }) {
   return (
     <section>
-      <div className="mb-1.5 flex items-center justify-between px-1">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">{title}</h2>
+      <div className={`mb-1.5 flex items-center justify-between gap-2 px-1 ${wideLayout ? "max-sm:mb-2" : ""}`}>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+          <h2 className={`text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3 ${wideLayout ? "max-sm:text-[14px] max-sm:normal-case max-sm:tracking-normal max-sm:text-ink" : ""}`}>{title}</h2>
           {hint ? <span className="text-[11px] text-ink-3">{hint}</span> : null}
-          <span className="text-[11px] tabular-nums text-ink-3">{tasks.length}</span>
+          <span className={`text-[11px] tabular-nums text-ink-3 ${wideLayout ? "max-sm:rounded-full max-sm:bg-surface-2 max-sm:px-2 max-sm:py-0.5" : ""}`}>{tasks.length}</span>
         </div>
         {action}
       </div>

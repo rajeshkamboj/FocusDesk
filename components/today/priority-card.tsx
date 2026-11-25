@@ -88,7 +88,7 @@ export function PriorityCard() {
   ];
 
   return (
-    <div className="animate-rise-in h-full rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
+    <div className="animate-rise-in min-w-0 self-start rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-8">
       <div className="flex items-center gap-2 text-accent">
         <IconFlame width={18} height={18} />
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">Today&apos;s priority</span>
@@ -138,6 +138,12 @@ export function PriorityCard() {
           <Button type="submit" variant="primary" size="lg" disabled={!draft.trim()}>Set Priority</Button>
         </div>
       </form>
+
+      {priorities.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-line px-4 py-4 text-center text-sm text-ink-3">
+          No priorities yet. Add one manually or choose an existing task.
+        </p>
+      ) : null}
 
       {priorities.length > 0 ? (
         <div className="mt-5 space-y-3">

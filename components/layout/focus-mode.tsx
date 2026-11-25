@@ -95,7 +95,7 @@ export function FocusMode() {
               ) : null}
             </div>
             {timerTask ? (
-              <div className="mt-3 flex justify-end border-t border-line/70 pt-3">
+              <div className="absolute bottom-3 right-3">
                 <CopyTaskContextIconButton taskId={timerTask.id} />
               </div>
             ) : null}

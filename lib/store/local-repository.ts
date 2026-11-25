@@ -454,6 +454,7 @@ export class LocalRepository implements AppRepository {
         date: input.date,
         title: input.title.trim(),
         completed: false,
+        taskId: input.taskId,
         dueDate: undefined,
         postponementCount: 0,
       }),

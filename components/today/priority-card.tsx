@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useData } from '@/components/data/data-provider';
 import { useUI } from '@/components/ui/ui-provider';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ export function PriorityCard() {
     const q = search.trim().toLowerCase();
     return availableTasks.filter((task) => {
       const date = task.dueDate || task.scheduledDate;
-      const overdue = Boolean(task.dueDate && task.dueDate < today);
+      const overdue = Boolean((task.dueDate || task.scheduledDate) && (task.dueDate || task.scheduledDate)! < today);
       const dueToday = date === today;
       const upcoming = Boolean(date && date > today);
       const matchesFilter = filter === 'all' || (filter === 'overdue' ? overdue : filter === 'today' ? dueToday : upcoming);
@@ -51,7 +51,7 @@ export function PriorityCard() {
   const anyRunning = timerTasks.some((t) => t && isTimerRunning(t));
   const now = useNow(anyRunning);
 
-  const addManualPriority = (event: React.FormEvent) => {
+  const addManualPriority = (event: FormEvent) => {
     event.preventDefault();
     const title = draft.trim();
     if (!title) return;
